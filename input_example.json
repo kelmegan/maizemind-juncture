@@ -1,0 +1,48 @@
+{
+    "user": {
+        "id": "user_1234",
+        "type": "student | researcher | business | other",
+        "goals": [
+            "persuasive essay",
+            "research paper"
+        ],
+        "accessibility_mode": false
+    },
+    "graph": {
+        "nodes": [
+            {
+                "id": "node_1",
+                "type": "claim | evidence | counterargument",
+                "text": "Low carbon dioxide levels are needed for an ice age",
+                "parent_id": null,
+                "confidence": 0.6,
+                "support_score": 0.5,
+                "premise_coverage": 0.4,
+                "consistency_flag": true,
+                "status": "weak | strong | unsupported | contradictory"
+            }
+        ],
+        "edges": [
+            {
+                "from": "node_2",
+                "to": "node_1",
+                "type": "supports | contradicts | depends_on",
+                "weight": 0.7
+            }
+        ]
+    },
+    "new_input": {
+        "text": "here are some notes about ice ages. Ice is cold...",
+        "documents": [
+            {
+                "title": "Class Lecture - Chemical composition of ice",
+                "content": "..."
+            },
+            {
+                "title": "Study on Large Fossils",
+                "content": "..."
+            }
+        ]
+    },
+    "graph_summary": "Really focuses on ice and not life during that time. Struggles with counterarguments."
+}

@@ -1,0 +1,59 @@
+{
+    "mutations": {
+        "add": [
+            {
+                "temp_id": "temp_node_1",
+                "type": "assumption",
+                "text": "The Earth should be maximally tilted from the Sun for an ice age to occur.",
+                "parent_id": "node_1",
+                "edge_id": "edge_2"
+            }
+        ]
+    },
+    "critiques": [
+        {
+            "node_id": "node_1",
+            "severity": "high | medium | low",
+            "issues": [
+                {
+                    "type": "missing_evidence | weak_inference | ambiguity | contradiction",
+                    "explanation": "The claim is broad and lacks statistical evidence.",
+                    "suggested_actions": [
+                        "add_evidence",
+                        "narrow_scope",
+                        "add_assumption"
+                    ]
+                }
+            ]
+        }
+    ],
+    "suggested_actions": [
+        {
+            "node_id": "node_1",
+            "action": "add_evidence",
+            "example_prompt": "Add a peer-reviewed statistic about Earth's orbital tilt."
+        }
+    ],
+    "reasoning_score": {
+        "overall": 64,
+        "support_coverage": 70,
+        "premise_coverage": 60,
+        "consistency": 55,
+        "passing": true
+    },
+    "summary": {
+        "top_issues": [
+            "Main claim lacks empirical support.",
+            "Two assumptions are unstated.",
+            "Counterargument is not addressed."
+        ],
+        "strength_nodes": [
+            "node_1",
+            "node_7"
+        ],
+        "improvement_nodes": [
+            "node_3",
+            "node_12"
+        ]
+    }
+}
