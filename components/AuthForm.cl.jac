@@ -1,20 +1,19 @@
 """Authentication form component."""
 
-cl import from .Button { Button }
+import from .Button { Button }
 
-def:pub AuthForm(
-    isSignup: bool,
-    name: str,
-    email: str,
-    password: str,
-    error: str,
-    loading: bool,
-    onNameChange: any,
-    onEmailChange: any,
-    onPasswordChange: any,
-    onSubmit: any,
-    onToggleMode: any,
-) -> any {
+def:pub AuthForm(props: any) -> JsxElement {
+    isSignup = props.isSignup;
+    name = props.name;
+    email = props.email;
+    password = props.password;
+    error = props.error;
+    loading = props.loading;
+    onNameChange = props.onNameChange;
+    onEmailChange = props.onEmailChange;
+    onPasswordChange = props.onPasswordChange;
+    onSubmit = props.onSubmit;
+    onToggleMode = props.onToggleMode;
     return (
         <div className="auth-container">
             <div className="auth-card">
@@ -28,16 +27,17 @@ def:pub AuthForm(
                     <div className="auth-error">{error}</div>
                 ) if error else None}
                 <div className="button-toggle">
-                    # need to add toggle variant styling to button component
                     <Button
                         label="Login"
-                        onClick={onToggleMode}
+                        onClick={lambda -> None { onToggleMode(False); }}
                         variant={"secondary" if isSignup else "primary"}
+                        toggle={True}
                     />
                     <Button
                         label="Sign Up"
-                        onClick={onToggleMode}
+                        onClick={lambda -> None { onToggleMode(True); }}
                         variant={"primary" if isSignup else "secondary"}
+                        toggle={True}
                     />
                 </div>
                 <form onSubmit={onSubmit}>
@@ -82,13 +82,13 @@ def:pub AuthForm(
                     </button>
                 </form>
                 <hr/>
-                <div>"OR"</div>
+                <div>OR</div>
                 <hr/>
                 <div className="auth-toggle">
                     <Button
                         label="Continue as Guest"
-                        onClick={lambda -> None { isSignup = true; }}
-                        variant="toggle"
+                        onClick={lambda -> None { print("this dont work right now"); }}
+                        variant={"primary"}
                     />
                 </div>
             </div>

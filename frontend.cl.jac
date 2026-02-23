@@ -4,9 +4,9 @@ import from "@jac/runtime" { jacSignup, jacLogin, jacLogout, jacIsLoggedIn }
 
 import "./styles.css";
 
-cl import from .components.AuthForm { AuthForm }
+import from .components.AuthForm { AuthForm }
 
-def:pub app -> any {
+def:pub app -> JsxElement {
     has isLoggedIn: bool = False,
         checkingAuth: bool = True,
         isSignup: bool = False,
@@ -21,22 +21,53 @@ def:pub app -> any {
         checkingAuth = False;
     }
 
-    # Method declarations (implementations in frontend.impl.jac)
-    async def handleLogin -> None;
-    async def handleSignup -> None;
-    def handleLogout -> None;
-    async def handleSubmit(e: any) -> None;
-    def toggleLogin -> None {
-        setIsSignup(not isSignup);
-    };
+    def toggleLogin(isSign: bool) -> None {
+        isSignup = isSign;
+        error = "";
+    }
+
+    async def handleLogin() -> None {
+        error = "";
+        loading = True;
+        success = await jacLogin(email, password);
+        loading = False;
+        if success {
+            isLoggedIn = True;
+            email = "";
+            password = "";
+        } else {
+            error = "Invalid email or password";
+        }
+    }
+
+    async def handleSignup() -> None {
+        error = "";
+        loading = True;
+        result = await jacSignup(email, password);
+        loading = False;
+        if result["success"] {
+            isLoggedIn = True;
+        } else {
+            error = result["error"] if result["error"] else "Signup failed";
+        }
+    }
+
+    def handleLogout() -> None {
+        jacLogout();
+        isLoggedIn = False;
+    }
+
+    async def handleSubmit(e: any) -> None {
+        e.preventDefault();
+        if isSignup {
+            await handleSignup();
+        } else {
+            await handleLogin();
+        }
+    }
 
     if checkingAuth {
-        return
-            <div style={{"display": "flex", "justifyContent": "center",
-                         "alignItems": "center", "minHeight": "100vh",
-                         "color": "rgba(255,255,255,0.6)", "fontFamily": "system-ui"}}>
-                Loading...
-            </div>;
+        return <div>Loading...</div>;
     }
 
     return
@@ -52,13 +83,7 @@ def:pub app -> any {
                 onEmailChange={lambda e: any -> None { email = e.target.value; }}
                 onPasswordChange={lambda e: any -> None { password = e.target.value; }}
                 onSubmit={handleSubmit}
-                onToggleMode={lambda -> None { isSignup = not isSignup; error = ""; }}
+                onToggleMode={toggleLogin}
             />
         </div>;
-    # return
-    # <div className="auth-form-container">
-    #     <button onClick={lambda -> None { isSignup = not isSignup; error = ""; }}>
-    #         Toggle (isSignup={isSignup})
-    #     </button>
-    # </div>;
 }
