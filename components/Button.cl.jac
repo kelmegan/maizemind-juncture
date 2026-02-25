@@ -1,32 +1,18 @@
 """Button component for the Jac client application."""
 
-def:pub Button(label: str, onClick: any, variant: str = "primary", disabled: bool = False, toggle: bool = False) -> JsxElement {
-    base_styles = {
-        "padding": "0.75rem 1.5rem",
-        "fontSize": "1rem",
-        "fontWeight": "600",
-        "borderRadius": "0.5rem" if not toggle else "0",
-        "border": "none",
-        "cursor": "not-allowed" if disabled else "pointer",
-        "transition": "all 0.2s ease"
-    };
-
-    variant_styles = {
-        "primary": {
-            "backgroundColor": "#9ca3af" if disabled else "#3b82f6",
-            "color": "#ffffff"
-        },
-        "secondary": {
-            "backgroundColor": "#e5e7eb" if disabled else "#6b7280",
-            "color": "#ffffff"
-        }
-    };
-
-    return <button
-        style={{**base_styles, **variant_styles[variant]}}
-        onClick={onClick}
-        disabled={disabled}
-    >
-        {label}
-    </button>;
+def:pub Button(
+    label: str,
+    onClick: any,
+    variant: str = "primary",
+    disabled: bool = False,
+    toggle: bool = False
+) -> JsxElement {
+    className = "button button-" + variant;
+    if (toggle) {
+        className += " button-toggle";
+    }
+    return
+        <button className={className} onClick={onClick} disabled={disabled}>
+            {label}
+        </button>;
 }
