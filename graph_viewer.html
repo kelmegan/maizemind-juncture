@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Juncture – Argument Map</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Sans',system-ui,sans-serif;overflow:hidden;}
+button{font-family:inherit;}
+:root{
+  --bg:#f4f1ee;--panel:#ffffff;--card:rgba(0,0,0,0.03);--border:rgba(0,0,0,0.08);
+  --text:#1e293b;--muted:#475569;--faint:#94a3b8;--node-fill:#fff;
+}
+.dark{
+  --bg:#0f0f17;--panel:#13131f;--card:rgba(255,255,255,0.04);--border:rgba(255,255,255,0.07);
+  --text:#f1f5f9;--muted:#94a3b8;--faint:#64748b;--node-fill:#1a1a2e;
+}
+.app{display:flex;flex-direction:column;height:100vh;background:var(--bg);color:var(--text);}
+.hdr{padding:10px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--panel);}
+.hdr-l{display:flex;align-items:center;gap:10px;}
+.hdr-r{display:flex;align-items:center;gap:10px;}
+.logo{font-size:18px;color:#8b5cf6;}.app-nm{font-weight:600;font-size:15px;}.bc{color:var(--faint);font-size:13px;}
+.tbtn,.xbtn{padding:5px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:11px;cursor:pointer;}
+.xbtn{background:rgba(139,92,246,0.1);border-color:rgba(139,92,246,0.25);color:#8b5cf6;font-weight:500;font-size:12px;}
+.sc{display:flex;align-items:center;gap:6px;padding:5px 12px;background:var(--card);border-radius:8px;border:1px solid var(--border);}
+.sl{color:var(--faint);font-size:11px;}.sv{font-size:16px;font-weight:700;}
+.lgd{padding:7px 20px;display:flex;align-items:center;gap:20px;border-bottom:1px solid var(--border);background:var(--card);font-size:11px;}
+.lgd-s{display:flex;align-items:center;gap:8px;}
+.lgd-l{color:var(--faint);font-size:10px;text-transform:uppercase;letter-spacing:1px;}
+.lgd-i{display:flex;align-items:center;gap:4px;}
+.lgd-d{width:14px;height:14px;border-radius:7px;}
+.mn{display:flex;flex:1;overflow:hidden;}
+.ga{flex:1;position:relative;display:flex;flex-direction:column;}
+.ga svg{flex:1;display:block;cursor:grab;}
+.ga svg.dragging{cursor:grabbing;}
+.sb{padding:8px 20px;border-top:1px solid var(--border);background:var(--panel);display:flex;align-items:center;gap:12px;overflow-x:auto;}
+.sbl{color:var(--faint);font-size:10px;text-transform:uppercase;letter-spacing:1px;flex-shrink:0;}
+.fc{display:flex;align-items:center;gap:6px;padding:4px 10px 4px 6px;background:var(--card);border:1px solid var(--border);border-radius:6px;font-size:11px;white-space:nowrap;color:var(--text);}
+.fc .pi{width:16px;height:20px;background:#dc2626;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:6px;color:#fff;font-weight:700;}
+.fc .sd{width:6px;height:6px;border-radius:3px;}
+.gh{position:absolute;bottom:60px;left:50%;transform:translateX(-50%);padding:6px 14px;background:var(--card);border:1px solid var(--border);border-radius:16px;font-size:12px;color:var(--faint);pointer-events:none;}
+.bb{position:absolute;top:12px;left:12px;z-index:10;padding:8px 16px;border-radius:10px;background:#6366f1;color:#fff;font-size:13px;cursor:pointer;border:none;box-shadow:0 2px 8px rgba(99,102,241,0.3);display:none;align-items:center;gap:8px;}
+.bb.vis{display:flex;}
+.sp{width:400px;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;transition:width .2s;}
+.sp.cl{width:0;border:none;overflow:hidden;}
+.sph{padding:20px;border-bottom:1px solid var(--border);}
+.sph-top{display:flex;justify-content:space-between;align-items:start;}
+.sph-bg{display:flex;align-items:center;gap:10px;}
+.tp-b{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+.st-b{padding:3px 10px;border-radius:8px;font-size:11px;font-weight:600;border:1px solid;}
+.cl-b{background:var(--card);border:1px solid var(--border);color:var(--muted);font-size:14px;cursor:pointer;padding:4px 10px;border-radius:6px;}
+.sp-t{font-size:17px;font-weight:600;margin-top:12px;line-height:1.5;display:flex;align-items:start;}
+.sp-b{flex:1;overflow-y:auto;padding:20px;}
+.sp-s{margin-bottom:18px;}
+.ss-l{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.ss-d{width:6px;height:6px;border-radius:3px;}
+.src-c{padding:14px;border-radius:12px;margin-bottom:16px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15);}
+.dark .src-c{background:rgba(59,130,246,0.08);border-color:rgba(59,130,246,0.2);}
+.src-h{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.src-q{font-size:13px;color:var(--muted);font-style:italic;line-height:1.7;border-left:3px solid rgba(59,130,246,0.4);padding-left:12px;}
+.iss-c{padding:12px;border-radius:10px;margin-bottom:6px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.12);}
+.dark .iss-c{background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.15);}
+.iss-t{font-size:13px;font-weight:500;margin-bottom:3px;color:#dc2626;}
+.dark .iss-t{color:#fca5a5;}
+.iss-x{font-size:12px;color:var(--muted);line-height:1.5;}
+.ok-c{padding:12px;border-radius:10px;font-size:13px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.12);color:#16a34a;}
+.dark .ok-c{background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.15);color:#86efac;}
+.act-b{display:block;width:100%;padding:10px 14px;margin-bottom:6px;background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.15);border-radius:10px;font-size:13px;color:#7c3aed;text-align:left;cursor:pointer;}
+.dark .act-b{background:rgba(139,92,246,0.08);border-color:rgba(139,92,246,0.2);color:#c4b5fd;}
+.act-b:hover{background:rgba(139,92,246,0.12);}
+.eb-b{width:100%;padding:10px 14px;margin-bottom:14px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:10px;font-size:12px;font-weight:600;color:#6366f1;cursor:pointer;text-align:center;}
+.eb-b:hover{background:rgba(99,102,241,0.14);}
+.eb-b.on{background:#6366f1;color:#fff;border-color:#6366f1;}
+.sp-f{padding:16px 20px;border-top:1px solid var(--border);}
+.rv-b{width:100%;padding:13px 18px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);border:none;border-radius:10px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;box-shadow:0 4px 12px rgba(124,58,237,0.25);}
+
+/* Concept badge + card */
+.concept-badge{
+  width:26px;height:26px;border-radius:13px;background:#8b5cf6;
+  display:inline-flex;align-items:center;justify-content:center;
+  cursor:pointer;flex-shrink:0;font-size:14px;color:#fff;font-weight:700;
+  margin-left:8px;box-shadow:0 2px 6px rgba(139,92,246,0.3);
+}
+.concept-badge:hover{background:#7c3aed;}
+.concept-card{
+  padding:16px;margin-bottom:16px;border-radius:12px;
+  background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.15);
+}
+.dark .concept-card{background:rgba(139,92,246,0.1);border-color:rgba(139,92,246,0.25);}
+
+/* SVG node styles */
+.node-card{cursor:pointer;transition:filter 0.15s;}
+.node-card:hover .node-body{filter:brightness(0.97);}
+.edge-line{fill:none;pointer-events:none;}
+.edge-label-bg{fill:var(--panel);stroke:var(--border);}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// ============================================================
+// COLORS
+// ============================================================
+const TC={
+  thesis:   {fill:'#ede9fe',stroke:'#7c3aed',header:'#7c3aed',text:'#5b21b6',ht:'#fff',
+             df:{fill:'#1e1636',stroke:'#a78bfa',header:'#7c3aed',text:'#c4b5fd',ht:'#fff'}},
+  claim:    {fill:'#e8e0fc',stroke:'#9f7aea',header:'#9f7aea',text:'#6d28d9',ht:'#fff',
+             df:{fill:'#1c1430',stroke:'#b794f4',header:'#9f7aea',text:'#d6bcfa',ht:'#fff'}},
+  evidence: {fill:'#d1fae5',stroke:'#10b981',header:'#10b981',text:'#065f46',ht:'#fff',
+             df:{fill:'#0d2818',stroke:'#6ee7b7',header:'#10b981',text:'#a7f3d0',ht:'#fff'}},
+  counterarg:{fill:'#fee2e2',stroke:'#ef4444',header:'#ef4444',text:'#991b1b',ht:'#fff',
+              df:{fill:'#2a1215',stroke:'#f87171',header:'#ef4444',text:'#fca5a5',ht:'#fff'}},
+  assumption:{fill:'#fef3c7',stroke:'#f59e0b',header:'#f59e0b',text:'#92400e',ht:'#fff',
+              df:{fill:'#2a2008',stroke:'#fcd34d',header:'#f59e0b',text:'#fde68a',ht:'#fff'}},
+};
+const EC={supports:'#10b981',contradicts:'#ef4444',depends_on:'#f59e0b',addresses:'#8b5cf6'};
+function tc(t){return TC[t]||TC.claim;}
+function strC(v){return v>=0.7?{b:'#16a34a',t:'#15803d',bg:'#dcfce7'}:v>=0.5?{b:'#ca8a04',t:'#a16207',bg:'#fef9c3'}:{b:'#dc2626',t:'#dc2626',bg:'#fee2e2'};}
+function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ============================================================
+// STATE
+// ============================================================
+let data=null, gNodes=[], gEdges=[], simulation;
+let selected=null, isDark=false, editingBranch=null, branchIds=new Set();
+
+// ============================================================
+// LOAD
+// ============================================================
+async function loadData(){
+  try{const r=await fetch('graph_output.json');if(r.ok){data=await r.json();return;}}catch(e){}
+  data={
+    nodes:[
+      {id:"node_1",type:"thesis",text:"Social media harms teen mental health",confidence:"0.4",status:"needs_work",issues:"unsupported_claim",suggestions:"add_evidence,narrow_scope",source_title:"",source_quote:""},
+      {id:"node_2",type:"evidence",text:"Depression rates increased 50% since 2012",confidence:"0.85",status:"ok",issues:"",suggestions:"",source_title:"Haidt_Twenge_2021.pdf",source_quote:"Among girls, rates of depression and anxiety have increased by nearly 50% since 2012."},
+      {id:"node_3",type:"counterarg",text:"Correlation does not imply causation",confidence:"0.55",status:"needs_work",issues:"unsupported_claim",suggestions:"add_evidence",source_title:"Oxford_Study_2019.pdf",source_quote:"The association between social media use and well-being is small and inconsistent."},
+      {id:"node_4",type:"claim",text:"Teens who quit social media report improved mood and focus",confidence:"0.3",status:"needs_work",issues:"unsupported_claim,vague_language",suggestions:"add_evidence,narrow_scope",source_title:"",source_quote:""},
+      {id:"node_5",type:"evidence",text:"APA recommends screen time limits for adolescents",confidence:"0.9",status:"ok",issues:"",suggestions:"",source_title:"APA_Advisory_2023.pdf",source_quote:"The APA recommends limiting social media use for adolescents."},
+      {id:"node_6",type:"claim",text:"Addictive design patterns exploit developing brains",confidence:"0.65",status:"needs_work",issues:"missing_premise",suggestions:"add_evidence,add_assumption",source_title:"",source_quote:""},
+      {id:"node_7",type:"assumption",text:"Current regulations are insufficient to protect minors online",confidence:"0.5",status:"needs_work",issues:"missing_premise",suggestions:"add_evidence",source_title:"",source_quote:""},
+      {id:"node_8",type:"evidence",text:"Internal documents show companies knew of teen harm",confidence:"0.88",status:"ok",issues:"",suggestions:"",source_title:"WSJ_Facebook_Files.pdf",source_quote:"Internal research showed Instagram was harmful for a significant percentage of teen users."}
+    ],
+    edges:[
+      {from_id:"node_2",to_id:"node_1",type:"supports",weight:"0.8"},
+      {from_id:"node_3",to_id:"node_1",type:"contradicts",weight:"0.9"},
+      {from_id:"node_4",to_id:"node_2",type:"supports",weight:"0.4"},
+      {from_id:"node_5",to_id:"node_2",type:"supports",weight:"0.7"},
+      {from_id:"node_6",to_id:"node_1",type:"supports",weight:"0.6"},
+      {from_id:"node_7",to_id:"node_6",type:"depends_on",weight:"0.7"},
+      {from_id:"node_8",to_id:"node_6",type:"supports",weight:"0.85"}
+    ],
+    reasoning_score:{overall:"52",support_coverage:"60",premise_coverage:"45",consistency:"40",passing:"False"},
+    summary:{top_issues:["Main claim lacks direct causal evidence","Two claims have no sources","Counterargument unaddressed"],strength_nodes:["node_2","node_5","node_8"],improvement_nodes:["node_4","node_3","node_7"]},
+    sources:[{name:"Haidt_Twenge_2021.pdf",stance:"supporting"},{name:"Oxford_Study_2019.pdf",stance:"opposing"},{name:"APA_Advisory_2023.pdf",stance:"supporting"},{name:"WSJ_Facebook_Files.pdf",stance:"supporting"}]
+  };
+}
+
+// ============================================================
+// WRAP TEXT
+// ============================================================
+function wrapText(text,max){
+  if(text.length<=max)return[text];
+  const words=text.split(' ');const lines=[];let cur='';
+  words.forEach(w=>{if((cur+' '+w).trim().length<=max){cur=(cur+' '+w).trim();}else{if(cur)lines.push(cur);cur=w;}});
+  if(cur)lines.push(cur);
+  return lines;
+}
+
+// ============================================================
+// BRANCH HELPERS
+// ============================================================
+function buildMaps(){
+  const cMap={},pMap={};
+  for(const e of data.edges){
+    if(['supports','depends_on'].includes(e.type)){
+      if(!cMap[e.to_id])cMap[e.to_id]=[];
+      cMap[e.to_id].push(e.from_id);
+      pMap[e.from_id]=e.to_id;
+    }
+  }
+  return{cMap,pMap};
+}
+function getBranch(nodeId){
+  const{cMap}=buildMaps();
+  // Just the selected node and all its descendants
+  const result=new Set();
+  const q=[nodeId];
+  while(q.length){
+    const cur=q.shift();
+    result.add(cur);
+    for(const ch of(cMap[cur]||[])){
+      if(!result.has(ch))q.push(ch);
+    }
+  }
+  return result;
+}
+function toggleBranch(id){
+  if(editingBranch===id){editingBranch=null;branchIds=new Set();}
+  else{editingBranch=id;branchIds=getBranch(id);}
+  updateGraph();
+}
+
+// ============================================================
+// INIT GRAPH with D3-force
+// ============================================================
+function initGraph(){
+  // Prepare node data
+  gNodes=data.nodes.map(n=>{
+    const lines=wrapText(n.text,26);
+    const w=Math.min(240,Math.max(150,...lines.map(l=>l.length*7.2+36)));
+    const h=Math.max(66,34+lines.length*18+10);
+    return{...n,lines,w,h};
+  });
+  gEdges=data.edges.map(e=>({
+    source:e.from_id,target:e.to_id,type:e.type,weight:parseFloat(e.weight)||0.5,
+    from_id:e.from_id,to_id:e.to_id
+  }));
+
+  // Assign initial positions as a proper tree layout
+  const{cMap:cm,pMap:pm}=buildMaps();
+  function getDepth(id,v=new Set()){if(v.has(id))return 0;v.add(id);return pm[id]?getDepth(pm[id],v)+1:0;}
+
+  // BFS to get proper tree positions
+  const allIds=gNodes.map(n=>n.id);
+  const hasP=new Set(Object.keys(pm));
+  let roots=allIds.filter(id=>!hasP.has(id));
+  if(!roots.length)roots=[allIds[0]];
+
+  const lvl={};
+  const bfsQ=[...roots];roots.forEach(r=>lvl[r]=0);
+  while(bfsQ.length){const c=bfsQ.shift();for(const ch of(cm[c]||[])){if(!(ch in lvl)){lvl[ch]=lvl[c]+1;bfsQ.push(ch);}}}
+  allIds.forEach(id=>{if(!(id in lvl))lvl[id]=0;});
+
+  const levels={};
+  allIds.forEach(id=>{const l=lvl[id];if(!levels[l])levels[l]=[];levels[l].push(id);});
+
+  gNodes.forEach(n=>{
+    const l=lvl[n.id]||0;
+    const ns=levels[l]||[];
+    const idx=ns.indexOf(n.id);
+    n.x=(idx-(ns.length-1)/2)*200;
+    n.y=l*160;
+  });
+
+  // D3 force simulation — very calm, mostly static
+  simulation=d3.forceSimulation(gNodes)
+    .force('link',d3.forceLink(gEdges).id(d=>d.id).distance(140).strength(0.05))
+    .force('charge',d3.forceManyBody().strength(-80).distanceMax(300))
+    .force('collide',d3.forceCollide().radius(d=>Math.max(d.w,d.h)/2+12).strength(1).iterations(3))
+    .force('x',d3.forceX(d=>{
+      const l=lvl[d.id]||0;
+      const ns=levels[l]||[];
+      const idx=ns.indexOf(d.id);
+      return(idx-(ns.length-1)/2)*200;
+    }).strength(0.08))
+    .force('y',d3.forceY(d=>(lvl[d.id]||0)*160).strength(0.3))
+    .alphaDecay(0.12)
+    .velocityDecay(0.75)
+    .on('tick',ticked);
+
+  // Cool down fast — we want it mostly static
+  simulation.alpha(0.3);
+}
+
+// ============================================================
+// RENDER GRAPH (SVG via D3)
+// ============================================================
+let svgG, edgeG, nodeG, zoomBehavior;
+
+function renderGraph(){
+  const container=document.getElementById('graphArea');
+  if(!container)return;
+  const svg=d3.select(container).append('svg')
+    .attr('width','100%').attr('height','100%')
+    .style('flex','1');
+
+  // Zoom/pan
+  zoomBehavior=d3.zoom()
+    .scaleExtent([0.15,4])
+    .on('zoom',e=>{svgG.attr('transform',e.transform);});
+  svg.call(zoomBehavior);
+
+  // Arrow markers
+  const defs=svg.append('defs');
+  ['supports','contradicts','depends_on','addresses'].forEach(t=>{
+    defs.append('marker').attr('id','arrow-'+t)
+      .attr('viewBox','0 0 10 6').attr('refX',10).attr('refY',3)
+      .attr('markerWidth',8).attr('markerHeight',6).attr('orient','auto')
+      .append('path').attr('d','M0,0 L10,3 L0,6Z').attr('fill',EC[t]||'#94a3b8');
+  });
+
+  // Drop shadow
+  const filter=defs.append('filter').attr('id','shadow').attr('x','-10%').attr('y','-10%').attr('width','120%').attr('height','130%');
+  filter.append('feDropShadow').attr('dx',0).attr('dy',2).attr('stdDeviation',4).attr('flood-opacity',0.08);
+
+  // Branch glow filter — soft colored aura
+  const glowFilter=defs.append('filter').attr('id','branch-glow').attr('x','-30%').attr('y','-30%').attr('width','160%').attr('height','160%');
+  glowFilter.append('feGaussianBlur').attr('in','SourceGraphic').attr('stdDeviation',6).attr('result','blur');
+  glowFilter.append('feColorMatrix').attr('in','blur').attr('type','matrix')
+    .attr('values','0 0 0 0 0.388  0 0 0 0 0.400  0 0 0 0 0.945  0 0 0 0.35 0').attr('result','glow');
+  const glowMerge=glowFilter.append('feMerge');
+  glowMerge.append('feMergeNode').attr('in','glow');
+  glowMerge.append('feMergeNode').attr('in','SourceGraphic');
+
+  // Selected glow — slightly stronger
+  const selFilter=defs.append('filter').attr('id','sel-glow').attr('x','-30%').attr('y','-30%').attr('width','160%').attr('height','160%');
+  selFilter.append('feGaussianBlur').attr('in','SourceGraphic').attr('stdDeviation',8).attr('result','blur');
+  selFilter.append('feColorMatrix').attr('in','blur').attr('type','matrix')
+    .attr('values','0 0 0 0 0.486  0 0 0 0 0.231  0 0 0 0 0.929  0 0 0 0.5 0').attr('result','glow');
+  const selMerge=selFilter.append('feMerge');
+  selMerge.append('feMergeNode').attr('in','glow');
+  selMerge.append('feMergeNode').attr('in','SourceGraphic');
+
+  svgG=svg.append('g');
+  edgeG=svgG.append('g').attr('class','edges');
+  nodeG=svgG.append('g').attr('class','nodes');
+
+  updateGraph();
+
+  // Fit view after simulation settles a bit
+  // Run simulation synchronously so nodes are settled before first paint
+  for(let i=0;i<150;i++)simulation.tick();
+  simulation.stop();
+  ticked(); // update DOM positions
+
+  // Fit view immediately (synchronous, no transition)
+  const svgEl=svg.node();
+  const{width:cw2,height:ch2}=svgEl.getBoundingClientRect();
+  if(cw2>10&&ch2>10&&gNodes.length){
+    let mnX=Infinity,mnY=Infinity,mxX=-Infinity,mxY=-Infinity;
+    gNodes.forEach(n=>{
+      mnX=Math.min(mnX,n.x-n.w/2-30);mnY=Math.min(mnY,n.y-n.h/2-30);
+      mxX=Math.max(mxX,n.x+n.w/2+30);mxY=Math.max(mxY,n.y+n.h/2+30);
+    });
+    const gw=mxX-mnX,gh=mxY-mnY;
+    if(gw>1&&gh>1){
+      const sc=Math.min(cw2*0.85/gw,ch2*0.85/gh,1.3);
+      const cx=(mnX+mxX)/2,cy=(mnY+mxY)/2;
+      svg.call(zoomBehavior.transform,
+        d3.zoomIdentity.translate(cw2/2,ch2/2).scale(sc).translate(-cx,-cy)
+      );
+    }
+  }
+
+  // Gentle restart for minor collision fixes only
+  simulation.alpha(0.01).restart();
+}
+
+function fitView(svg){
+  if(!gNodes.length)return;
+  const svgEl=svg||d3.select('#graphArea svg');
+  const el=svgEl.node();
+  if(!el)return;
+  const{width:cw,height:ch}=el.getBoundingClientRect();
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  gNodes.forEach(n=>{
+    minX=Math.min(minX,n.x-n.w/2-30);
+    minY=Math.min(minY,n.y-n.h/2-30);
+    maxX=Math.max(maxX,n.x+n.w/2+30);
+    maxY=Math.max(maxY,n.y+n.h/2+30);
+  });
+  const gw=maxX-minX,gh=maxY-minY;
+  if(gw<1||gh<1)return;
+  const scale=Math.min(cw*0.85/gw,ch*0.85/gh,1.3);
+  const cx=(minX+maxX)/2,cy=(minY+maxY)/2;
+  svgEl.transition().duration(500).call(
+    zoomBehavior.transform,
+    d3.zoomIdentity.translate(cw/2,ch/2).scale(scale).translate(-cx,-cy)
+  );
+}
+
+function updateGraph(){
+  if(!edgeG||!nodeG)return;
+  const dk=isDark;
+
+  // --- EDGES ---
+  const edgeSel=edgeG.selectAll('.edge-group').data(gEdges,d=>d.from_id+'-'+d.to_id);
+  edgeSel.exit().remove();
+  const edgeEnter=edgeSel.enter().append('g').attr('class','edge-group');
+  edgeEnter.append('path').attr('class','edge-line');
+  edgeEnter.append('rect').attr('class','edge-label-bg').attr('rx',4).attr('ry',4).attr('width',30).attr('height',14);
+  edgeEnter.append('text').attr('class','edge-label').attr('text-anchor','middle').attr('font-size',9).attr('font-family','DM Sans').attr('dy',4);
+
+  const edgeAll=edgeEnter.merge(edgeSel);
+  edgeAll.each(function(d){
+    const g=d3.select(this);
+    const col=EC[d.type]||'#94a3b8';
+    const inBranch=!editingBranch||(branchIds.has(d.from_id)&&branchIds.has(d.to_id));
+    const dim=inBranch?(editingBranch?0.7:0.45):0.06;
+    const strokeW=inBranch?(editingBranch?2+d.weight*2.5:1.5+d.weight*2):1;
+    const dash=(d.type==='contradicts'||d.type==='depends_on')?'6,4':'none';
+    g.select('.edge-line')
+      .attr('stroke',col).attr('stroke-width',strokeW)
+      .attr('stroke-dasharray',dash).attr('opacity',dim)
+      .attr('marker-end','url(#arrow-'+d.type+')');
+    g.select('.edge-label-bg').attr('opacity',inBranch?(editingBranch?0.8:0.6):0.06);
+    g.select('.edge-label').attr('fill',col).attr('opacity',inBranch?(editingBranch?0.9:0.7):0.06).text(Math.round(d.weight*100)+'%');
+  });
+
+  // --- NODES ---
+  const nodeSel=nodeG.selectAll('.node-card').data(gNodes,d=>d.id);
+  nodeSel.exit().remove();
+  const nodeEnter=nodeSel.enter().append('g').attr('class','node-card');
+
+  // Build node DOM on enter
+  nodeEnter.each(function(d){
+    const g=d3.select(this);
+    const c=tc(d.type);
+    const col=dk?c.df:c;
+    const conf=parseFloat(d.confidence)||0;
+    const s=strC(conf);
+    const iss=(d.issues||'').split(',').filter(Boolean);
+
+    // Outer glow rect (for selection/branch)
+    g.append('rect').attr('class','node-glow')
+      .attr('rx',18).attr('ry',18).attr('fill','none').attr('stroke-width',2).attr('opacity',0);
+
+    // Body
+    g.append('rect').attr('class','node-body')
+      .attr('rx',16).attr('ry',16).attr('filter','url(#shadow)');
+
+    // Header
+    g.append('rect').attr('class','node-header').attr('rx',16).attr('ry',16);
+    g.append('rect').attr('class','node-header-btm'); // square bottom of header
+
+    // Type label
+    g.append('text').attr('class','node-type')
+      .attr('font-size',9.5).attr('font-weight',600).attr('letter-spacing',0.8)
+      .attr('font-family','DM Sans');
+
+    // Strength badge
+    g.append('rect').attr('class','node-badge').attr('rx',9).attr('ry',9);
+    g.append('text').attr('class','node-badge-text')
+      .attr('font-size',9.5).attr('font-weight',600).attr('text-anchor','middle')
+      .attr('fill','#fff').attr('font-family','DM Sans');
+
+    // Text lines
+    d.lines.forEach((_,i)=>{
+      g.append('text').attr('class','node-text-'+i)
+        .attr('text-anchor','middle').attr('font-size',11.5).attr('font-weight',500)
+        .attr('font-family','DM Sans');
+    });
+
+    // Source icon
+    if(d.source_title){
+      g.append('circle').attr('class','node-src').attr('r',7).attr('fill','#3b82f6');
+      g.append('text').attr('class','node-src-icon').attr('font-size',9).attr('fill','#fff').attr('text-anchor','middle').text('⎘');
+    }
+
+    // Issue icon
+    if(iss.length){
+      g.append('circle').attr('class','node-iss').attr('r',7).attr('fill','#ef4444');
+      g.append('text').attr('class','node-iss-icon').attr('font-size',9).attr('fill','#fff').attr('text-anchor','middle').attr('font-weight',700).text('!');
+    }
+  });
+
+  // Update all nodes (enter + existing)
+  const nodeAll=nodeEnter.merge(nodeSel);
+  nodeAll.each(function(d){
+    const g=d3.select(this);
+    const c=tc(d.type);
+    const col=dk?c.df:c;
+    const conf=parseFloat(d.confidence)||0;
+    const s=strC(conf);
+    const isSel=selected===d.id;
+    const isBr=editingBranch&&branchIds.has(d.id);
+    const dim=editingBranch&&!branchIds.has(d.id)?0.12:1;
+    const w=d.w, h=d.h;
+
+    g.attr('opacity',dim);
+
+    // Apply filters based on state
+    const filterStr = isSel ? 'url(#sel-glow)' : (isBr ? 'url(#branch-glow)' : 'url(#shadow)');
+    g.select('.node-body').attr('filter',filterStr);
+
+    // Glow outline — only for selected node
+    g.select('.node-glow')
+      .attr('x',-w/2-4).attr('y',-h/2-4).attr('width',w+8).attr('height',h+8)
+      .attr('stroke',isSel?col.stroke:'none')
+      .attr('stroke-width',isSel?2:0)
+      .attr('opacity',isSel?0.4:0);
+
+    // Body — thicker stroke for branch nodes
+    g.select('.node-body')
+      .attr('x',-w/2).attr('y',-h/2).attr('width',w).attr('height',h)
+      .attr('fill',col.fill)
+      .attr('stroke',isSel?col.stroke:(isBr?'#6366f1':col.stroke))
+      .attr('stroke-width',isSel?3:(isBr?2.2:1.5));
+
+    // Header
+    g.select('.node-header')
+      .attr('x',-w/2).attr('y',-h/2).attr('width',w).attr('height',26).attr('fill',col.header);
+    g.select('.node-header-btm')
+      .attr('x',-w/2).attr('y',-h/2+16).attr('width',w).attr('height',10).attr('fill',col.header);
+
+    // Type
+    g.select('.node-type')
+      .attr('x',-w/2+12).attr('y',-h/2+17).attr('fill',col.ht)
+      .text((d.type||'').toUpperCase());
+
+    // Badge
+    g.select('.node-badge')
+      .attr('x',w/2-38).attr('y',-h/2+4).attr('width',32).attr('height',18).attr('fill',s.b);
+    g.select('.node-badge-text')
+      .attr('x',w/2-22).attr('y',-h/2+16).text(Math.round(conf*100));
+
+    // Text
+    d.lines.forEach((line,i)=>{
+      g.select('.node-text-'+i).attr('x',0).attr('y',-h/2+36+i*18+12).attr('fill',col.text).text(line);
+    });
+
+    // Source
+    g.select('.node-src').attr('cx',-w/2+14).attr('cy',h/2-12);
+    g.select('.node-src-icon').attr('x',-w/2+14).attr('y',h/2-9);
+
+    // Issue
+    g.select('.node-iss').attr('cx',w/2-14).attr('cy',h/2-12);
+    g.select('.node-iss-icon').attr('x',w/2-14).attr('y',h/2-9);
+  });
+
+  // Click handler
+  nodeAll.on('click',function(event,d){
+    event.stopPropagation();
+    selected=selected===d.id?null:d.id;
+    updateGraph();
+    renderPanel();
+  });
+
+  // Drag — nodes stay where you drop them, only nudge if overlapping
+  nodeAll.call(d3.drag()
+    .on('start',(event,d)=>{
+      if(!event.active)simulation.alphaTarget(0.02).restart();
+      d.fx=d.x;d.fy=d.y;
+    })
+    .on('drag',(event,d)=>{
+      d.fx=event.x;d.fy=event.y;
+    })
+    .on('end',(event,d)=>{
+      if(!event.active)simulation.alphaTarget(0);
+      // Keep the node pinned where it was dropped
+      d.x=d.fx;d.y=d.fy;
+      d.fx=null;d.fy=null;
+      d.vx=0;d.vy=0;
+      // Tiny reheat just for collision resolution
+      simulation.alpha(0.05).restart();
+    })
+  );
+
+  // Click background to deselect
+  d3.select('#graphArea svg').on('click',()=>{
+    selected=null;updateGraph();renderPanel();
+  });
+}
+
+function ticked(){
+  if(!edgeG||!nodeG)return;
+
+  // Update edge paths
+  edgeG.selectAll('.edge-group').each(function(d){
+    const g=d3.select(this);
+    const s=d.source,t=d.target;
+    const midY=(s.y+t.y)/2;
+    g.select('.edge-line')
+      .attr('d',`M${s.x},${s.y+((s.h||60)/2)} C${s.x},${midY} ${t.x},${midY} ${t.x},${t.y-((t.h||60)/2)}`);
+    const lx=(s.x+t.x)/2, ly=midY;
+    g.select('.edge-label-bg').attr('x',lx-15).attr('y',ly-7);
+    g.select('.edge-label').attr('x',lx).attr('y',ly);
+  });
+
+  // Update node positions
+  nodeG.selectAll('.node-card').attr('transform',d=>`translate(${d.x},${d.y})`);
+}
+
+// ============================================================
+// RENDER UI SHELL + PANEL
+// ============================================================
+function renderUI(){
+  const app=document.getElementById('app');
+  const sc=data.reasoning_score||{};
+  const overall=parseInt(sc.overall)||0;
+  const sColor=overall>=70?'#16a34a':overall>=50?'#ca8a04':'#dc2626';
+  const sources=data.sources||[];
+
+  const ldots=['thesis','claim','evidence','counterarg','assumption'].map(k=>{
+    const c=isDark?TC[k].df:TC[k];
+    return`<div class="lgd-i"><div class="lgd-d" style="background:${c.fill};border:2px solid ${c.stroke}"></div><span style="color:${c.text};font-weight:500">${k.charAt(0).toUpperCase()+k.slice(1)}</span></div>`;
+  }).join('');
+
+  app.className=`app${isDark?' dark':''}`;
+  app.innerHTML=`
+  <div class="hdr">
+    <div class="hdr-l"><span class="logo">△</span><span class="app-nm">Juncture</span><span class="bc">/ Review</span></div>
+    <div class="hdr-r">
+      <button class="tbtn" id="tBtn">${isDark?'☀️ Light':'🌙 Dark'}</button>
+      <div class="sc"><span class="sl">Score</span><span class="sv" style="color:${sColor}">${overall}</span></div>
+      <button class="xbtn">Export</button>
+    </div>
+  </div>
+  <div class="lgd">
+    <div class="lgd-s"><span class="lgd-l">Type</span>${ldots}</div>
+    <div class="lgd-s"><span class="lgd-l">Strength</span>
+      <div class="lgd-i"><div style="width:10px;height:10px;border-radius:3px;background:#16a34a"></div><span style="color:var(--muted)">70+</span></div>
+      <div class="lgd-i"><div style="width:10px;height:10px;border-radius:3px;background:#ca8a04"></div><span style="color:var(--muted)">50-69</span></div>
+      <div class="lgd-i"><div style="width:10px;height:10px;border-radius:3px;background:#dc2626"></div><span style="color:var(--muted)">&lt;50</span></div>
+    </div>
+  </div>
+  <div class="mn">
+    <div class="ga">
+      <button class="bb${editingBranch?' vis':''}" id="bBtn">⎈ Editing branch · Click to exit</button>
+      <div id="graphArea" style="flex:1;overflow:hidden"></div>
+      <div class="sb">
+        <span class="sbl">Sources</span>
+        ${sources.map(f=>`<div class="fc"><div class="pi">PDF</div>${f.name.replace('.pdf','')}<span class="sd" style="background:${f.stance==='supporting'?'#22c55e':'#eab308'}"></span></div>`).join('')}
+      </div>
+      ${!selected?'<div class="gh">Click a node · Drag to rearrange · Scroll to zoom</div>':''}
+    </div>
+    <div class="sp${selected?'':' cl'}" id="sidePanel"></div>
+  </div>`;
+
+  document.getElementById('tBtn')?.addEventListener('click',()=>{isDark=!isDark;fullRender();});
+  document.getElementById('bBtn')?.addEventListener('click',()=>{editingBranch=null;branchIds=new Set();updateGraph();renderPanel();});
+
+  renderGraph();
+  renderPanel();
+}
+
+function renderPanel(){
+  const panel=document.getElementById('sidePanel');
+  if(!panel)return;
+  const sn=selected?gNodes.find(n=>n.id===selected):null;
+  if(!sn){panel.className='sp cl';panel.innerHTML='';return;}
+  panel.className='sp';
+
+  const c=tc(sn.type);const col=isDark?c.df:c;
+  const conf=parseFloat(sn.confidence)||0;
+  const s=strC(conf);
+  const isSt=(data.summary.strength_nodes||[]).includes(sn.id);
+  const isIm=(data.summary.improvement_nodes||[]).includes(sn.id);
+  const sources=data.sources||[];
+
+  // Find deep analysis for this node
+  const analyses=data.analyses||[];
+  const analysis=analyses.find(a=>a.node_id===sn.id);
+
+  // Parse analysis fields (delimited strings from pipeline)
+  let deepIssues=[], deepSuggs=[], deepReading=[];
+  let concept=null;
+
+  if(analysis){
+    if(analysis.issues){
+      deepIssues=analysis.issues.split(';;;').filter(Boolean).map(s=>{
+        const p=s.split('|||');
+        return{title:p[0]||'',context:p[1]||'',source:p[2]||'',node:p[3]||''};
+      });
+    }
+    if(analysis.suggestions){
+      deepSuggs=analysis.suggestions.split(';;;').filter(Boolean).map(s=>{
+        const p=s.split('|||');
+        return{action:p[0]||'',detail:p[1]||'',source_hint:p[2]||''};
+      });
+    }
+    if(analysis.further_reading){
+      deepReading=analysis.further_reading.split(';;;').filter(Boolean).map(s=>{
+        const p=s.split('|||');
+        return{title:p[0]||'',why:p[1]||'',query:p[2]||''};
+      });
+    }
+    if(analysis.concept_term){
+      concept={
+        term:analysis.concept_term,
+        definition:analysis.concept_definition||'',
+        howToUse:analysis.concept_how_to_use||'',
+        example:analysis.concept_example||''
+      };
+    }
+  }
+
+  // Fall back to simple issues/suggestions if no deep analysis
+  if(!deepIssues.length){
+    const simpleIss=(sn.issues||'').split(',').filter(Boolean);
+    deepIssues=simpleIss.map(i=>({title:i.replace(/_/g,' '),context:'This weakens the argument. Consider addressing it.',source:'',node:''}));
+  }
+  if(!deepSuggs.length){
+    const simpleSug=(sn.suggestions||'').split(',').filter(Boolean);
+    deepSuggs=simpleSug.map(s=>({action:s.replace(/_/g,' '),detail:'',source_hint:''}));
+  }
+
+  panel.innerHTML=`
+  <div class="sph">
+    <div class="sph-top">
+      <div class="sph-bg">
+        <span class="tp-b" style="color:${col.text}">${(sn.type||'').toUpperCase()}</span>
+        <span class="st-b" style="background:${s.bg};color:${s.t};border-color:${s.b}">${Math.round(conf*100)}%</span>
+        ${isSt?'<span style="font-size:12px;color:#16a34a">✦ Strong</span>':''}
+        ${isIm?'<span style="font-size:12px;color:#dc2626">⚠ Needs work</span>':''}
+      </div>
+      <button class="cl-b" id="clP">✕</button>
+    </div>
+    <div class="sp-t">
+      <span style="flex:1">${esc(sn.text)}</span>
+      ${concept?`<span class="concept-badge" title="${esc(concept.term)}">i</span>`:''}
+    </div>
+  </div>
+  <div class="sp-b">
+    <!-- Edit Branch -->
+    <button class="eb-b${editingBranch===sn.id?' on':''}" id="eBr">${editingBranch===sn.id?'⎈ Exit branch editing':'⎈ Edit this branch'}</button>
+
+    <!-- Logical Concept Tooltip -->
+    ${concept?`
+    <div class="concept-card" id="conceptCard">
+      <div style="font-size:14px;font-weight:700;color:#8b5cf6;margin-bottom:8px">${esc(concept.term)}</div>
+      <div style="font-size:13px;color:var(--text);line-height:1.6;margin-bottom:12px">${esc(concept.definition)}</div>
+      <div style="font-size:10px;color:#8b5cf6;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">How to use</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">${esc(concept.howToUse)}</div>
+      <div style="font-size:10px;color:#8b5cf6;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Example</div>
+      <div style="font-size:12px;color:${isDark?'#c4b5fd':'#6d28d9'};font-style:italic;line-height:1.6;padding:10px;background:${isDark?'rgba(139,92,246,0.15)':'rgba(139,92,246,0.06)'};border-radius:8px">${esc(concept.example)}</div>
+    </div>`:''}
+
+    <!-- Source -->
+    ${sn.source_title?`
+    <div class="src-c">
+      <div class="src-h">
+        <div style="width:28px;height:34px;background:#dc2626;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;font-weight:700;flex-shrink:0">PDF</div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">${esc(sn.source_title)}</div>
+          ${sn.source_page?`<div style="font-size:11px;color:var(--faint)">Page ${sn.source_page}</div>`:''}
+        </div>
+      </div>
+      ${sn.source_quote?`<div class="src-q">"${esc(sn.source_quote)}"</div>`:''}
+    </div>`:''}
+
+    <!-- What's Wrong -->
+    <div class="sp-s">
+      <div class="ss-l" style="color:#dc2626"><span class="ss-d" style="background:#dc2626"></span>What's Wrong</div>
+      ${deepIssues.length?deepIssues.map(iss=>`
+        <div class="iss-c">
+          <div class="iss-t">${esc(iss.title)}</div>
+          <div class="iss-x">${esc(iss.context)}</div>
+          ${iss.source?`<div style="margin-top:6px;font-size:11px;color:var(--faint);display:flex;align-items:center;gap:4px">
+            <span style="width:12px;height:14px;background:#dc2626;border-radius:2px;display:inline-flex;align-items:center;justify-content:center;font-size:5px;color:#fff;font-weight:700">PDF</span>
+            ${esc(iss.source)}
+          </div>`:''}
+        </div>
+      `).join(''):`<div class="ok-c">Well-supported ✓</div>`}
+    </div>
+
+    <!-- Suggested Actions -->
+    ${deepSuggs.length?`
+    <div class="sp-s">
+      <div class="ss-l" style="color:#8b5cf6"><span class="ss-d" style="background:#8b5cf6"></span>Suggested Actions</div>
+      ${deepSuggs.map(sg=>`
+        <button class="act-b">
+          <div style="font-weight:500">${esc(sg.action)}</div>
+          ${sg.detail?`<div style="font-size:11px;color:var(--muted);margin-top:3px;font-weight:400">${esc(sg.detail)}</div>`:''}
+        </button>
+      `).join('')}
+    </div>`:''}
+
+    <!-- Further Reading -->
+    ${deepReading.length?`
+    <div class="sp-s">
+      <div class="ss-l" style="color:#3b82f6"><span class="ss-d" style="background:#3b82f6"></span>Further Reading</div>
+      ${deepReading.map(rd=>`
+        <div style="padding:10px 12px;margin-bottom:6px;background:${isDark?'rgba(59,130,246,0.08)':'rgba(59,130,246,0.05)'};border:1px solid ${isDark?'rgba(59,130,246,0.15)':'rgba(59,130,246,0.1)'};border-radius:10px">
+          <div style="font-size:13px;font-weight:500;color:var(--text)">${esc(rd.title)}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.5">${esc(rd.why)}</div>
+          ${rd.query?`<div style="margin-top:6px;font-size:11px;color:#3b82f6;cursor:pointer" onclick="window.open('https://scholar.google.com/scholar?q='+encodeURIComponent('${esc(rd.query)}'))">🔍 Search Google Scholar</div>`:''}
+        </div>
+      `).join('')}
+    </div>`:`
+    <div class="sp-s">
+      <div class="ss-l" style="color:#3b82f6"><span class="ss-d" style="background:#3b82f6"></span>Further Reading</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${sources.filter(f=>f.name!==(sn.source_title||'')).slice(0,3).map(f=>`
+          <div class="fc">
+            <div class="pi">PDF</div>${f.name.replace('.pdf','')}<span class="sd" style="background:${f.stance==='supporting'?'#22c55e':'#eab308'}"></span>
+          </div>
+        `).join('')}
+      </div>
+    </div>`}
+  </div>
+  <div class="sp-f"><button class="rv-b">Revise This Node →</button></div>`;
+
+  document.getElementById('clP')?.addEventListener('click',()=>{selected=null;updateGraph();renderPanel();renderUI_hint();});
+  document.getElementById('eBr')?.addEventListener('click',()=>{if(selected)toggleBranch(selected);renderPanel();});
+
+  // Concept badge toggle
+  const badge=panel.querySelector('.concept-badge');
+  const card=document.getElementById('conceptCard');
+  if(badge&&card){
+    card.style.display='none';
+    badge.addEventListener('click',()=>{card.style.display=card.style.display==='none'?'block':'none';});
+  }
+}
+
+function renderUI_hint(){
+  // Toggle hint visibility
+  document.querySelectorAll('.gh').forEach(el=>{el.style.display=selected?'none':'block';});
+  const sp=document.getElementById('sidePanel');
+  if(sp)sp.className=selected?'sp':'sp cl';
+}
+
+function fullRender(){
+  // Full re-render preserving node positions
+  const savedPos=gNodes.map(n=>({id:n.id,x:n.x,y:n.y}));
+  renderUI();
+  // Restore positions
+  savedPos.forEach(sp=>{
+    const n=gNodes.find(nn=>nn.id===sp.id);
+    if(n){n.x=sp.x;n.y=sp.y;}
+  });
+  simulation.alpha(0.05).restart();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+async function init(){
+  await loadData();
+  initGraph();
+  renderUI();
+}
+init();
+</script>
+</body>
+</html>

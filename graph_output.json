@@ -1,0 +1,165 @@
+{
+  "nodes": [
+    {
+      "id": "node_1",
+      "type": "thesis",
+      "text": "Climate change is primarily caused by human activities.",
+      "parent_id": "",
+      "confidence": "0.9",
+      "status": "needs_work"
+    },
+    {
+      "id": "node_2",
+      "type": "claim",
+      "text": "Burning fossil fuels releases CO2 into the atmosphere.",
+      "parent_id": "node_1",
+      "confidence": "0.8",
+      "status": "needs_work"
+    },
+    {
+      "id": "node_3",
+      "type": "claim",
+      "text": "Some scientists argue that natural cycles also play a role.",
+      "parent_id": "node_1",
+      "confidence": "0.7",
+      "status": "needs_work"
+    },
+    {
+      "id": "node_4",
+      "type": "claim",
+      "text": "The Paris Agreement aims to limit warming to 1.5 degrees.",
+      "parent_id": "node_1",
+      "confidence": "0.9",
+      "status": "needs_work"
+    },
+    {
+      "id": "node_5",
+      "type": "claim",
+      "text": "However, many countries are not meeting their targets.",
+      "parent_id": "node_4",
+      "confidence": "0.8",
+      "status": "needs_work"
+    },
+    {
+      "id": "node_6",
+      "type": "claim",
+      "text": "Renewable energy is growing but not fast enough.",
+      "parent_id": "node_4",
+      "confidence": "0.7",
+      "status": "needs_work"
+    },
+    {
+      "id": "node_7",
+      "type": "evidence",
+      "text": "Human activities have unequivocally caused global warming.",
+      "parent_id": "node_2",
+      "confidence": "0.9",
+      "status": "needs_work"
+    }
+  ],
+  "edges": [
+    {
+      "from_id": "node_2",
+      "to_id": "node_1",
+      "type": "supports",
+      "weight": "0.8"
+    },
+    {
+      "from_id": "node_3",
+      "to_id": "node_2",
+      "type": "supports",
+      "weight": "0.7"
+    },
+    {
+      "from_id": "node_4",
+      "to_id": "node_1",
+      "type": "supports",
+      "weight": "0.9"
+    },
+    {
+      "from_id": "node_5",
+      "to_id": "node_4",
+      "type": "supports",
+      "weight": "0.8"
+    },
+    {
+      "from_id": "node_6",
+      "to_id": "node_4",
+      "type": "supports",
+      "weight": "0.7"
+    },
+    {
+      "from_id": "node_1",
+      "to_id": "node_6",
+      "type": "supports",
+      "weight": "0.9"
+    },
+    {
+      "from_id": "node_7",
+      "to_id": "node_2",
+      "type": "supports",
+      "weight": "0.9"
+    }
+  ],
+  "critiques": [
+    {
+      "node_id": "node_1",
+      "severity": "high",
+      "issues": "inconsistent_parentage: Node has inconsistent parentage."
+    },
+    {
+      "node_id": "node_2",
+      "severity": "medium",
+      "issues": "unclear_support: Node lacks clear support from evidence."
+    },
+    {
+      "node_id": "node_3",
+      "severity": "low",
+      "issues": ""
+    },
+    {
+      "node_id": "node_4",
+      "severity": "high",
+      "issues": "incomplete_evidence: Node lacks sufficient evidence to support its claim."
+    },
+    {
+      "node_id": "node_5",
+      "severity": "medium",
+      "issues": "unreliable_source: Node relies on an unreliable source."
+    },
+    {
+      "node_id": "node_6",
+      "severity": "low",
+      "issues": ""
+    },
+    {
+      "node_id": "node_7",
+      "severity": "high",
+      "issues": "unconnected_node: Node is not connected to the main graph."
+    }
+  ],
+  "reasoning_score": {
+    "overall": "86",
+    "support_coverage": "66",
+    "premise_coverage": "100",
+    "consistency": "100",
+    "passing": "True"
+  },
+  "summary": {
+    "top_issues": [
+      "Critique: Node 1 (Severity: high, Issue type: inconsistent_parentage) - Reconcile the node's parentage with its content.",
+      "Critique: Node 4 (Severity: high, Issue type: incomplete_evidence) - Provide additional evidence or strengthen the current evidence.",
+      "Critique: Node 7 (Severity: high, Issue type: unconnected_node) - Connect the node to its parent or strengthen its relevance."
+    ],
+    "strength_nodes": [
+      "Node 7 (type: evidence, confidence: 0.9, support_score: 0.8, premise_coverage: 0.7)",
+      "Node 4 (type: claim, confidence: 0.9, support_score: 0.8, premise_coverage: 0.7)",
+      "Node 1 (type: thesis, confidence: 0.9, support_score: 0.8, premise_coverage: 0.6)"
+    ],
+    "improvement_nodes": [
+      "Node 2 (needs clear support from evidence)",
+      "Node 5 (needs to verify the source or find alternative evidence)",
+      "Node 4 (needs more complete evidence)"
+    ]
+  }
+}
