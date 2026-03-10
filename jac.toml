@@ -8,6 +8,9 @@ entry-point = "main.jac"
 
 [dependencies.npm]
 jac-client-node = "1.0.4"
+lucide-react = "^0.483.0"
+pdfjs-dist = "^4.0.0"
+mammoth = "^1.8.0"
 
 [dependencies.npm.dev]
 "@jac-client/dev-deps" = "1.0.0"
@@ -19,3 +22,4 @@ watchdog = ">=3.0.0"
 base_route_app = "app"
 
 [plugins.client]
+debug = true
