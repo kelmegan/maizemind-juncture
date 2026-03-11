@@ -1,9 +1,11 @@
-cl import from ..screens.WelcomeScreen { WelcomeScreen }
-cl import from ..screens.ExportScreen { ExportScreen }
-cl import from ..screens.GenerateScreen { GenerateScreen }
-cl import from ..screens.ReviewScreen { ReviewScreen }
-cl import from ..screens.ReviseScreen { ReviseScreen }
-cl import from ..screens.ProfileScreen { ProfileScreen }
+import from ..screens.WelcomeScreen { WelcomeScreen }
+import from ..screens.ExportScreen { ExportScreen }
+import from ..screens.GenerateScreen { GenerateScreen }
+import from ..screens.ReviewScreen { ReviewScreen }
+import from ..screens.ReviseScreen { ReviseScreen }
+import from ..screens.ProfileScreen { ProfileScreen }
+
+import "../styles.css";
 
 def:pub AppRouter -> JsxElement {
     has currentScreen: str = "welcome",

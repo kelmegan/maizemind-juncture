@@ -1,15 +1,18 @@
 """Juncture - Profile Screen for user settings, history, and statistics."""
 
-import from "lucide-react" { ArrowLeft, User, History, Target, TrendingUp, Award, Settings }
+import from "lucide-react" { User, History, Target, TrendingUp, Award, Settings }
 
 import from ..components.Badge { Badge }
 import from ..components.Button { Button }
 import from ..components.Card { Card }
 import from ..components.Switch { Switch }
 import from ..components.Tabs { Tabs, TabsContent, TabsList, TabsTrigger }
+import from ..components.Header { Header }
 
 def:pub ProfileScreen(props: any) -> JsxElement {
     navigate = props.navigate;
+    screen_data = props.screenData if props.screenData else {};
+    back_to = screen_data["from"] if "from" in screen_data else "generate";
 
     has userId: str = "",
         isGuest: bool = False,
@@ -28,11 +31,6 @@ def:pub ProfileScreen(props: any) -> JsxElement {
             userId = ctx.currentUser.id;
             isGuest = ctx.currentUser.isGuest;
         }
-
-        # Mock data for now - replace with walker calls when backend integrated
-        # profile_result = await root spawn GetUserProfile(userId=userId);
-        # sessions_result = await root spawn GetUserSessions(userId=userId);
-        # stats_result = await root spawn CalculateUserStats(userId=userId);
 
         userId = "user_123";
         isGuest = False;
@@ -119,38 +117,34 @@ def:pub ProfileScreen(props: any) -> JsxElement {
     average_improvement = stats["averageImprovement"] if stats else 0;
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            <header className="bg-white border-b px-4 py-3">
-                <div className="max-w-6xl mx-auto flex items-center gap-4">
-                    <Button label={(<><ArrowLeft className="h-4 w-4 mr-2" />Back</>)} variant="ghost" size="sm" onClick={navigateToGenerate} />
-                    <h1 className="text-xl font-bold">Profile</h1>
-                </div>
-            </header>
+        <div className="profile-page">
+            <Header navigate={navigate} screen="profile" title="Profile" backTo={back_to} />
 
-            <div className="max-w-6xl mx-auto p-6">
-                <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-                    <TabsList className="grid w-full grid-cols-3 max-w-md">
+            <div className="profile-content">
+                <Tabs value={activeTab} onValueChange={handleTabChange} className="profile-tabs">
+                    <TabsList className="profile-tabs-list">
                         <TabsTrigger value="profile" activeValue={activeTab} onValueChange={handleTabChange}>
-                            <User className="h-4 w-4 mr-2" />Profile
+                            <User className="profile-tab-icon" />Profile
                         </TabsTrigger>
                         <TabsTrigger value="history" activeValue={activeTab} onValueChange={handleTabChange}>
-                            <History className="h-4 w-4 mr-2" />History
+                            <History className="profile-tab-icon" />History
                         </TabsTrigger>
                         <TabsTrigger value="stats" activeValue={activeTab} onValueChange={handleTabChange}>
-                            <TrendingUp className="h-4 w-4 mr-2" />Stats
+                            <TrendingUp className="profile-tab-icon" />Stats
                         </TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="profile" activeValue={activeTab} className="space-y-6">
-                        <div className="grid md:grid-cols-2 gap-6">
+                    <TabsContent value="profile" activeValue={activeTab} className="profile-tab-content">
+                        <div className="profile-grid">
                             <Card
-                                title={<><User className="h-5 w-5" />Basic Information</>}
+                                title={(<span className="card-title-icon"><User />Basic Information</span>)}
                                 description={"Sign up to save your profile permanently" if isGuest else "Your account details"}
                             >
-                                <div className="space-y-4">
-                                    <div className="space-y-2">
-                                        <label>Name</label>
+                                <div className="profile-form">
+                                    <div className="profile-field">
+                                        <label className="profile-label">Name</label>
                                         <input
+                                            className="profile-input"
                                             id="name"
                                             value={name}
                                             onChange={handleNameChange}
@@ -159,12 +153,12 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                                         />
                                     </div>
 
-                                    <div className="space-y-2">
-                                        <label>User Type</label>
+                                    <div className="profile-field">
+                                        <label className="profile-label">User Type</label>
                                         <select
+                                            className="profile-select"
                                             value={userType}
                                             onChange={handleUserTypeChange}
-                                            className="border-input flex h-9 w-full rounded-md border bg-input-background px-3 py-2 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                                         >
                                             <option value="student">Student</option>
                                             <option value="business">Business</option>
@@ -174,58 +168,58 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                                     </div>
 
                                     {(
-                                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm">
-                                            <p className="font-medium text-amber-900">Guest Mode</p>
-                                            <p className="text-amber-700 text-xs mt-1">
+                                        <div className="profile-guest-notice">
+                                            <p className="profile-guest-title">Guest Mode</p>
+                                            <p className="profile-guest-body">
                                                 Sign up to save your profile and access it across devices
                                             </p>
                                         </div>
                                     ) if isGuest else None}
 
                                     {(
-                                        <Button label="Save Changes" onClick={handleSaveProfile} className="w-full" />
+                                        <Button label="Save Changes" onClick={handleSaveProfile} className="profile-save-btn" />
                                     ) if not isGuest else None}
                                 </div>
                             </Card>
 
                             <Card
-                                title={<><Target className="h-5 w-5" />Your Goals</>}
+                                title={(<span className="card-title-icon"><Target />Your Goals</span>)}
                                 description="What do you want to improve?"
                             >
-                                <div className="space-y-3">
+                                <div className="profile-goals-list">
                                     {available_goals.map(lambda goal -> any {
                                         is_selected = goal in goals;
                                         return <div
                                             key={goal}
-                                            className={"p-3 border rounded-lg cursor-pointer transition-colors " + ("bg-indigo-50 border-indigo-300" if is_selected else "hover:bg-gray-50")}
+                                            className={"profile-goal-item" + (" profile-goal-item-selected" if is_selected else "")}
                                             onClick={lambda -> None { toggleGoal(goal); }}
                                         >
-                                            <div className="flex items-center gap-2">
-                                                <div className={"w-4 h-4 rounded border-2 flex items-center justify-center " + ("bg-indigo-600 border-indigo-600" if is_selected else "border-gray-300")}>
+                                            <div className="profile-goal-row">
+                                                <div className={"profile-goal-checkbox" + (" profile-goal-checkbox-selected" if is_selected else "")}>
                                                     {(
-                                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <svg className="profile-goal-check-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                                         </svg>
                                                     ) if is_selected else None}
                                                 </div>
-                                                <span className="text-sm">{goal}</span>
+                                                <span className="profile-goal-label">{goal}</span>
                                             </div>
                                         </div>;
                                     })}
                                 </div>
                             </Card>
 
-                            <Card title={<><Settings className="h-5 w-5" />Preferences</>} className="md:col-span-2">
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <div className="space-y-0.5">
-                                            <label>Theme</label>
-                                            <p className="text-sm text-gray-500">Choose your preferred color scheme</p>
+                            <Card title={(<span className="card-title-icon"><Settings />Preferences</span>)} className="profile-prefs-card">
+                                <div className="profile-prefs-list">
+                                    <div className="profile-pref-row">
+                                        <div className="profile-pref-info">
+                                            <label className="profile-label">Theme</label>
+                                            <p className="profile-pref-description">Choose your preferred color scheme</p>
                                         </div>
                                         <select
+                                            className="profile-select-sm"
                                             value={theme}
                                             onChange={handleThemeChange}
-                                            className="border-input flex h-9 rounded-md border bg-input-background px-3 py-2 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 w-32"
                                         >
                                             <option value="light">Light</option>
                                             <option value="dark">Dark</option>
@@ -233,10 +227,10 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                                         </select>
                                     </div>
 
-                                    <div className="flex items-center justify-between">
-                                        <div className="space-y-0.5">
-                                            <label>Accessibility Mode</label>
-                                            <p className="text-sm text-gray-500">Enhanced contrast and larger text</p>
+                                    <div className="profile-pref-row">
+                                        <div className="profile-pref-info">
+                                            <label className="profile-label">Accessibility Mode</label>
+                                            <p className="profile-pref-description">Enhanced contrast and larger text</p>
                                         </div>
                                         <Switch checked={accessibilityMode} onCheckedChange={handleAccessibilityChange} />
                                     </div>
@@ -248,30 +242,30 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                     <TabsContent value="history" activeValue={activeTab}>
                         <Card title="Session History" description="Your past argument maps and scores">
                             {(
-                                <div className="text-center py-12">
-                                    <History className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-                                    <p className="text-gray-500">No sessions yet</p>
-                                    <p className="text-sm text-gray-400 mt-1">Create your first argument map to get started</p>
-                                    <Button label="Create New Argument" variant="outline" onClick={navigateToGenerate} className="mt-4" />
+                                <div className="profile-history-empty">
+                                    <History className="profile-history-empty-icon" />
+                                    <p className="profile-history-empty-title">No sessions yet</p>
+                                    <p className="profile-history-empty-sub">Create your first argument map to get started</p>
+                                    <Button label="Create New Argument" variant="outline" onClick={navigateToGenerate} className="profile-history-empty-btn" />
                                 </div>
                             ) if len(sessions) == 0 else (
-                                <div className="h-[500px] overflow-y-auto">
-                                    <div className="space-y-3">
+                                <div className="profile-history-list">
+                                    <div className="profile-history-items">
                                         {sessions.map(lambda session -> any {
                                             formatted_date = session["date"].replace("T", " at ");
                                             return <div
                                                 key={session["id"]}
-                                                className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer"
+                                                className="profile-session-item"
                                             >
-                                                <div className="flex items-start justify-between gap-4">
-                                                    <div className="flex-1">
-                                                        <h4 className="font-medium">{session["title"]}</h4>
-                                                        <p className="text-sm text-gray-500 mt-1">{formatted_date}</p>
+                                                <div className="profile-session-inner">
+                                                    <div className="profile-session-body">
+                                                        <h4 className="profile-session-title">{session["title"]}</h4>
+                                                        <p className="profile-session-date">{formatted_date}</p>
                                                     </div>
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="profile-session-badges">
                                                         <Badge variant="outline">Score: {session["finalScore"]}</Badge>
                                                         {(
-                                                            <Badge className="bg-green-100 text-green-700">
+                                                            <Badge className="badge-improvement">
                                                                 +{session["finalScore"] - session["initialScore"]}
                                                             </Badge>
                                                         ) if session["finalScore"] > session["initialScore"] else None}
@@ -286,50 +280,50 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                     </TabsContent>
 
                     <TabsContent value="stats" activeValue={activeTab}>
-                        <div className="grid md:grid-cols-3 gap-6">
-                            <Card title={<span className="text-sm text-gray-600">Total Sessions</span>}>
-                                <div className="text-4xl font-bold">{total_sessions}</div>
-                                <p className="text-sm text-gray-500 mt-1">Argument maps created</p>
+                        <div className="profile-stats-grid">
+                            <Card title={<span className="profile-stat-label">Total Sessions</span>}>
+                                <div className="profile-stat-number">{total_sessions}</div>
+                                <p className="profile-stat-sub">Argument maps created</p>
                             </Card>
 
-                            <Card title={<span className="text-sm text-gray-600">Average Score</span>}>
-                                <div className="text-4xl font-bold text-indigo-600">{average_score}</div>
-                                <p className="text-sm text-gray-500 mt-1">Out of 100</p>
+                            <Card title={<span className="profile-stat-label">Average Score</span>}>
+                                <div className="profile-stat-number profile-stat-number-accent">{average_score}</div>
+                                <p className="profile-stat-sub">Out of 100</p>
                             </Card>
 
-                            <Card title={<span className="text-sm text-gray-600">Avg. Improvement</span>}>
-                                <div className="text-4xl font-bold text-green-600">+{average_improvement}</div>
-                                <p className="text-sm text-gray-500 mt-1">Per session</p>
+                            <Card title={<span className="profile-stat-label">Avg. Improvement</span>}>
+                                <div className="profile-stat-number profile-stat-number-good">+{average_improvement}</div>
+                                <p className="profile-stat-sub">Per session</p>
                             </Card>
 
                             <Card
-                                title={<><Award className="h-5 w-5" />Achievements</>}
+                                title={(<span className="card-title-icon"><Award />Achievements</span>)}
                                 description="Milestones you've unlocked"
-                                className="md:col-span-3"
+                                className="profile-achievements-card"
                             >
-                                <div className="grid md:grid-cols-2 gap-3">
-                                    <div className={"p-4 border rounded-lg " + ("bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-300" if total_sessions >= 1 else "bg-gray-50 border-gray-200 opacity-50")}>
-                                        <div className="text-2xl mb-2">🎯</div>
-                                        <h4 className="font-semibold">First Steps</h4>
-                                        <p className="text-sm text-gray-600">Create your first argument map</p>
+                                <div className="profile-achievements-grid">
+                                    <div className={"profile-achievement" + (" profile-achievement-gold" if total_sessions >= 1 else " profile-achievement-locked")}>
+                                        <div className="profile-achievement-icon">🎯</div>
+                                        <h4 className="profile-achievement-title">First Steps</h4>
+                                        <p className="profile-achievement-desc">Create your first argument map</p>
                                     </div>
 
-                                    <div className={"p-4 border rounded-lg " + ("bg-gradient-to-br from-green-50 to-green-100 border-green-300" if average_score >= 75 else "bg-gray-50 border-gray-200 opacity-50")}>
-                                        <div className="text-2xl mb-2">⭐</div>
-                                        <h4 className="font-semibold">Strong Reasoner</h4>
-                                        <p className="text-sm text-gray-600">Achieve an average score of 75+</p>
+                                    <div className={"profile-achievement" + (" profile-achievement-green" if average_score >= 75 else " profile-achievement-locked")}>
+                                        <div className="profile-achievement-icon">⭐</div>
+                                        <h4 className="profile-achievement-title">Strong Reasoner</h4>
+                                        <p className="profile-achievement-desc">Achieve an average score of 75+</p>
                                     </div>
 
-                                    <div className={"p-4 border rounded-lg " + ("bg-gradient-to-br from-blue-50 to-blue-100 border-blue-300" if total_sessions >= 5 else "bg-gray-50 border-gray-200 opacity-50")}>
-                                        <div className="text-2xl mb-2">📚</div>
-                                        <h4 className="font-semibold">Dedicated</h4>
-                                        <p className="text-sm text-gray-600">Create 5 argument maps</p>
+                                    <div className={"profile-achievement" + (" profile-achievement-blue" if total_sessions >= 5 else " profile-achievement-locked")}>
+                                        <div className="profile-achievement-icon">📚</div>
+                                        <h4 className="profile-achievement-title">Dedicated</h4>
+                                        <p className="profile-achievement-desc">Create 5 argument maps</p>
                                     </div>
 
-                                    <div className={"p-4 border rounded-lg " + ("bg-gradient-to-br from-purple-50 to-purple-100 border-purple-300" if average_improvement >= 20 else "bg-gray-50 border-gray-200 opacity-50")}>
-                                        <div className="text-2xl mb-2">🚀</div>
-                                        <h4 className="font-semibold">Growth Mindset</h4>
-                                        <p className="text-sm text-gray-600">Average +20 score improvement</p>
+                                    <div className={"profile-achievement" + (" profile-achievement-purple" if average_improvement >= 20 else " profile-achievement-locked")}>
+                                        <div className="profile-achievement-icon">🚀</div>
+                                        <h4 className="profile-achievement-title">Growth Mindset</h4>
+                                        <p className="profile-achievement-desc">Average +20 score improvement</p>
                                     </div>
                                 </div>
                             </Card>

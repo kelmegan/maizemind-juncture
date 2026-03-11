@@ -5,16 +5,13 @@ def:pub Badge(props: any) -> JsxElement {
     variant = props.variant if props.variant else "default";
     className = props.className if props.className else "";
 
-    base_class = "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors ";
-
-    variant_class = "default";
-    if variant == "default" { variant_class = "border-transparent bg-primary text-primary-foreground "; }
-    elif variant == "secondary" { variant_class = "border-transparent bg-secondary text-secondary-foreground "; }
-    elif variant == "destructive" { variant_class = "border-transparent bg-destructive text-destructive-foreground "; }
-    elif variant == "outline" { variant_class = "text-foreground "; }
+    variant_class = "badge-default";
+    if variant == "secondary"    { variant_class = "badge-secondary"; }
+    elif variant == "destructive" { variant_class = "badge-destructive"; }
+    elif variant == "outline"     { variant_class = "badge-outline"; }
 
     return (
-        <span className={base_class + variant_class + className}>
+        <span className={"badge " + variant_class + " " + className}>
             {children}
         </span>
     );

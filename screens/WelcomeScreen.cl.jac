@@ -80,63 +80,126 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
 
     def handleTabChange(v: str) -> None {
         isSignup = (v == "signup");
+        error = "";
     }
 
     activeTab = "signup" if isSignup else "login";
 
     return (
-        <div className="min-h-screen flex items-center justify-center">
-            <Card
-                title="Get Started"
-                description="Sign in to save your work or continue as guest"
-            >
-                <Tabs value={activeTab} onValueChange={handleTabChange}>
-                    <TabsList className="grid grid-cols-2">
-                        <TabsTrigger value="login" activeValue={activeTab} onValueChange={handleTabChange}>
-                            Login
-                        </TabsTrigger>
-                        <TabsTrigger value="signup" activeValue={activeTab} onValueChange={handleTabChange}>
-                            Sign Up
-                        </TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="login" activeValue={activeTab}>
-                        <input
-                            placeholder="Email"
-                            value={email}
-                            onChange={lambda e -> None { email = e.target.value; }}
-                        />
-                        <input
-                            placeholder="Password"
-                            type="password"
-                            value={password}
-                            onChange={lambda e -> None { password = e.target.value; }}
-                        />
-                        {(<div className="text-red-600">{error}</div>) if error and not isSignup else None}
-                        <Button label={"Loading..." if loading else "Login"} onClick={handleLogin} />
-                    </TabsContent>
-                    <TabsContent value="signup" activeValue={activeTab}>
-                        <input
-                            placeholder="Name"
-                            value={name}
-                            onChange={lambda e -> None { name = e.target.value; }}
-                        />
-                        <input
-                            placeholder="Email"
-                            value={email}
-                            onChange={lambda e -> None { email = e.target.value; }}
-                        />
-                        <input
-                            placeholder="Password"
-                            type="password"
-                            value={password}
-                            onChange={lambda e -> None { password = e.target.value; }}
-                        />
-                        {(<div className="text-red-600">{error}</div>) if error and isSignup else None}
-                        <Button label={"Creating..." if loading else "Sign Up"} onClick={handleSignup} />
-                    </TabsContent>
-                </Tabs>
-                <Button label="Continue as Guest" variant="outline" onClick={handleContinueAsGuest} />
-            </Card>
+        <div className="entry-page">
+            <div className="branding-section">
+                <h1 className="branding-title">Juncture</h1>
+                <p className="tagline">Your paper & presentation copilot</p>
+                <div className="feature-list">
+                    <div className="feature-item">
+                        <div className="feature-icon">
+                            <Brain />
+                        </div>
+                        <div className="feature-content">
+                            <h3>Paste your messy notes</h3>
+                            <p>Transform scattered thoughts into structured arguments</p>
+                        </div>
+                    </div>
+                    <div className="feature-item">
+                        <div className="feature-icon">
+                            <Lightbulb />
+                        </div>
+                        <div className="feature-content">
+                            <h3>Get instant critique</h3>
+                            <p>See exactly what to fix with AI-powered analysis</p>
+                        </div>
+                    </div>
+                    <div className="feature-item">
+                        <div className="feature-icon">
+                            <TrendingUp />
+                        </div>
+                        <div className="feature-content">
+                            <h3>Watch your score improve</h3>
+                            <p>Track reasoning quality and export polished outlines</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="auth-container">
+                <div className="auth-card">
+                    <div className="auth-header">
+                        <h4>Get Started</h4>
+                        <p>Sign in to save your work or continue as guest</p>
+                    </div>
+                    <Tabs value={activeTab} onValueChange={handleTabChange} className="auth-tabs">
+                        <TabsList className="auth-tabs-list">
+                            <TabsTrigger value="login" activeValue={activeTab} onValueChange={handleTabChange} className="auth-tab-trigger">
+                                Login
+                            </TabsTrigger>
+                            <TabsTrigger value="signup" activeValue={activeTab} onValueChange={handleTabChange} className="auth-tab-trigger">
+                                Sign Up
+                            </TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="login" activeValue={activeTab} className="auth-tab-content">
+                            {(<div className="auth-error">{error}</div>) if error and not isSignup else None}
+                            <div className="form-field">
+                                <label className="form-label">Email</label>
+                                <input
+                                    type="text"
+                                    placeholder="you@example.com"
+                                    value={email}
+                                    onChange={lambda e -> None { email = e.target.value; }}
+                                    className="auth-input"
+                                />
+                            </div>
+                            <div className="form-field">
+                                <label className="form-label">Password</label>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={lambda e -> None { password = e.target.value; }}
+                                    className="auth-input"
+                                />
+                            </div>
+                            <Button label={"Processing..." if loading else "Login"} onClick={handleLogin} className="auth-submit-btn" />
+                        </TabsContent>
+
+                        <TabsContent value="signup" activeValue={activeTab} className="auth-tab-content">
+                            {(<div className="auth-error">{error}</div>) if error and isSignup else None}
+                            <div className="form-field">
+                                <label className="form-label">Name</label>
+                                <input
+                                    type="text"
+                                    placeholder="Your name"
+                                    value={name}
+                                    onChange={lambda e -> None { name = e.target.value; }}
+                                    className="auth-input"
+                                />
+                            </div>
+                            <div className="form-field">
+                                <label className="form-label">Email</label>
+                                <input
+                                    type="text"
+                                    placeholder="you@example.com"
+                                    value={email}
+                                    onChange={lambda e -> None { email = e.target.value; }}
+                                    className="auth-input"
+                                />
+                            </div>
+                            <div className="form-field">
+                                <label className="form-label">Password</label>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={lambda e -> None { password = e.target.value; }}
+                                    className="auth-input"
+                                />
+                            </div>
+                            <Button label={"Processing..." if loading else "Create Account"} onClick={handleSignup} className="auth-submit-btn" />
+                        </TabsContent>
+                    </Tabs>
+
+                    <div className="auth-divider">OR</div>
+                    <Button label="Continue as Guest" variant="outline" onClick={handleContinueAsGuest} className="auth-guest-btn" />
+                </div>
+            </div>
         </div>
     );
 }

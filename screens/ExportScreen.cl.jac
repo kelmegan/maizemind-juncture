@@ -1,11 +1,12 @@
 """Export Screen"""
 
-import from "lucide-react" { ArrowLeft, Download, FileText, AlertTriangle, CheckCircle2, Copy }
+import from "lucide-react" { Download, FileText, AlertTriangle, CheckCircle2, Copy }
 
 import from ..components.Alert { Alert }
 import from ..components.Badge { Badge }
 import from ..components.Button { Button }
 import from ..components.Card { Card }
+import from ..components.Header { Header }
 
 def:pub ExportScreen(props: any) -> JsxElement {
     navigate = props.navigate;
@@ -109,18 +110,17 @@ def:pub ExportScreen(props: any) -> JsxElement {
     }
 
     def handleExportText() -> None {
+        # TODO: make this work
         show_flags = currentScore["overall"] < 75;
-
         outline = generateOutlineText(show_flags);
-
         print("Copy to clipboard:");
         print(outline);
     }
 
     def handleExportPDF() -> None {
+        # TODO: make this work
         show_flags = currentScore["overall"] < 75;
         outline = generateOutlineText(show_flags);
-
         print("Export PDF:");
         print(outline);
     }
@@ -132,50 +132,27 @@ def:pub ExportScreen(props: any) -> JsxElement {
             notes=currentNotes,
             score=currentScore
         );
-
         print(walker_result);
     }
 
-    def navigateBack() -> None {
-        navigate("review");
-    }
-
-    def navigateToGenerate() -> None {
-        navigate("generate");
-    }
-
-    def navigateToProfile() -> None {
-        navigate("profile");
-    }
-
     if not currentGraph or not currentScore {
-        return <div className="flex items-center justify-center h-screen">
-            <p>Loading...</p>
-        </div>;
+        return <div className="export-loading"><p>Loading...</p></div>;
     }
 
     show_warning = currentScore["overall"] < 75;
-    unsupported_count = currentScore["unsupportedClaims"];
-    contradiction_count = currentScore["unresolvedContradictions"];
 
-    return
-        <div className="min-h-screen bg-gray-50">
-            <header className="bg-white border-b px-4 py-3">
-                <div className="max-w-4xl mx-auto flex items-center gap-4">
-                    <Button label={(<><ArrowLeft className="h-4 w-4 mr-2" />Back to Map</>)} variant="ghost" size="sm" onClick={navigateBack} />
-                    <h1 className="text-xl font-bold">
-                        Export Outline
-                    </h1>
-                </div>
-            </header>
-            <div className="max-w-4xl mx-auto p-6 space-y-6">
+    return (
+        <div className="export-page">
+            <Header navigate={navigate} screen="export" title="Export Outline" backTo="revise" />
+
+            <div className="export-content">
                 <Card
                     title={
-                        <div className="flex items-center justify-between">
+                        <div className="export-score-header">
                             <span>Final Score</span>
                             <Badge
                                 variant={"default" if currentScore["overall"] >= 75 else "destructive"}
-                                className="text-lg px-4 py-1"
+                                className="export-score-badge"
                             >
                                 {currentScore["overall"]}/100
                             </Badge>
@@ -185,35 +162,35 @@ def:pub ExportScreen(props: any) -> JsxElement {
                         if currentScore["overall"] >= 75 else
                         "Your argument could be improved before exporting."}
                 />
+
                 {(
-                    <Alert className="border-green-200 bg-green-50">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        <p className="font-medium text-green-900">Great work! Your argument is ready to export.</p>
+                    <Alert className="export-alert-success">
+                        <CheckCircle2 className="export-alert-success-icon" />
+                        <p className="export-alert-success-text">Great work! Your argument is ready to export.</p>
                     </Alert>
                 ) if not show_warning else (
-                    <Alert className="border-amber-200 bg-amber-50">
-                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    <Alert className="export-alert-warning">
+                        <AlertTriangle className="export-alert-warning-icon" />
                         <p>Some issues were detected before export.</p>
                     </Alert>
                 )}
+
                 <Card title="Outline Preview">
-                    <div className="bg-gray-50 rounded-lg p-4 font-mono text-sm whitespace-pre-wrap border">
+                    <div className="export-preview">
                         {generateOutlineText(show_warning)}
                     </div>
                 </Card>
+
                 <Card title="Export Options">
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <Button label={(<><Copy className="h-6 w-6" />Copy Outline</>)} variant="outline" onClick={handleExportText} />
-                            <Button label={(<><Download className="h-6 w-6" />Download PDF</>)} variant="outline" onClick={handleExportPDF} />
+                    <div className="export-options-body">
+                        <div className="export-options-grid">
+                            <Button label={(<><Copy className="export-btn-icon" />Copy Outline</>)} variant="outline" onClick={handleExportText} />
+                            <Button label={(<><Download className="export-btn-icon" />Download PDF</>)} variant="outline" onClick={handleExportPDF} />
                         </div>
-                        <Button label={(<><FileText className="h-4 w-4 mr-2" />Save to History</>)} variant="default" onClick={handleSaveSession} className="w-full" />
+                        <Button label={(<><FileText className="export-btn-icon-sm" />Save to History</>)} onClick={handleSaveSession} className="export-save-btn" />
                     </div>
                 </Card>
-                <div className="flex gap-3">
-                    <Button label="Start New Argument" variant="outline" onClick={navigateToGenerate} className="flex-1" />
-                    <Button label="View Profile" variant="outline" onClick={navigateToProfile} className="flex-1" />
-                </div>
             </div>
-        </div>;
+        </div>
+    );
 }
