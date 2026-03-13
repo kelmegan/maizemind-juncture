@@ -1,6 +1,7 @@
 """Export Screen"""
 
 import from "lucide-react" { Download, FileText, AlertTriangle, CheckCircle2, Copy }
+import from "jspdf" { jsPDF }
 
 import from ..components.Alert { Alert }
 import from ..components.Badge { Badge }
@@ -17,7 +18,8 @@ def:pub ExportScreen(props: any) -> JsxElement {
         currentNotes: str = "",
         userId: str = "",
         exportFormat: str = "text",
-        copyStatus: str = "";  # "" | "success" | "failure";
+        # "" | "success" | "failure" | "pdf-success" | "pdf-failure"
+        copyStatus: str = "";
 
     async def loadContext() -> None {
         ctx = await root spawn GetContext();
@@ -56,7 +58,8 @@ def:pub ExportScreen(props: any) -> JsxElement {
         nodes = currentGraph["nodes"];
         edges = currentGraph["edges"];
 
-        # Find thesis
+        NL = chr(10);  # JAC doesn't interpret \n in string literals — use chr(10) for a real newline
+
         thesis_node = None;
         claim_nodes = [];
         evidence_nodes = {};
@@ -67,21 +70,20 @@ def:pub ExportScreen(props: any) -> JsxElement {
             elif n["type"] == "EVIDENCE" { evidence_nodes[n["id"]] = n; }
         }
 
-        outline = "ARGUMENT OUTLINE\n";
-        outline += "==================================================\n\n";
+        outline = "ARGUMENT OUTLINE" + NL;
+        outline += "==================================================" + NL + NL;
 
         if thesis_node {
-            outline += "THESIS:\n";
-            outline += thesis_node["content"] + "\n\n";
+            outline += "THESIS:" + NL;
+            outline += thesis_node["content"] + NL + NL;
         }
 
         if len(claim_nodes) > 0 {
-            outline += "MAIN CLAIMS:\n";
+            outline += "MAIN CLAIMS:" + NL;
             i = 1;
             for claim in claim_nodes {
-                outline += str(i) + ". " + claim["content"] + "\n";
+                outline += str(i) + ". " + claim["content"] + NL;
 
-                # Find evidence supporting this claim
                 supporting = [];
                 for edge in edges {
                     if edge["target"] == claim["id"] and edge["type"] == "SUPPORTS" {
@@ -92,52 +94,82 @@ def:pub ExportScreen(props: any) -> JsxElement {
                 }
 
                 if len(supporting) > 0 {
-                    outline += "   Supporting Evidence:\n";
+                    outline += "   Supporting Evidence:" + NL;
                     for ev in supporting {
-                        outline += "   • " + ev["content"] + "\n";
+                        outline += "   - " + ev["content"] + NL;
                     }
                 }
 
-                outline += "\n";  # extra spacing between claims
+                outline += NL;
                 i += 1;
             }
         }
 
-        outline += "==================================================\n";
-        outline += "Reasoning Score: " + str(currentScore["overall"]) + "/100\n";
+        outline += "==================================================" + NL;
+        outline += "Reasoning Score: " + str(currentScore["overall"]) + "/100" + NL;
 
         return outline;
     }
 
-    def handleExportText() -> None {
-        # TODO: make this work
+    # ── Copy to clipboard ─────────────────────────────────────────────────────
+    # navigator.clipboard.writeText returns a Promise — await it and catch
+    # failures with try/except. No :js: escape needed; JAC calls browser
+    # APIs directly. setTimeout uses JAC lambda syntax for auto-dismiss.
+    def handleCopyOutline() -> None {
         show_flags = currentScore["overall"] < 75;
-        outline = generateOutlineText(show_flags);
-        print("Copy to clipboard:");
-        print(outline);
+        outline_text = generateOutlineText(show_flags);
+
+        navigator.clipboard.writeText(outline_text)
+            .then(lambda _: any -> None {
+                copyStatus = "success";
+                setTimeout(lambda -> None { copyStatus = ""; }, 3000);
+            })
+            .catch(lambda _: any -> None {
+                copyStatus = "failure";
+                setTimeout(lambda -> None { copyStatus = ""; }, 3000);
+            });
     }
 
-    def handleCopyOutline() -> None {
-        # TODO: make this work
-        outline_text = generateOutlineText(show_warning);
+    # ── Download as text file ─────────────────────────────────────────────────
+    # JAC does not support the `new` keyword — use Reflect.construct instead.
+    # Everything else (document, URL, appendChild, click) is called directly.
+    def handleExportPDF() -> None {
+        show_flags = currentScore["overall"] < 75;
+        outline = generateOutlineText(show_flags);
 
-        result: dict = navigator.clipboard.writeText(text=outline_text);
-        if "ok" in result and result["ok"] {
-            copyStatus = "success";
-        } else {
-            copyStatus = "failure";
-            print("Copy failed:", result);
+        # Reflect.construct is required because JAC bans the `new` keyword.
+        # jsPDF() with no args defaults to portrait, mm units, A4 page size.
+        doc = Reflect.construct(jsPDF, []);
+
+        # jsPDF.splitTextToSize wraps long lines to fit within the page width.
+        # A4 usable width is ~190mm (210mm - 10mm margin each side).
+        margin = 10;
+        page_width = doc.internal.pageSize.getWidth();
+        usable_width = page_width - (margin * 2);
+
+        doc.setFont("courier", "normal");
+        doc.setFontSize(10);
+
+        y = margin;
+        line_height = 5;
+
+        for raw_line in outline.split(chr(10)) {
+            # Wrap the line if it's too wide, then write each wrapped segment.
+            wrapped = doc.splitTextToSize(raw_line, usable_width);
+            for segment in wrapped {
+                # Add a new page if we've run out of vertical space.
+                if y + line_height > doc.internal.pageSize.getHeight() - margin {
+                    doc.addPage();
+                    y = margin;
+                }
+                doc.text(segment, margin, y);
+                y += line_height;
+            }
         }
 
-        copyStatus = "";
-    }
-
-    def handleExportPDF() -> None {
-        # TODO: make this work
-        show_flags = currentScore["overall"] < 75;
-        outline = generateOutlineText(show_flags);
-        print("Export PDF:");
-        print(outline);
+        doc.save("argument-outline.pdf");
+        copyStatus = "pdf-success";
+        setTimeout(lambda -> None { copyStatus = ""; }, 3000);
     }
 
     async def handleSaveSession() -> None {
@@ -156,10 +188,9 @@ def:pub ExportScreen(props: any) -> JsxElement {
 
     show_warning = currentScore["overall"] < 75;
 
-    outline_lines: list = [];
-
+    outline_lines = [];
     i = 0;
-    for line in generateOutlineText(show_warning).split("\n") {
+    for line in generateOutlineText(show_warning).split(chr(10)) {
         outline_lines.append(<div key={str(i)}>{line}</div>);
         i += 1;
     }
@@ -171,14 +202,25 @@ def:pub ExportScreen(props: any) -> JsxElement {
             {(
                 <Alert className="export-alert-success">
                     <CheckCircle2 className="export-alert-success-icon" />
-                    <p className="export-alert-success-text">Outline copied to clipboard!</p>
+                    <p className="export-alert-success-text">Outline copied to clipboard successfully!</p>
                 </Alert>
             ) if copyStatus == "success" else (
                 <Alert className="export-alert-warning">
                     <AlertTriangle className="export-alert-warning-icon" />
-                    <p>Failed to copy outline. Please try again.</p>
+                    <p>Copy to clipboard failed. Please try again.</p>
                 </Alert>
-            ) if copyStatus == "failure" else None}
+            ) if copyStatus == "failure" else (
+                <Alert className="export-alert-success">
+                    <CheckCircle2 className="export-alert-success-icon" />
+                    <p className="export-alert-success-text">Outline downloaded successfully!</p>
+                </Alert>
+            ) if copyStatus == "pdf-success" else (
+                <Alert className="export-alert-warning">
+                    <AlertTriangle className="export-alert-warning-icon" />
+                    <p>Download failed. Please try again.</p>
+                </Alert>
+            ) if copyStatus == "pdf-failure" else None}
+
             <div className="export-content">
                 <Card
                     title={
