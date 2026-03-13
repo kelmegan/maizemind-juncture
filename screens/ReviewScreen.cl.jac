@@ -114,21 +114,21 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                 <div className="score-breakdown-group">
                                     <div>
                                         <div className="score-breakdown-row">
-                                            <span className="score-breakdown-label">Support Coverage (40%)</span>
+                                            <span className="score-breakdown-label">Support Coverage</span>
                                             <Badge variant="outline">{currentScore["support"]}%</Badge>
                                         </div>
                                         <Progress value={currentScore["support"]} />
                                     </div>
                                     <div>
                                         <div className="score-breakdown-row">
-                                            <span className="score-breakdown-label">Premise Coverage (40%)</span>
+                                            <span className="score-breakdown-label">Premise Coverage</span>
                                             <Badge variant="outline">{currentScore["premise"]}%</Badge>
                                         </div>
                                         <Progress value={currentScore["premise"]} />
                                     </div>
                                     <div>
                                         <div className="score-breakdown-row">
-                                            <span className="score-breakdown-label">Consistency (20%)</span>
+                                            <span className="score-breakdown-label">Consistency</span>
                                             <Badge variant="outline">{currentScore["consistency"]}%</Badge>
                                         </div>
                                         <Progress value={currentScore["consistency"]} />

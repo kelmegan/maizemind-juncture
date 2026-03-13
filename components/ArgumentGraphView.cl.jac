@@ -20,15 +20,33 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         isPanning: bool        = False,
         panStartX: float       = 0.0,
         panStartY: float       = 0.0,
-        viewX: float           = 40.0,
-        viewY: float           = 40.0,
+        viewX: float           = 0.0,
+        viewY: float           = 0.0,
         scale: float           = 1.0,
-        isLocked: bool         = False;
+        isLocked: bool         = False,
+        viewportW: float       = 0.0,
+        viewportH: float       = 0.0;
 
     can with entry {
         init = {};
-        for n in nodes { init[n["id"]] = {"x": n["position"]["x"], "y": n["position"]["y"]}; }
+        for n in nodes {
+            init[n["id"]] = {
+                "x": n["position"]["x"],
+                "y": n["position"]["y"]
+            };
+        }
         nodePositions = init;
+
+        # center the camera
+        canvas = document.querySelector("[data-graph-canvas]");
+        if canvas {
+            rect = canvas.getBoundingClientRect();
+            viewportW = rect.width;
+            viewportH = rect.height;
+
+            viewX = viewportW / 2.0;
+            viewY = viewportH / 2.0;
+        }
     }
 
     def getPos(nid: str) -> dict {
@@ -57,9 +75,13 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
     def resolveCollisions(positions: dict, draggedId: str) -> dict {
         # Deep-copy so we don't mutate the input
         result = {};
-        for k in positions { result[k] = {"x": positions[k]["x"], "y": positions[k]["y"]}; }
+        for n in nodes {
+            nid = n["id"];
+            pos = positions[nid];
+            result[nid] = {"x": pos["x"], "y": pos["y"]};
+        }
 
-        all_ids = list(result.keys());
+        all_ids = list(result);
 
         # Multiple passes let chain reactions propagate (A bumps B, B bumps C)
         passes = 4;
@@ -139,7 +161,7 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
 
     def zoomIn()     -> None { scale = min(3.0, scale + 0.15); }
     def zoomOut()    -> None { scale = max(0.25, scale - 0.15); }
-    def resetView()  -> None { scale = 1.0; viewX = 40.0; viewY = 40.0; }
+    def resetView()  -> None { scale = 1.0; viewX = viewportW / 2.0; viewY = viewportH / 2.0; }
     def toggleLock() -> None { isLocked = not isLocked; }
 
     def handleCanvasMouseDown(e: any) -> None {
@@ -168,14 +190,25 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
 
         if draggingNodeId {
             rect  = e.currentTarget.getBoundingClientRect();
+
             new_x = max(0.0, (e.clientX - rect.left - viewX) / scale - nodeDragOffsetX);
             new_y = max(0.0, (e.clientY - rect.top  - viewY) / scale - nodeDragOffsetY);
 
-            updated = {};
-            for k in nodePositions { updated[k] = {"x": nodePositions[k]["x"], "y": nodePositions[k]["y"]}; }
-            updated[draggingNodeId] = {"x": new_x, "y": new_y};
-            nodePositions = resolveCollisions(updated, draggingNodeId);
-            dragDidMove   = True;
+            # Ensure node exists in position table
+            if draggingNodeId not in nodePositions {
+                nodePositions[draggingNodeId] = {"x": new_x, "y": new_y};
+            }
+
+            # Update dragged node directly
+            nodePositions[draggingNodeId] = {
+                "x": new_x,
+                "y": new_y
+            };
+
+            # Resolve collisions against current state
+            nodePositions = resolveCollisions(nodePositions, draggingNodeId);
+
+            dragDidMove = True;
             return;
         }
 
@@ -254,13 +287,11 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             <svg
                 xmlns="http://www.w3.org/2000/svg"
                 style={{
-                    "transform":       f"translate({viewX}px, {viewY}px) scale({scale})",
-                    "transformOrigin": "0 0",
                     "position":        "absolute",
                     "top":             "0",
                     "left":            "0",
-                    "width":           "4000px",
-                    "height":          "4000px",
+                    "width":           "100%",
+                    "height":          "100%",
                     "overflow":        "visible"
                 }}
             >
@@ -271,8 +302,10 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                     <marker id="mk-addresses"   markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#8b5cf6" /></marker>
                     <marker id="mk-default"     markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#6b7280" /></marker>
                 </defs>
-                {edge_elements}
-                {node_elements}
+                <g transform={f"translate({viewX}, {viewY}) scale({scale})"}>
+                    {edge_elements}
+                    {node_elements}
+                </g>
             </svg>
 
             <div className="graph-controls">

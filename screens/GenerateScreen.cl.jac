@@ -93,7 +93,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                 <div className="generate-hero">
                     <h2 className="generate-hero-title">Transform Your Notes</h2>
                     <p className="generate-hero-subtitle">
-                        Paste your messy notes below and we'll create an argument map with instant feedback
+                        Paste your messy notes below, and we'll create an argument map with instant feedback
                     </p>
                 </div>
 
@@ -123,7 +123,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                         <div className="upload-dropzone" onClick={handleDivClick}>
                             <Upload className="upload-icon" />
                             <div className="upload-label">
-                                <span className="upload-label-cta">Upload documents</span> or drag and drop
+                                <span className="upload-label-cta">Upload documents</span>
                             </div>
                             <p className="upload-hint">TXT, MD, PDF, DOCX up to 10MB</p>
                         </div>

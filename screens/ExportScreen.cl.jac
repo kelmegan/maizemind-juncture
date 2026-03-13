@@ -16,7 +16,8 @@ def:pub ExportScreen(props: any) -> JsxElement {
         currentIssues: list = [],
         currentNotes: str = "",
         userId: str = "",
-        exportFormat: str = "text";
+        exportFormat: str = "text",
+        copyStatus: str = "";  # "" | "success" | "failure";
 
     async def loadContext() -> None {
         ctx = await root spawn GetContext();
@@ -50,61 +51,60 @@ def:pub ExportScreen(props: any) -> JsxElement {
     }
 
     def generateOutlineText(includeFlags: bool) -> str {
-        if not currentGraph {
-            return "";
-        }
+        if not currentGraph { return ""; }
+
         nodes = currentGraph["nodes"];
         edges = currentGraph["edges"];
-        thesis = None;
-        claims = [];
-        evidence = [];
 
-        for node in nodes {
-            if node["type"] == "THESIS" {
-                thesis = node;
-            } elif node["type"] == "CLAIM" {
-                claims.append(node);
-            } elif node["type"] == "EVIDENCE" {
-                evidence.append(node);
-            }
+        # Find thesis
+        thesis_node = None;
+        claim_nodes = [];
+        evidence_nodes = {};
+
+        for n in nodes {
+            if n["type"] == "THESIS" { thesis_node = n; }
+            elif n["type"] == "CLAIM" { claim_nodes.append(n); }
+            elif n["type"] == "EVIDENCE" { evidence_nodes[n["id"]] = n; }
         }
 
         outline = "ARGUMENT OUTLINE\n";
         outline += "==================================================\n\n";
-        if thesis {
+
+        if thesis_node {
             outline += "THESIS:\n";
-            outline += thesis["content"] + "\n\n";
+            outline += thesis_node["content"] + "\n\n";
         }
-        outline += "MAIN CLAIMS:\n";
 
-        i = 0;
-        for claim in claims {
-            claim_evidence = [];
+        if len(claim_nodes) > 0 {
+            outline += "MAIN CLAIMS:\n";
+            i = 1;
+            for claim in claim_nodes {
+                outline += str(i) + ". " + claim["content"] + "\n";
 
-            for edge in edges {
-                if edge["target"] == claim["id"] and edge["type"] == "SUPPORTS" {
-                    for ev in evidence {
-                        if ev["id"] == edge["source"] {
-                            claim_evidence.append(ev);
-                            break;
+                # Find evidence supporting this claim
+                supporting = [];
+                for edge in edges {
+                    if edge["target"] == claim["id"] and edge["type"] == "SUPPORTS" {
+                        if edge["source"] in evidence_nodes {
+                            supporting.append(evidence_nodes[edge["source"]]);
                         }
                     }
                 }
-            }
 
-            outline += f"\n{i + 1}. {claim['content']}\n";
-
-            if len(claim_evidence) > 0 {
-                outline += "   Supporting Evidence:\n";
-                for ev in claim_evidence {
-                    outline += f"   • {ev['content']}\n";
+                if len(supporting) > 0 {
+                    outline += "   Supporting Evidence:\n";
+                    for ev in supporting {
+                        outline += "   • " + ev["content"] + "\n";
+                    }
                 }
+
+                outline += "\n";  # extra spacing between claims
+                i += 1;
             }
-            i += 1;
         }
 
-        outline += "\n==================================================\n";
-        outline += f"Reasoning Score: {currentScore['overall']}/100\n";
+        outline += "==================================================\n";
+        outline += "Reasoning Score: " + str(currentScore["overall"]) + "/100\n";
 
         return outline;
     }
@@ -115,6 +115,21 @@ def:pub ExportScreen(props: any) -> JsxElement {
         outline = generateOutlineText(show_flags);
         print("Copy to clipboard:");
         print(outline);
+    }
+
+    def handleCopyOutline() -> None {
+        # TODO: make this work
+        outline_text = generateOutlineText(show_warning);
+
+        result: dict = navigator.clipboard.writeText(text=outline_text);
+        if "ok" in result and result["ok"] {
+            copyStatus = "success";
+        } else {
+            copyStatus = "failure";
+            print("Copy failed:", result);
+        }
+
+        copyStatus = "";
     }
 
     def handleExportPDF() -> None {
@@ -141,10 +156,29 @@ def:pub ExportScreen(props: any) -> JsxElement {
 
     show_warning = currentScore["overall"] < 75;
 
+    outline_lines: list = [];
+
+    i = 0;
+    for line in generateOutlineText(show_warning).split("\n") {
+        outline_lines.append(<div key={str(i)}>{line}</div>);
+        i += 1;
+    }
+
     return (
         <div className="export-page">
-            <Header navigate={navigate} screen="export" title="Export Outline" backTo="revise" />
+            <Header navigate={navigate} screen="export" title="Export Outline" backTo="review" />
 
+            {(
+                <Alert className="export-alert-success">
+                    <CheckCircle2 className="export-alert-success-icon" />
+                    <p className="export-alert-success-text">Outline copied to clipboard!</p>
+                </Alert>
+            ) if copyStatus == "success" else (
+                <Alert className="export-alert-warning">
+                    <AlertTriangle className="export-alert-warning-icon" />
+                    <p>Failed to copy outline. Please try again.</p>
+                </Alert>
+            ) if copyStatus == "failure" else None}
             <div className="export-content">
                 <Card
                     title={
@@ -177,14 +211,14 @@ def:pub ExportScreen(props: any) -> JsxElement {
 
                 <Card title="Outline Preview">
                     <div className="export-preview">
-                        {generateOutlineText(show_warning)}
+                        {outline_lines}
                     </div>
                 </Card>
 
                 <Card title="Export Options">
                     <div className="export-options-body">
                         <div className="export-options-grid">
-                            <Button label={(<><Copy className="export-btn-icon" />Copy Outline</>)} variant="outline" onClick={handleExportText} />
+                            <Button label={(<><Copy className="export-btn-icon" />Copy Outline</>)} variant="outline" onClick={handleCopyOutline} />
                             <Button label={(<><Download className="export-btn-icon" />Download PDF</>)} variant="outline" onClick={handleExportPDF} />
                         </div>
                         <Button label={(<><FileText className="export-btn-icon-sm" />Save to History</>)} onClick={handleSaveSession} className="export-save-btn" />
