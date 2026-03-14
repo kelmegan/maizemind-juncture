@@ -1,5 +1,6 @@
 """Welcome Screen"""
 
+sv import from ...main { CreateUser, GetUserProfile, UpdateContext }
 import from "@jac/runtime" { jacSignup, jacLogin }
 import from "lucide-react" { Brain, Lightbulb, TrendingUp }
 
@@ -28,16 +29,32 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
         loading = False;
 
         if result["success"] {
-            walker_result = await root spawn CreateUser(
-                name=name if name else email.split("@")[0],
-                email=email,
-                isGuest=False
-            );
+            try {
+                walker_result = await root spawn CreateUser(
+                    name=name if name else email.split("@")[0],
+                    email=email,
+                    isGuest=False
+                );
+                user_data = walker_result.reports[0] if walker_result.reports else {};
+
+                await root spawn UpdateContext(
+                    currentUser={
+                        "id": user_data["id"] if user_data and "id" in user_data else "",
+                        "name": user_data["name"] if user_data and "name" in user_data else name,
+                        "email": email,
+                        "userType": "student",
+                        "isGuest": False
+                    }
+                );
+            } except Exception {
+                # Context update failed, still navigate
+            }
+
             email = "";
             password = "";
             name = "";
         } else {
-            error = result["error"] if result["error"] else "Signup failed";
+            error = result["error"] if "error" in result and result["error"] else "Signup failed";
         }
 
         if not error {
@@ -57,7 +74,28 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
         loading = False;
 
         if success {
-            walker_result = await root spawn GetUserProfile(userId=email);
+            try {
+                walker_result = await root spawn GetUserProfile(userId=email);
+                user_data = walker_result.reports[0] if walker_result.reports else None;
+
+                if user_data {
+                    await root spawn UpdateContext(
+                        currentUser={
+                            "id": user_data["id"] if "id" in user_data else "",
+                            "name": user_data["name"] if "name" in user_data else "",
+                            "email": user_data["email"] if "email" in user_data else email,
+                            "userType": user_data["userType"] if "userType" in user_data else "student",
+                            "goals": user_data["goals"] if "goals" in user_data else [],
+                            "theme": user_data["theme"] if "theme" in user_data else "system",
+                            "accessibilityMode": user_data["accessibilityMode"] if "accessibilityMode" in user_data else False,
+                            "isGuest": False
+                        }
+                    );
+                }
+            } except Exception {
+                # Context update failed, still navigate
+            }
+
             email = "";
             password = "";
         } else {
@@ -70,12 +108,17 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
     }
 
     async def handleContinueAsGuest() -> None {
-        await root spawn CreateUser(
-            name="Guest",
-            email="",
-            isGuest=True
-        );
-        navigate("generate");
+        # Sign up — 400 if already exists, that's expected
+        try {
+            await jacSignup("__guest__", "__no_password__");
+        } except Exception as _e {
+            # Already registered
+        }
+        # Login and go
+        success = await jacLogin("__guest__", "__no_password__");
+        if success {
+            navigate("generate");
+        }
     }
 
     def handleTabChange(v: str) -> None {

@@ -7,7 +7,7 @@ walker:pub AddEvidenceToNode {
         nodeId: str,
         evidenceContent: str;
 
-    can run with `root entry {
+    can run with Root entry {
         graph_node = None;
         for graph in [ArgumentGraph] {
             if graph.id == self.graphId {
@@ -51,7 +51,7 @@ walker:pub AddAssumptionToNode {
         nodeId: str,
         assumptionContent: str;
 
-    can run with `root entry {
+    can run with Root entry {
         graph_node = None;
         for graph in [ArgumentGraph] {
             if graph.id == self.graphId {
@@ -95,7 +95,7 @@ walker:pub UpdateNodeContent {
         nodeId: str,
         newContent: str;
 
-    can run with `root entry {
+    can run with Root entry {
         graph_node = None;
         for graph in [ArgumentGraph] {
             if graph.id == self.graphId {
@@ -134,7 +134,7 @@ walker:pub DeleteNode {
     has graphId: str,
         nodeId: str;
 
-    can run with `root entry {
+    can run with Root entry {
         graph_node = None;
         for graph in [ArgumentGraph] {
             if graph.id == self.graphId {

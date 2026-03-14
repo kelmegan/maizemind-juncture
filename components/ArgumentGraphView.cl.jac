@@ -9,7 +9,7 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
     onNodeClick = props.onNodeClick if props.onNodeClick else None;
 
     NODE_W   = 220;
-    NODE_H   = 130;
+    NODE_H   = 90;
     NODE_PAD = 18;
 
     has nodePositions: dict    = {},

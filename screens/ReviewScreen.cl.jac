@@ -1,5 +1,6 @@
 """Juncture - Review Screen for visualizing and analyzing argument maps."""
 
+sv import from ...main { GetContext, GetGraphWithScoring }
 import from "lucide-react" { AlertTriangle, TrendingUp, ChevronRight }
 
 import from ..components.ArgumentGraphView { ArgumentGraphView }
@@ -11,49 +12,42 @@ import from ..components.Progress { Progress }
 
 def:pub ReviewScreen(props: any) -> JsxElement {
     navigate = props.navigate;
+    screen_data = props.screenData if props.screenData else {};
 
     has currentGraph: dict = None,
         currentScore: dict = None,
         currentIssues: list = [],
         selectedNodeId: str = None;
 
-    can async with entry {
-        currentGraph = {
-            "nodes": [
-                {"id": "node_thesis",       "type": "THESIS",          "content": "Remote work increases overall productivity",             "position": {"x": 280, "y": 40},  "issues": [], "isWeak": False},
-                {"id": "node_claim_1",      "type": "CLAIM",           "content": "Eliminates commute time waste",                         "position": {"x": 60,  "y": 220}, "issues": [], "isWeak": False},
-                {"id": "node_claim_2",      "type": "CLAIM",           "content": "Reduces office distractions",                           "position": {"x": 500, "y": 220}, "issues": [{"id": "i1"}], "isWeak": False},
-                {"id": "node_evidence_1",   "type": "EVIDENCE",        "content": "Study: average commute is 54 minutes daily",            "position": {"x": 60,  "y": 420}, "issues": [], "isWeak": False},
-                {"id": "node_assumption_1", "type": "ASSUMPTION",      "content": "Time saved from commuting is redirected to work tasks",  "position": {"x": 300, "y": 420}, "issues": [], "isWeak": False},
-                {"id": "node_counter_1",    "type": "COUNTERARGUMENT", "content": "Remote workers report higher rates of isolation",        "position": {"x": 500, "y": 420}, "issues": [], "isWeak": False}
-            ],
-            "edges": [
-                {"id": "edge_1", "source": "node_claim_1",      "target": "node_thesis",  "type": "SUPPORTS"},
-                {"id": "edge_2", "source": "node_claim_2",      "target": "node_thesis",  "type": "SUPPORTS"},
-                {"id": "edge_3", "source": "node_evidence_1",   "target": "node_claim_1", "type": "SUPPORTS"},
-                {"id": "edge_4", "source": "node_assumption_1", "target": "node_claim_1", "type": "DEPENDS_ON"},
-                {"id": "edge_5", "source": "node_counter_1",    "target": "node_thesis",  "type": "CONTRADICTS"}
-            ]
-        };
-
-        currentScore = {
-            "overall": 65,
-            "support": 60,
-            "premise": 70,
-            "consistency": 65,
-            "unsupportedClaims": 1,
-            "unresolvedContradictions": 0
-        };
-
-        currentIssues = [
-            {
-                "id": "issue_1",
-                "nodeId": "node_claim_2",
-                "severity": "high",
-                "description": "This claim lacks supporting evidence",
-                "suggestedAction": "Add evidence or data to support this claim"
+    async def loadContext() -> None {
+        try {
+            ctx = await root spawn GetContext();
+            if ctx and ctx["currentGraph"] {
+                graphObj = ctx["currentGraph"];
+                graphId = graphObj["id"] if "id" in graphObj else "";
+                if graphId {
+                    result = await root spawn GetGraphWithScoring(graphId=graphId);
+                    data = result.reports[0] if result.reports else {};
+                    if "error" not in data {
+                        currentGraph = data["graph"] if "graph" in data else None;
+                        currentScore = data["score"] if "score" in data else None;
+                        currentIssues = data["issues"] if "issues" in data else [];
+                    }
+                }
             }
-        ];
+        } except Exception {
+            # Context not available
+        }
+    }
+
+    can with entry {
+        currentGraph = screen_data["graphData"] if "graphData" in screen_data else None;
+        currentScore = screen_data["scoreData"] if "scoreData" in screen_data else None;
+        currentIssues = screen_data["issuesData"] if "issuesData" in screen_data else [];
+
+        if not currentGraph {
+            loadContext();
+        }
     }
 
     def getScoreClass(score: int) -> str {
@@ -63,11 +57,29 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     }
 
     def handleNodeClick(node_data: any) -> None {
-        navigate("revise", {"nodeId": node_data["id"]});
+        navigate("revise", {
+            "graphData": currentGraph,
+            "scoreData": currentScore,
+            "issuesData": currentIssues,
+            "nodeId": node_data["id"]
+        });
     }
 
     def handleIssueClick(nodeId: str) -> None {
-        navigate("revise", {"nodeId": nodeId});
+        navigate("revise", {
+            "graphData": currentGraph,
+            "scoreData": currentScore,
+            "issuesData": currentIssues,
+            "nodeId": nodeId
+        });
+    }
+
+    def handleExport() -> None {
+        navigate("export", {
+            "graphData": currentGraph,
+            "scoreData": currentScore,
+            "issuesData": currentIssues
+        });
     }
 
     topIssues = currentIssues[:3] if currentIssues else [];
@@ -190,6 +202,12 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                     )}
                                 </div>
                             </Card>
+
+                            <Button
+                                label="Export Outline"
+                                onClick={handleExport}
+                                className="review-export-btn"
+                            />
 
                         </div>
                     </div>

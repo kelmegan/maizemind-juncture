@@ -9,13 +9,18 @@ def:pub Header(props: any) -> JsxElement {
     screen = props.screen if props.screen else "generate";
     title = props.title if props.title else None;
     backTo = props.backTo if props.backTo else None;
+    onBack = props.onBack if props.onBack else None;
 
     def handleLogoClick() -> None {
         navigate("generate");
     }
 
     def handleBack() -> None {
-        navigate(backTo);
+        if onBack {
+            onBack();
+        } else {
+            navigate(backTo);
+        }
     }
 
     def handleProfile() -> None {
@@ -30,7 +35,7 @@ def:pub Header(props: any) -> JsxElement {
         navigate("export");
     }
 
-    show_back = backTo != None;
+    show_back = backTo != None or onBack != None;
     show_profile = screen != "profile";
     show_logout = screen == "profile";
     show_export = screen == "review";

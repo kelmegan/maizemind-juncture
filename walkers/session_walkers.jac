@@ -9,7 +9,7 @@ walker:pub CreateSession {
         notes: str,
         score: dict;
 
-    can run with `root entry {
+    can run with Root entry {
         graph_node = None;
         for graph in [ArgumentGraph] {
             if graph.id == self.graphId {
@@ -51,7 +51,7 @@ walker:pub CreateSession {
 walker:pub GetUserSessions {
     has userId: str;
 
-    can run with `root entry {
+    can run with Root entry {
         sessions = [];
 
         for s in [Session] {
@@ -68,7 +68,7 @@ walker:pub GetUserSessions {
 walker:pub CalculateUserStats {
     has userId: str;
 
-    can run with `root entry {
+    can run with Root entry {
         sessions = [];
 
         for s in [Session] {

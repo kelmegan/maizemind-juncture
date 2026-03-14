@@ -1,5 +1,6 @@
 """Juncture - Profile Screen for user settings, history, and statistics."""
 
+sv import from ...main { GetContext, GetUserSessions, CalculateUserStats, UpdateUserProfile, UpdateContext }
 import from "lucide-react" { User, History, Target, TrendingUp, Award, Settings }
 
 import from ..components.Badge { Badge }
@@ -23,38 +24,53 @@ def:pub ProfileScreen(props: any) -> JsxElement {
         accessibilityMode: bool = False,
         sessions: list = [],
         stats: dict = None,
-        activeTab: str = "profile";
+        activeTab: str = "profile",
+        loading: bool = True;
 
     async def loadContext() -> None {
-        ctx = await root spawn GetContext();
-        if ctx and ctx.currentUser {
-            userId = ctx.currentUser.id;
-            isGuest = ctx.currentUser.isGuest;
+        loading = True;
+        try {
+            ctx = await root spawn GetContext();
+            if ctx and ctx["currentUser"] and "id" in ctx["currentUser"] {
+                userId = ctx["currentUser"]["id"];
+                isGuest = ctx["currentUser"]["isGuest"] if "isGuest" in ctx["currentUser"] else False;
+                name = ctx["currentUser"]["name"] if "name" in ctx["currentUser"] else "";
+                userType = ctx["currentUser"]["userType"] if "userType" in ctx["currentUser"] else "student";
+                goals = ctx["currentUser"]["goals"] if "goals" in ctx["currentUser"] else [];
+                theme = ctx["currentUser"]["theme"] if "theme" in ctx["currentUser"] else "system";
+                accessibilityMode = ctx["currentUser"]["accessibilityMode"] if "accessibilityMode" in ctx["currentUser"] else False;
+            }
+
+            if userId and not isGuest {
+                try {
+                    sess_result = await root spawn GetUserSessions(userId=userId);
+                    raw_sessions = sess_result.reports[0] if sess_result.reports else [];
+                    sessions = raw_sessions if raw_sessions else [];
+                } except Exception as e {
+                    print(f"Error loading sessions: {e}");
+                }
+
+                try {
+                    stats_result = await root spawn CalculateUserStats(userId=userId);
+                    raw_stats = stats_result.reports[0] if stats_result.reports else None;
+                    stats = raw_stats if raw_stats else None;
+                } except Exception as e {
+                    print(f"Error loading stats: {e}");
+                }
+            }
+        } except Exception {
+            # Context not available
         }
 
-        userId = "user_123";
-        isGuest = False;
-        name = "John Doe";
-        userType = "student";
-        goals = ["Improve argument structure", "Add more evidence"];
-        theme = "system";
-        accessibilityMode = False;
+        if not stats {
+            stats = {
+                "totalSessions": len(sessions),
+                "averageScore": 0,
+                "averageImprovement": 0
+            };
+        }
 
-        sessions = [
-            {
-                "id": "session_1",
-                "title": "Remote work increases productivity",
-                "date": "2024-03-08T10:30:00",
-                "initialScore": 55,
-                "finalScore": 75
-            }
-        ];
-
-        stats = {
-            "totalSessions": 1,
-            "averageScore": 75,
-            "averageImprovement": 20
-        };
+        loading = False;
     }
 
     can with entry {
@@ -69,6 +85,19 @@ def:pub ProfileScreen(props: any) -> JsxElement {
             goals=goals,
             theme=theme,
             accessibilityMode=accessibilityMode
+        );
+
+        await root spawn UpdateContext(
+            currentUser={
+                "id": userId,
+                "name": name,
+                "email": "",
+                "userType": userType,
+                "goals": goals,
+                "theme": theme,
+                "accessibilityMode": accessibilityMode,
+                "isGuest": isGuest
+            }
         );
     }
 
@@ -252,23 +281,23 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                                 <div className="profile-history-list">
                                     <div className="profile-history-items">
                                         {sessions.map(lambda session -> any {
-                                            formatted_date = session["date"].replace("T", " at ");
+                                            formatted_date = str(session["date"] if "date" in session else "").replace("T", " at ");
                                             return <div
-                                                key={session["id"]}
+                                                key={session["id"] if "id" in session else ""}
                                                 className="profile-session-item"
                                             >
                                                 <div className="profile-session-inner">
                                                     <div className="profile-session-body">
-                                                        <h4 className="profile-session-title">{session["title"]}</h4>
+                                                        <h4 className="profile-session-title">{session["title"] if "title" in session else "Untitled"}</h4>
                                                         <p className="profile-session-date">{formatted_date}</p>
                                                     </div>
                                                     <div className="profile-session-badges">
-                                                        <Badge variant="outline">Score: {session["finalScore"]}</Badge>
+                                                        <Badge variant="outline">Score: {session["finalScore"] if "finalScore" in session else 0}</Badge>
                                                         {(
                                                             <Badge className="badge-improvement">
                                                                 +{session["finalScore"] - session["initialScore"]}
                                                             </Badge>
-                                                        ) if session["finalScore"] > session["initialScore"] else None}
+                                                        ) if ("finalScore" in session and "initialScore" in session and session["finalScore"] > session["initialScore"]) else None}
                                                     </div>
                                                 </div>
                                             </div>;

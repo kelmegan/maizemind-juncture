@@ -26,3 +26,8 @@ debug = true
 
 [plugins.byllm.model]
 default_model = "ollama/minimax-m2.5:cloud"
+verbose = true
+
+[plugins.byllm.call_params]
+temperature = 0.3
+max_tokens = 1500

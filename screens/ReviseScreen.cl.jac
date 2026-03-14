@@ -1,5 +1,6 @@
 """Juncture - Revise Screen for editing and improving argument nodes."""
 
+sv import from ...main { AddEvidenceToNode, AddAssumptionToNode, UpdateNodeContent, DeleteNode, GetGraphWithScoring }
 import from "lucide-react" { Plus, Check, X, Info }
 
 import from ..components.Alert { Alert }
@@ -11,10 +12,12 @@ import from ..components.Header { Header }
 def:pub ReviseScreen(props: any) -> JsxElement {
     navigate = props.navigate;
     screen_data = props.screenData if props.screenData else {};
-    initial_node_id = screen_data["nodeId"] if "nodeId" in screen_data else "node_claim_1";
 
     has nodeId: str = "",
         graphId: str = "",
+        graphData: dict = None,
+        scoreData: dict = None,
+        issuesData: list = [],
         currentNode: dict = None,
         nodeIssues: list = [],
         actionType: str = None,
@@ -22,28 +25,36 @@ def:pub ReviseScreen(props: any) -> JsxElement {
         showConfirmDelete: bool = False;
 
     can with entry {
-        nodeId = initial_node_id;
-        graphId = "graph_123";
+        nodeId = screen_data["nodeId"] if "nodeId" in screen_data else "";
+        graphData = screen_data["graphData"] if "graphData" in screen_data else None;
+        scoreData = screen_data["scoreData"] if "scoreData" in screen_data else None;
+        issuesData = screen_data["issuesData"] if "issuesData" in screen_data else [];
 
-        currentNode = {
-            "id": nodeId,
-            "type": "CLAIM",
-            "content": "Remote work increases productivity"
-        };
+        if graphData {
+            graphId = graphData["id"] if "id" in graphData else "";
 
-        nodeIssues = [
-            {
-                "id": "issue_1",
-                "nodeId": nodeId,
-                "description": "This claim lacks supporting evidence",
-                "suggestedAction": "Add specific examples or data to support this claim"
+            nodes_list = graphData["nodes"] if "nodes" in graphData else [];
+            for n in nodes_list {
+                if n["id"] == nodeId {
+                    currentNode = n;
+                    break;
+                }
             }
-        ];
+        }
+
+        if not currentNode {
+            currentNode = {
+                "id": nodeId,
+                "type": "CLAIM",
+                "content": "Node not found"
+            };
+        }
+
+        nodeIssues = [iss for iss in issuesData if (iss["nodeId"] if "nodeId" in iss else "") == nodeId];
     }
 
     async def handleSave() -> None {
         if not inputValue.strip() {
-            print("Please enter some content");
             return;
         }
 
@@ -69,6 +80,8 @@ def:pub ReviseScreen(props: any) -> JsxElement {
 
         actionType = None;
         inputValue = "";
+
+        await refreshAndNavigateBack();
     }
 
     async def handleDelete() -> None {
@@ -76,7 +89,31 @@ def:pub ReviseScreen(props: any) -> JsxElement {
             graphId=graphId,
             nodeId=nodeId
         );
-        navigate("review");
+        await refreshAndNavigateBack();
+    }
+
+    async def refreshAndNavigateBack() -> None {
+        if graphId {
+            try {
+                result = await root spawn GetGraphWithScoring(graphId=graphId);
+                data = result.reports[0] if result.reports else {};
+                if "error" not in data {
+                    navigate("review", {
+                        "graphData": data["graph"] if "graph" in data else graphData,
+                        "scoreData": data["score"] if "score" in data else scoreData,
+                        "issuesData": data["issues"] if "issues" in data else issuesData
+                    });
+                    return;
+                }
+            } except Exception as e {
+                print(f"Error refreshing graph: {e}");
+            }
+        }
+        navigate("review", {
+            "graphData": graphData,
+            "scoreData": scoreData,
+            "issuesData": issuesData
+        });
     }
 
     def selectEvidence() -> None {
@@ -135,20 +172,28 @@ def:pub ReviseScreen(props: any) -> JsxElement {
 
     return (
         <div className="revise-page">
-            <Header navigate={navigate} screen="revise" title="Revise Node" backTo="review" />
+            <Header navigate={navigate} screen="revise" title="Revise Node" backTo="review"
+                onBack={lambda -> None {
+                    navigate("review", {
+                        "graphData": graphData,
+                        "scoreData": scoreData,
+                        "issuesData": issuesData
+                    });
+                }}
+            />
 
             <div className="revise-content">
                 <Card
                     title={
                         <div className="revise-node-header">
                             <span className="revise-node-type">
-                                <span>{nodeIcons[currentNode["type"]]}</span>
+                                <span>{nodeIcons[currentNode["type"]] if currentNode["type"] in nodeIcons else "💭"}</span>
                                 {currentNode["type"]}
                             </span>
                             <Badge variant="outline">{currentNode["id"]}</Badge>
                         </div>
                     }
-                    className={nodeColorClasses[currentNode["type"]]}
+                    className={nodeColorClasses[currentNode["type"]] if currentNode["type"] in nodeColorClasses else "revise-node-card-claim"}
                 >
                     <p className="revise-node-content">{currentNode["content"]}</p>
                 </Card>

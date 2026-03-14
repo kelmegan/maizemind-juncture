@@ -8,7 +8,7 @@ walker:pub CreateUser {
         userType: str = "student",
         isGuest: bool = False;
 
-    can run with `root entry {
+    can run with Root entry {
         new_user = (root ++> User(
             id=f"user_{now()}",
             name=self.name,
@@ -26,7 +26,7 @@ walker:pub CreateUser {
 walker:pub GetUserProfile {
     has userId: str;
 
-    can run with `root entry {
+    can run with Root entry {
         user_node = None;
 
         for user in [User] {
@@ -49,7 +49,7 @@ walker:pub UpdateUserProfile {
         theme: str = None,
         accessibilityMode: bool = None;
 
-    can run with `root entry {
+    can run with Root entry {
         user_node = None;
 
         for user in [User] {

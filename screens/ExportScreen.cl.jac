@@ -1,5 +1,6 @@
 """Export Screen"""
 
+sv import from ...main { GetContext, CreateSession }
 import from "lucide-react" { Download, FileText, AlertTriangle, CheckCircle2, Copy }
 
 import from ..components.Alert { Alert }
@@ -10,39 +11,27 @@ import from ..components.Header { Header }
 
 def:pub ExportScreen(props: any) -> JsxElement {
     navigate = props.navigate;
+    screen_data = props.screenData if props.screenData else {};
 
     has currentGraph: dict = None,
         currentScore: dict = None,
         currentIssues: list = [],
-        currentNotes: str = "",
         userId: str = "",
-        exportFormat: str = "text";
+        saved: bool = False;
 
     async def loadContext() -> None {
-        ctx = await root spawn GetContext();
-        if ctx and "currentUser" in ctx and ctx["currentUser"] {
-            userId = ctx["currentUser"]["id"];
+        try {
+            ctx = await root spawn GetContext();
+            if ctx and "currentUser" in ctx and ctx["currentUser"] {
+                userId = ctx["currentUser"]["id"] if "id" in ctx["currentUser"] else "";
+            }
+        } except Exception {
+            # Context not available
         }
-        currentGraph = {
-            "nodes": [
-                {"id": "node_thesis", "type": "THESIS", "content": "Remote work increases productivity"},
-                {"id": "node_claim_1", "type": "CLAIM", "content": "Eliminates commute time"},
-                {"id": "node_evidence_1", "type": "EVIDENCE", "content": "Average commute is 54 minutes"}
-            ],
-            "edges": [
-                {"source": "node_claim_1", "target": "node_thesis", "type": "SUPPORTS"},
-                {"source": "node_evidence_1", "target": "node_claim_1", "type": "SUPPORTS"}
-            ]
-        };
 
-        currentScore = {
-            "overall": 75,
-            "support": 70,
-            "premise": 75,
-            "consistency": 80,
-            "unsupportedClaims": 0,
-            "unresolvedContradictions": 0
-        };
+        currentGraph = screen_data["graphData"] if "graphData" in screen_data else None;
+        currentScore = screen_data["scoreData"] if "scoreData" in screen_data else None;
+        currentIssues = screen_data["issuesData"] if "issuesData" in screen_data else [];
     }
 
     can with entry {
@@ -53,8 +42,8 @@ def:pub ExportScreen(props: any) -> JsxElement {
         if not currentGraph {
             return "";
         }
-        nodes = currentGraph["nodes"];
-        edges = currentGraph["edges"];
+        nodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
+        edges = currentGraph["edges"] if "edges" in currentGraph else [];
         thesis = None;
         claims = [];
         evidence = [];
@@ -110,15 +99,12 @@ def:pub ExportScreen(props: any) -> JsxElement {
     }
 
     def handleExportText() -> None {
-        # TODO: make this work
         show_flags = currentScore["overall"] < 75;
         outline = generateOutlineText(show_flags);
-        print("Copy to clipboard:");
-        print(outline);
+        navigator.clipboard.writeText(outline);
     }
 
     def handleExportPDF() -> None {
-        # TODO: make this work
         show_flags = currentScore["overall"] < 75;
         outline = generateOutlineText(show_flags);
         print("Export PDF:");
@@ -126,13 +112,17 @@ def:pub ExportScreen(props: any) -> JsxElement {
     }
 
     async def handleSaveSession() -> None {
-        walker_result = await root spawn SaveSessionToHistory(
+        if not userId or saved {
+            return;
+        }
+        graphId = currentGraph["id"] if currentGraph and "id" in currentGraph else "";
+        await root spawn CreateSession(
             userId=userId,
-            graphId="graph_1",
-            notes=currentNotes,
+            graphId=graphId,
+            notes="",
             score=currentScore
         );
-        print(walker_result);
+        saved = True;
     }
 
     if not currentGraph or not currentScore {
@@ -143,7 +133,7 @@ def:pub ExportScreen(props: any) -> JsxElement {
 
     return (
         <div className="export-page">
-            <Header navigate={navigate} screen="export" title="Export Outline" backTo="revise" />
+            <Header navigate={navigate} screen="export" title="Export Outline" backTo="review" />
 
             <div className="export-content">
                 <Card
@@ -187,7 +177,12 @@ def:pub ExportScreen(props: any) -> JsxElement {
                             <Button label={(<><Copy className="export-btn-icon" />Copy Outline</>)} variant="outline" onClick={handleExportText} />
                             <Button label={(<><Download className="export-btn-icon" />Download PDF</>)} variant="outline" onClick={handleExportPDF} />
                         </div>
-                        <Button label={(<><FileText className="export-btn-icon-sm" />Save to History</>)} onClick={handleSaveSession} className="export-save-btn" />
+                        <Button
+                            label={(<><FileText className="export-btn-icon-sm" />{("Saved!" if saved else "Save to History")}</>)}
+                            onClick={handleSaveSession}
+                            disabled={saved or not userId}
+                            className="export-save-btn"
+                        />
                     </div>
                 </Card>
             </div>

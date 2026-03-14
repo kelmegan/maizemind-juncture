@@ -1,5 +1,6 @@
 """Juncture - Generate Screen for creating argument maps from notes."""
 
+sv import from ...main { GetContext, GenerateArgumentGraph, UpdateContext }
 import from "lucide-react" { Upload, Sparkles, ArrowRight }
 import from "pdfjs-dist" { getDocument, GlobalWorkerOptions }
 import from "mammoth" { extractRawText }
@@ -13,15 +14,20 @@ def:pub GenerateScreen(props: any) -> JsxElement {
 
     has notes: str = "",
         isGenerating: bool = False,
+        generateStatus: str = "",
         currentUserId: str = "",
         isGuest: bool = False,
         isDragging: bool = False;
 
     async def loadContext() -> None {
-        ctx = await root spawn GetContext();
-        if ctx and ctx["currentUser"] {
-            currentUserId = ctx["currentUser"]["id"];
-            isGuest = ctx["currentUser"]["isGuest"];
+        try {
+            ctx = await root spawn GetContext();
+            if ctx and ctx["currentUser"] {
+                currentUserId = ctx["currentUser"]["id"];
+                isGuest = ctx["currentUser"]["isGuest"];
+            }
+        } except Exception {
+            # Context not available
         }
     }
 
@@ -42,13 +48,23 @@ def:pub GenerateScreen(props: any) -> JsxElement {
             );
 
             data = result.reports[0] if result.reports else {};
+            graphData = data["graph"] if "graph" in data else {};
+            scoreData = data["score"] if "score" in data else {};
+            issuesData = data["issues"] if "issues" in data else [];
+
             isGenerating = False;
             generateStatus = "";
             navigate("review", {
-                "graphData": data.get("graph", {}),
-                "scoreData": data.get("score", {}),
-                "issuesData": data.get("issues", [])
+                "graphData": graphData,
+                "scoreData": scoreData,
+                "issuesData": issuesData
             });
+
+            try {
+                await root spawn UpdateContext(currentGraph=graphData);
+            } except Exception {
+                # Context update is non-critical
+            }
         } except Exception as e {
             print(f"Generation error: {e}");
             generateStatus = f"Error: {e}. Please try again.";
@@ -171,3 +187,4 @@ def:pub GenerateScreen(props: any) -> JsxElement {
             </div>
         </div>
     );
+}

@@ -5,7 +5,7 @@ import from graph.context { AppContext }
 walker:pub NavigateTo {
     has screen: str;
 
-    can run with `root entry {
+    can run with Root entry {
         ctx = None;
         for c in [AppContext] {
             ctx = c;

@@ -1,3 +1,5 @@
+sv import from ...main { GetContext }
+
 import from ..screens.WelcomeScreen { WelcomeScreen }
 import from ..screens.ExportScreen { ExportScreen }
 import from ..screens.GenerateScreen { GenerateScreen }
@@ -12,9 +14,13 @@ def:pub AppRouter -> JsxElement {
         screenData: dict = {};
 
     async def loadContext() -> None {
-        ctx = await root spawn GetContext();
-        if ctx {
-            currentScreen = ctx["currentScreen"];
+        try {
+            ctx = await root spawn GetContext();
+            if ctx and ctx["currentScreen"] {
+                currentScreen = ctx["currentScreen"];
+            }
+        } except Exception {
+            # Not logged in yet, stay on welcome
         }
     }
 

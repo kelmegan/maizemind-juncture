@@ -7,11 +7,20 @@ walker:pub GenerateArgumentGraph {
     has notes: str,
         userId: str;
 
-    can run with `root entry {
-        graph_id = f"graph_{now()}";
+    can run with Root entry {
+        print("=== GenerateArgumentGraph ENTERED ===");
+        print(f"=== userId={self.userId}, notes length={len(self.notes)} ===");
+        try {
+        import time;
+        graph_id = f"graph_{int(time.time())}";
 
         docs: list[Document] = [];
+        # Retry up to 2 times if LLM returns empty
         result = generate_argument_graph(self.notes, docs);
+        if not result.get("nodes", []) {
+            print("  [RETRY] LLM returned empty, retrying...");
+            result = generate_argument_graph(self.notes, docs);
+        }
         raw_nodes = result.get("nodes", []);
         raw_edges = result.get("edges", []);
 
@@ -138,8 +147,8 @@ walker:pub GenerateArgumentGraph {
             id=graph_id,
             nodes=fe_nodes,
             edges=fe_edges,
-            createdAt=str(now()),
-            updatedAt=str(now())
+            createdAt=str(int(time.time())),
+            updatedAt=str(int(time.time()))
         ))[0];
 
         sc = result.get("reasoning_score", {});
@@ -170,19 +179,29 @@ walker:pub GenerateArgumentGraph {
         }
 
         report {
-            "graph": new_graph,
+            "graph": {
+                "id": graph_id,
+                "nodes": fe_nodes,
+                "edges": fe_edges,
+                "createdAt": new_graph.createdAt,
+                "updatedAt": new_graph.updatedAt
+            },
             "score": fe_score,
             "issues": fe_issues
         };
+        } except Exception as e {
+            print(f"=== GenerateArgumentGraph ERROR: {e} ===");
+            report {"error": str(e)};
+        }
     }
 }
 
 walker:pub GetGraphWithScoring {
     has graphId: str;
 
-    can run with `root entry {
+    can run with Root entry {
         graph_node = None;
-        for graph in [-->](?ArgumentGraph) {
+        for graph in [ArgumentGraph] {
             if graph.id == self.graphId {
                 graph_node = graph;
                 break;
