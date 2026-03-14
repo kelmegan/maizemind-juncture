@@ -15,9 +15,11 @@ def:pub GenerateScreen(props: any) -> JsxElement {
     has notes: str = "",
         isGenerating: bool = False,
         generateStatus: str = "",
+        generateStep: int = 0,
         currentUserId: str = "",
         isGuest: bool = False,
-        isDragging: bool = False;
+        showConfirmRegenerate: bool = False,
+        hasExistingGraph: bool = False;
 
     async def loadContext() -> None {
         try {
@@ -25,6 +27,9 @@ def:pub GenerateScreen(props: any) -> JsxElement {
             if ctx and ctx["currentUser"] {
                 currentUserId = ctx["currentUser"]["id"];
                 isGuest = ctx["currentUser"]["isGuest"];
+            }
+            if ctx and ctx["currentGraph"] {
+                hasExistingGraph = True;
             }
         } except Exception {
             # Context not available
@@ -36,11 +41,18 @@ def:pub GenerateScreen(props: any) -> JsxElement {
     }
 
     async def handleGenerate() -> None {
-        if not notes.strip() {
+        if not notes.trim() { return; }
+
+        # If user already has a graph, confirm first
+        if hasExistingGraph and not showConfirmRegenerate {
+            showConfirmRegenerate = True;
             return;
         }
+        showConfirmRegenerate = False;
+
         isGenerating = True;
-        generateStatus = "Analyzing your notes with AI...";
+        generateStep = 1;
+        generateStatus = "Step 1/3: Parsing notes into argument structure...";
         try {
             result = await root spawn GenerateArgumentGraph(
                 notes=notes,
@@ -48,12 +60,29 @@ def:pub GenerateScreen(props: any) -> JsxElement {
             );
 
             data = result.reports[0] if result.reports else {};
+
+            # Check for error
+            if "error" in data {
+                generateStatus = f"Error: {data['error']}. Please try again.";
+                isGenerating = False;
+                return;
+            }
+
             graphData = data["graph"] if "graph" in data else {};
             scoreData = data["score"] if "score" in data else {};
             issuesData = data["issues"] if "issues" in data else [];
 
+            # Check for empty graph (LLM returned nothing)
+            nodes_list = graphData["nodes"] if "nodes" in graphData else [];
+            if len(nodes_list) == 0 {
+                generateStatus = "The AI returned an empty graph. This sometimes happens. Please try again.";
+                isGenerating = False;
+                return;
+            }
+
             isGenerating = False;
             generateStatus = "";
+            hasExistingGraph = True;
             navigate("review", {
                 "graphData": graphData,
                 "scoreData": scoreData,
@@ -67,9 +96,13 @@ def:pub GenerateScreen(props: any) -> JsxElement {
             }
         } except Exception as e {
             print(f"Generation error: {e}");
-            generateStatus = f"Error: {e}. Please try again.";
+            generateStatus = f"Error generating graph. Please try again.";
             isGenerating = False;
         }
+    }
+
+    def cancelRegenerate() -> None {
+        showConfirmRegenerate = False;
     }
 
     def loadExampleNotes() -> None {
@@ -83,16 +116,11 @@ def:pub GenerateScreen(props: any) -> JsxElement {
     async def handleFileUpload(e: any) -> None {
         file = e.target.files[0] if e.target.files else None;
         if not file { return; }
-
-        file_name = file.name.lower();
-
+        file_name = file.name.toLowerCase();
         if file_name.endswith(".txt") or file_name.endswith(".md") {
             reader = Reflect.construct(FileReader, []);
-            reader.onload = lambda event -> None {
-                notes = event.target.result;
-            };
+            reader.onload = lambda event -> None { notes = event.target.result; };
             reader.readAsText(file);
-
         } elif file_name.endswith(".pdf") {
             GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
             array_buffer = await file.arrayBuffer();
@@ -107,7 +135,6 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                 i = i + 1;
             }
             notes = text;
-
         } elif file_name.endswith(".docx") {
             array_buffer = await file.arrayBuffer();
             result = await extractRawText({"arrayBuffer": array_buffer});
@@ -118,6 +145,13 @@ def:pub GenerateScreen(props: any) -> JsxElement {
     def handleNotesChange(e: any) -> None {
         notes = e.target.value;
     }
+
+    # Loading step messages
+    stepMessages = {
+        1: "Step 1/3: Parsing notes into argument structure...",
+        2: "Step 2/3: Analyzing graph and generating summary...",
+        3: "Step 3/3: Calculating reasoning score..."
+    };
 
     return (
         <div className="generate-page">
@@ -144,6 +178,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                                 value={notes}
                                 onChange={handleNotesChange}
                                 className="notes-textarea"
+                                disabled={isGenerating}
                             />
                         </div>
 
@@ -162,24 +197,70 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                             <p className="upload-hint">TXT, MD, PDF, DOCX up to 10MB</p>
                         </div>
 
-                        <Button
-                            label={(<><Sparkles className="generate-btn-icon" />{ generateStatus if generateStatus else "Generating Argument Map..." }</>) if isGenerating else (<>Generate Argument Map<ArrowRight className="generate-btn-icon" /></>)}
-                            onClick={handleGenerate}
-                            disabled={not notes.strip() or isGenerating}
-                            className="generate-btn"
-                        />
+                        {(
+                            <div style={{
+                                "padding": "14px", "background": "#fffbeb",
+                                "border": "1px solid #fde68a", "borderRadius": "10px",
+                                "marginBottom": "12px"
+                            }}>
+                                <p style={{"fontSize": "13px", "color": "#92400e", "marginBottom": "10px"}}>
+                                    You already have a graph. Generating a new one will replace it. Continue?
+                                </p>
+                                <div style={{"display": "flex", "gap": "8px"}}>
+                                    <Button label="Yes, regenerate" onClick={handleGenerate} className="generate-btn" />
+                                    <Button label="Cancel" variant="outline" onClick={cancelRegenerate} />
+                                </div>
+                            </div>
+                        ) if showConfirmRegenerate else None}
+
+                        {(
+                            <div style={{
+                                "padding": "20px", "background": "rgba(99,102,241,0.06)",
+                                "border": "1px solid rgba(99,102,241,0.15)", "borderRadius": "12px",
+                                "textAlign": "center"
+                            }}>
+                                <div style={{"display": "flex", "alignItems": "center",
+                                              "justifyContent": "center", "gap": "10px", "marginBottom": "8px"}}>
+                                    <div style={{
+                                        "width": "20px", "height": "20px", "border": "2px solid #6366f1",
+                                        "borderTopColor": "transparent", "borderRadius": "50%",
+                                        "animation": "spin 1s linear infinite"
+                                    }}></div>
+                                    <span style={{"fontSize": "14px", "fontWeight": "600", "color": "#6366f1"}}>
+                                        Generating...
+                                    </span>
+                                </div>
+                                <p style={{"fontSize": "13px", "color": "#64748b"}}>{generateStatus}</p>
+                                <p style={{"fontSize": "11px", "color": "#94a3b8", "marginTop": "8px"}}>
+                                    This usually takes 20-40 seconds
+                                </p>
+                            </div>
+                        ) if isGenerating else (
+                            <Button
+                                label={(<>Generate Argument Map<ArrowRight className="generate-btn-icon" /></>)}
+                                onClick={handleGenerate}
+                                disabled={not notes.trim()}
+                                className="generate-btn"
+                            />
+                        )}
 
                         { generateStatus and not isGenerating and
-                            <p style={{"textAlign": "center", "marginTop": "12px",
-                                      "color": "#ef4444", "fontSize": "14px"}}>
-                                {generateStatus}
-                            </p>
+                            <div style={{
+                                "padding": "14px", "background": "rgba(239,68,68,0.06)",
+                                "border": "1px solid rgba(239,68,68,0.12)", "borderRadius": "10px",
+                                "textAlign": "center", "marginTop": "12px"
+                            }}>
+                                <p style={{"fontSize": "13px", "color": "#dc2626", "marginBottom": "8px"}}>
+                                    {generateStatus}
+                                </p>
+                                <Button label="Try Again" onClick={handleGenerate} className="generate-btn" />
+                            </div>
                         }
                     </div>
                 </Card>
 
                 <Card
-                    title="💡 Quick Start Example"
+                    title="Quick Start Example"
                     className="quickstart-card"
                 >
                     <Button label="Load example notes" variant="ghost" onClick={loadExampleNotes} />

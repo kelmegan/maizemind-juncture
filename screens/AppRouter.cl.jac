@@ -11,7 +11,10 @@ import "../styles.css";
 
 def:pub AppRouter -> JsxElement {
     has currentScreen: str = "welcome",
-        screenData: dict = {};
+        screenData: dict = {},
+        cachedGraphData: any = None,
+        cachedScoreData: any = None,
+        cachedIssuesData: list = [];
 
     async def loadContext() -> None {
         try {
@@ -29,6 +32,31 @@ def:pub AppRouter -> JsxElement {
     }
 
     def navigate(screen: str, data: dict = {}) -> None {
+        # Guard against undefined/None data from Jac client compiler
+        if not data {
+            data = {};
+        }
+
+        # Cache graph data whenever it's passed through navigation
+        if "graphData" in data and data["graphData"] {
+            cachedGraphData = data["graphData"];
+        }
+        if "scoreData" in data and data["scoreData"] {
+            cachedScoreData = data["scoreData"];
+        }
+        if "issuesData" in data {
+            cachedIssuesData = data["issuesData"];
+        }
+
+        # When navigating to review without data, use cached
+        if screen == "review" and "graphData" not in data and cachedGraphData {
+            data = {
+                "graphData": cachedGraphData,
+                "scoreData": cachedScoreData,
+                "issuesData": cachedIssuesData
+            };
+        }
+
         screenData = data;
         currentScreen = screen;
     }

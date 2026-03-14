@@ -54,7 +54,7 @@ def:pub ReviseScreen(props: any) -> JsxElement {
     }
 
     async def handleSave() -> None {
-        if not inputValue.strip() {
+        if not inputValue.trim() {
             return;
         }
 
@@ -133,6 +133,14 @@ def:pub ReviseScreen(props: any) -> JsxElement {
 
     def selectDelete() -> None {
         showConfirmDelete = True;
+    }
+
+    def handleBackToReview() -> None {
+        navigate("review", {
+            "graphData": graphData,
+            "scoreData": scoreData,
+            "issuesData": issuesData
+        });
     }
 
     def cancelAction() -> None {

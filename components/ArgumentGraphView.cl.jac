@@ -1,4 +1,7 @@
-"""SVG argument graph: draggable nodes, pan, zoom, lock, collision nudging."""
+"""SVG argument graph: D3-style force-directed layout, draggable nodes, pan, zoom, themed.
+   Uses the exact same force model and parameters as d3-force from the mockup,
+   implemented natively in Jac for full compatibility with the client compiler.
+   All loops use while+index to avoid Jac compiler dict-iteration issues."""
 
 import from .ArgumentNodeComponent { ArgumentNodeComponent }
 
@@ -7,10 +10,21 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
     nodes       = list(props.nodes) if props.nodes else [];
     edges       = list(props.edges) if props.edges else [];
     onNodeClick = props.onNodeClick if props.onNodeClick else None;
+    selectedNodeId = props.selectedNodeId if props.selectedNodeId else None;
+    isDark      = props.isDark if props.isDark else False;
+    focusBranch = props.focusBranch if props.focusBranch else None;
 
-    NODE_W   = 220;
-    NODE_H   = 90;
-    NODE_PAD = 18;
+    NODE_W   = 200;
+    NODE_H   = 80;
+
+    EDGE_COLORS = {
+        "SUPPORTS": "#10b981", "CONTRADICTS": "#ef4444",
+        "DEPENDS_ON": "#f59e0b", "ADDRESSES": "#8b5cf6"
+    };
+    EDGE_LABELS = {
+        "SUPPORTS": "SUP", "CONTRADICTS": "CON",
+        "DEPENDS_ON": "DEP", "ADDRESSES": "ADR"
+    };
 
     has nodePositions: dict    = {},
         draggingNodeId: str    = None,
@@ -22,136 +36,352 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         panStartY: float       = 0.0,
         viewX: float           = 40.0,
         viewY: float           = 40.0,
-        scale: float           = 1.0,
-        isLocked: bool         = False;
+        scale: float           = 1.0;
 
     can with entry {
-        init = {};
-        for n in nodes { init[n["id"]] = {"x": n["position"]["x"], "y": n["position"]["y"]}; }
-        nodePositions = init;
+        n_count = len(nodes);
+        n_edges = len(edges);
+        if n_count == 0 { return; }
+
+        # ── Build parallel arrays: ids[], xs[], ys[], vxs[], vys[] ──
+        # Using ONLY index-based while loops (no for-in on dicts)
+
+        ids: list = [];
+        xs: list = [];
+        ys: list = [];
+        vxs: list = [];
+        vys: list = [];
+        txs: list = [];
+        tys: list = [];
+        depths: list = [];
+
+        # Initialize from node positions
+        ni = 0;
+        while ni < n_count {
+            ids.append(nodes[ni]["id"]);
+            xs.append(nodes[ni]["position"]["x"] if "position" in nodes[ni] else 0.0);
+            ys.append(nodes[ni]["position"]["y"] if "position" in nodes[ni] else 0.0);
+            vxs.append(0.0);
+            vys.append(0.0);
+            txs.append(0.0);
+            tys.append(0.0);
+            depths.append(-1);
+            ni = ni + 1;
+        }
+
+        # Find index of root (THESIS or first)
+        root_idx = 0;
+        ri = 0;
+        while ri < n_count {
+            if nodes[ri]["type"] == "THESIS" { root_idx = ri; break; }
+            ri = ri + 1;
+        }
+
+        # BFS to compute depths using index arrays
+        depths[root_idx] = 0;
+        bfs_queue: list = [root_idx];
+        bqi = 0;
+        while bqi < len(bfs_queue) {
+            ci = bfs_queue[bqi];
+            cur_id = ids[ci];
+            cur_d = depths[ci];
+            # Scan edges for neighbors
+            ei = 0;
+            while ei < n_edges {
+                nb_id = "";
+                if edges[ei]["source"] == cur_id { nb_id = edges[ei]["target"]; }
+                elif edges[ei]["target"] == cur_id { nb_id = edges[ei]["source"]; }
+                if nb_id {
+                    # Find index of neighbor
+                    nbi = 0;
+                    while nbi < n_count {
+                        if ids[nbi] == nb_id and depths[nbi] == -1 {
+                            depths[nbi] = cur_d + 1;
+                            bfs_queue.append(nbi);
+                            break;
+                        }
+                        nbi = nbi + 1;
+                    }
+                }
+                ei = ei + 1;
+            }
+            bqi = bqi + 1;
+        }
+
+        # Fix disconnected nodes (depth still -1)
+        max_d = 0;
+        mi = 0;
+        while mi < n_count {
+            if depths[mi] > max_d { max_d = depths[mi]; }
+            mi = mi + 1;
+        }
+        mi = 0;
+        while mi < n_count {
+            if depths[mi] == -1 { depths[mi] = max_d + 1; }
+            mi = mi + 1;
+        }
+
+        # Count nodes per depth layer and compute BFS target positions
+        # First pass: count per layer
+        max_layer = 0;
+        mi = 0;
+        while mi < n_count {
+            if depths[mi] > max_layer { max_layer = depths[mi]; }
+            mi = mi + 1;
+        }
+
+        # For each layer, count nodes and assign x positions
+        layer = 0;
+        while layer <= max_layer {
+            # Count nodes in this layer
+            count = 0;
+            ci = 0;
+            while ci < n_count {
+                if depths[ci] == layer { count = count + 1; }
+                ci = ci + 1;
+            }
+            # Assign positions to nodes in this layer
+            idx = 0;
+            ci = 0;
+            while ci < n_count {
+                if depths[ci] == layer {
+                    txs[ci] = (idx - (count - 1) / 2.0) * 250;
+                    tys[ci] = layer * 130.0;
+                    # Start nodes at their target positions
+                    xs[ci] = txs[ci];
+                    ys[ci] = tys[ci];
+                    idx = idx + 1;
+                }
+                ci = ci + 1;
+            }
+            layer = layer + 1;
+        }
+
+        # Precompute edge source/target indices
+        edge_si: list = [];
+        edge_ti: list = [];
+        ei = 0;
+        while ei < n_edges {
+            src = edges[ei]["source"];
+            tgt = edges[ei]["target"];
+            si = -1;
+            ti = -1;
+            fi = 0;
+            while fi < n_count {
+                if ids[fi] == src { si = fi; }
+                if ids[fi] == tgt { ti = fi; }
+                fi = fi + 1;
+            }
+            edge_si.append(si);
+            edge_ti.append(ti);
+            ei = ei + 1;
+        }
+
+        # Compute degrees for link bias
+        degs: list = [];
+        di = 0;
+        while di < n_count { degs.append(0); di = di + 1; }
+        ei = 0;
+        while ei < n_edges {
+            if edge_si[ei] >= 0 { degs[edge_si[ei]] = degs[edge_si[ei]] + 1; }
+            if edge_ti[ei] >= 0 { degs[edge_ti[ei]] = degs[edge_ti[ei]] + 1; }
+            ei = ei + 1;
+        }
+
+        # ── Force simulation: exact d3-force parameters from mockup ──
+        # forceLink:     distance=140, strength=0.05
+        # forceManyBody: strength=-80, distanceMax=300
+        # forceCollide:  radius=112
+        # forceX:        strength=0.08
+        # forceY:        strength=0.3
+        # alphaDecay=0.12, velocityDecay=0.75 (internal=0.25), alpha=0.3, 150 ticks
+
+        alpha = 0.3;
+        tick = 0;
+        while tick < 150 {
+            # Alpha decay
+            alpha = alpha * 0.88;
+
+            # Link force
+            ei = 0;
+            while ei < n_edges {
+                si = edge_si[ei];
+                ti = edge_ti[ei];
+                if si >= 0 and ti >= 0 {
+                    dx = xs[ti] + vxs[ti] - xs[si] - vxs[si];
+                    dy = ys[ti] + vys[ti] - ys[si] - vys[si];
+                    dist = (dx * dx + dy * dy) ** 0.5;
+                    if dist < 0.001 { dist = 0.001; }
+                    strength = (dist - 140.0) / dist * alpha * 0.05;
+                    fx = dx * strength;
+                    fy = dy * strength;
+                    total_deg = degs[si] + degs[ti];
+                    bias = degs[ti] / total_deg if total_deg > 0 else 0.5;
+                    vxs[ti] = vxs[ti] - fx * bias;
+                    vys[ti] = vys[ti] - fy * bias;
+                    vxs[si] = vxs[si] + fx * (1.0 - bias);
+                    vys[si] = vys[si] + fy * (1.0 - bias);
+                }
+                ei = ei + 1;
+            }
+
+            # Many-body (charge) force
+            ia = 0;
+            while ia < n_count {
+                ib = ia + 1;
+                while ib < n_count {
+                    dx = xs[ib] - xs[ia];
+                    dy = ys[ib] - ys[ia];
+                    dist_sq = dx * dx + dy * dy;
+                    if dist_sq < 90000.0 and dist_sq > 0.01 {
+                        dist = dist_sq ** 0.5;
+                        w = -80.0 * alpha / dist;
+                        ux = dx / dist;
+                        uy = dy / dist;
+                        vxs[ia] = vxs[ia] + ux * w;
+                        vys[ia] = vys[ia] + uy * w;
+                        vxs[ib] = vxs[ib] - ux * w;
+                        vys[ib] = vys[ib] - uy * w;
+                    }
+                    ib = ib + 1;
+                }
+                ia = ia + 1;
+            }
+
+            # Collision force (radius=112, pair min distance=224)
+            ia = 0;
+            while ia < n_count {
+                ib = ia + 1;
+                while ib < n_count {
+                    dx = xs[ib] - xs[ia];
+                    dy = ys[ib] - ys[ia];
+                    dist = (dx * dx + dy * dy) ** 0.5;
+                    if dist < 224.0 and dist > 0.01 {
+                        overlap = (224.0 - dist) / dist * 0.5;
+                        vxs[ib] = vxs[ib] + dx * overlap;
+                        vys[ib] = vys[ib] + dy * overlap;
+                        vxs[ia] = vxs[ia] - dx * overlap;
+                        vys[ia] = vys[ia] - dy * overlap;
+                    }
+                    ib = ib + 1;
+                }
+                ia = ia + 1;
+            }
+
+            # X/Y positioning forces
+            pi = 0;
+            while pi < n_count {
+                vxs[pi] = vxs[pi] + (txs[pi] - xs[pi]) * 0.08 * alpha;
+                vys[pi] = vys[pi] + (tys[pi] - ys[pi]) * 0.3 * alpha;
+                pi = pi + 1;
+            }
+
+            # Apply velocity with decay (d3: vx *= 1-velocityDecay, then x += vx)
+            pi = 0;
+            while pi < n_count {
+                vxs[pi] = vxs[pi] * 0.25;
+                vys[pi] = vys[pi] * 0.25;
+                xs[pi] = xs[pi] + vxs[pi];
+                ys[pi] = ys[pi] + vys[pi];
+                pi = pi + 1;
+            }
+
+            tick = tick + 1;
+        }
+
+        # Normalize positions
+        min_x = 99999.0;
+        min_y = 99999.0;
+        pi = 0;
+        while pi < n_count {
+            if xs[pi] < min_x { min_x = xs[pi]; }
+            if ys[pi] < min_y { min_y = ys[pi]; }
+            pi = pi + 1;
+        }
+
+        positions: dict = {};
+        pi = 0;
+        while pi < n_count {
+            positions[ids[pi]] = {
+                "x": xs[pi] - min_x + 200,
+                "y": ys[pi] - min_y + 100
+            };
+            pi = pi + 1;
+        }
+
+        nodePositions = positions;
     }
 
     def getPos(nid: str) -> dict {
         if nid in nodePositions { return nodePositions[nid]; }
-        for n in nodes { if n["id"] == nid { return n["position"]; } }
+        # Fallback to node's original position
+        fi = 0;
+        while fi < len(nodes) {
+            if nodes[fi]["id"] == nid {
+                return nodes[fi]["position"] if "position" in nodes[fi] else {"x": 0, "y": 0};
+            }
+            fi = fi + 1;
+        }
         return {"x": 0, "y": 0};
     }
 
-    def midX(nid: str) -> float { return getPos(nid)["x"] + NODE_W / 2.0; }
-    def midY(nid: str) -> float { return getPos(nid)["y"] + NODE_H / 2.0; }
-
-    def edgeColor(t: str) -> str {
-        colors = {"SUPPORTS": "#10b981", "CONTRADICTS": "#ef4444", "DEPENDS_ON": "#f59e0b", "ADDRESSES": "#8b5cf6"};
-        return colors[t] if t in colors else "#6b7280";
-    }
-
-    def edgeDash(t: str) -> str {
-        return "8,4" if t == "CONTRADICTS" else ("4,4" if t == "DEPENDS_ON" else "none");
-    }
-
-    def makePath(sx: float, sy: float, tx: float, ty: float) -> str {
-        dy = ty - sy;
-        return f"M {sx} {sy} C {sx} {sy + dy*0.5}, {tx} {ty - dy*0.5}, {tx} {ty}";
-    }
-
-    def resolveCollisions(positions: dict, draggedId: str) -> dict {
-        # Deep-copy so we don't mutate the input
-        result = {};
-        for k in positions { result[k] = {"x": positions[k]["x"], "y": positions[k]["y"]}; }
-
-        all_ids = list(result.keys());
-
-        # Multiple passes let chain reactions propagate (A bumps B, B bumps C)
-        passes = 4;
-        for _ in range(passes) {
-            for aid in all_ids {
-                for bid in all_ids {
-                    if aid == bid { continue; }
-
-                    # The dragged card is immovable — only nudge stationary cards
-                    if aid == draggedId or bid == draggedId {
-                        # Exactly one of the pair is the dragged card; let the
-                        # OTHER one be the one that gets pushed.
-                        mover   = bid if aid == draggedId else aid;
-                        anchor  = draggedId;
-                        a_pos   = result[anchor];
-                        m_pos   = result[mover];
-
-                        dx = m_pos["x"] - a_pos["x"];
-                        dy = m_pos["y"] - a_pos["y"];
-                        overlap_x = (NODE_W + NODE_PAD) - abs(dx);
-                        overlap_y = (NODE_H + NODE_PAD) - abs(dy);
-
-                        if overlap_x > 0 and overlap_y > 0 {
-                            if overlap_x <= overlap_y {
-                                push = overlap_x if dx >= 0 else -overlap_x;
-                                result[mover] = {"x": m_pos["x"] + push, "y": m_pos["y"]};
-                            } else {
-                                push = overlap_y if dy >= 0 else -overlap_y;
-                                result[mover] = {"x": m_pos["x"], "y": m_pos["y"] + push};
-                            }
+    # Compute branch set for dimming
+    def getBranchIds(rootId: str) -> list {
+        result: list = [rootId];
+        ei = 0;
+        while ei < len(edges) {
+            if edges[ei]["target"] == rootId and (edges[ei]["type"] == "SUPPORTS" or edges[ei]["type"] == "DEPENDS_ON") {
+                src = edges[ei]["source"];
+                if src not in result {
+                    result.append(src);
+                    ei2 = 0;
+                    while ei2 < len(edges) {
+                        if edges[ei2]["target"] == src and (edges[ei2]["type"] == "SUPPORTS" or edges[ei2]["type"] == "DEPENDS_ON") {
+                            if edges[ei2]["source"] not in result { result.append(edges[ei2]["source"]); }
                         }
-                    } else {
-                        # Two non-dragged cards: let them push each other symmetrically
-                        a_pos = result[aid];
-                        b_pos = result[bid];
-
-                        dx = b_pos["x"] - a_pos["x"];
-                        dy = b_pos["y"] - a_pos["y"];
-                        overlap_x = (NODE_W + NODE_PAD) - abs(dx);
-                        overlap_y = (NODE_H + NODE_PAD) - abs(dy);
-
-                        if overlap_x > 0 and overlap_y > 0 {
-                            if overlap_x <= overlap_y {
-                                half = overlap_x / 2.0;
-                                push = half if dx >= 0 else -half;
-                                result[aid] = {"x": a_pos["x"] - push, "y": a_pos["y"]};
-                                result[bid] = {"x": b_pos["x"] + push, "y": b_pos["y"]};
-                            } else {
-                                half = overlap_y / 2.0;
-                                push = half if dy >= 0 else -half;
-                                result[aid] = {"x": a_pos["x"], "y": a_pos["y"] - push};
-                                result[bid] = {"x": b_pos["x"], "y": b_pos["y"] + push};
-                            }
-                        }
+                        ei2 = ei2 + 1;
                     }
                 }
             }
+            ei = ei + 1;
         }
-
-        # Clamp all cards to the positive canvas region
-        for k in all_ids {
-            result[k] = {
-                "x": max(0.0, result[k]["x"]),
-                "y": max(0.0, result[k]["y"])
-            };
-        }
-
         return result;
     }
 
+    branchIds = getBranchIds(focusBranch) if focusBranch else [];
+
+    def isInBranch(nid: str) -> bool {
+        if not focusBranch { return True; }
+        return nid in branchIds;
+    }
+
+    def edgeColor(t: str) -> str {
+        return EDGE_COLORS[t] if t in EDGE_COLORS else "#6b7280";
+    }
+
+    def edgeDash(t: str) -> str {
+        return "6,4" if t == "CONTRADICTS" or t == "DEPENDS_ON" else "none";
+    }
+
+    # ── Zoom / Pan / Drag ──
     def handleWheel(e: any) -> None {
-        if isLocked { return; }
         e.preventDefault();
-        new_scale = max(0.25, min(3.0, scale - e.deltaY * 0.001));
+        new_scale = max(0.15, min(4.0, scale - e.deltaY * 0.001));
         scale = new_scale;
     }
 
-    def zoomIn()     -> None { scale = min(3.0, scale + 0.15); }
-    def zoomOut()    -> None { scale = max(0.25, scale - 0.15); }
+    def zoomIn()     -> None { scale = min(4.0, scale + 0.15); }
+    def zoomOut()    -> None { scale = max(0.15, scale - 0.15); }
     def resetView()  -> None { scale = 1.0; viewX = 40.0; viewY = 40.0; }
-    def toggleLock() -> None { isLocked = not isLocked; }
 
     def handleCanvasMouseDown(e: any) -> None {
-    if isLocked { return; }
-    if draggingNodeId { return; }
-    isPanning = True;
-    panStartX = e.clientX - viewX;
-    panStartY = e.clientY - viewY;
-}
+        if draggingNodeId { return; }
+        isPanning = True;
+        panStartX = e.clientX - viewX;
+        panStartY = e.clientY - viewY;
+    }
 
     def handleNodeMouseDown(e: any, nodeId: str) -> None {
-        if isLocked { return; }
         e.preventDefault();
         e.stopPropagation();
         canvas = e.currentTarget.closest("[data-graph-canvas]");
@@ -164,21 +394,24 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
     }
 
     def handleMouseMove(e: any) -> None {
-        if isLocked { return; }
-
         if draggingNodeId {
             rect  = e.currentTarget.getBoundingClientRect();
-            new_x = max(0.0, (e.clientX - rect.left - viewX) / scale - nodeDragOffsetX);
-            new_y = max(0.0, (e.clientY - rect.top  - viewY) / scale - nodeDragOffsetY);
-
-            updated = {};
-            for k in nodePositions { updated[k] = {"x": nodePositions[k]["x"], "y": nodePositions[k]["y"]}; }
+            new_x = (e.clientX - rect.left - viewX) / scale - nodeDragOffsetX;
+            new_y = (e.clientY - rect.top  - viewY) / scale - nodeDragOffsetY;
+            updated: dict = {};
+            ki = 0;
+            while ki < len(nodes) {
+                k = nodes[ki]["id"];
+                if k in nodePositions {
+                    updated[k] = {"x": nodePositions[k]["x"], "y": nodePositions[k]["y"]};
+                }
+                ki = ki + 1;
+            }
             updated[draggingNodeId] = {"x": new_x, "y": new_y};
-            nodePositions = resolveCollisions(updated, draggingNodeId);
+            nodePositions = updated;
             dragDidMove   = True;
             return;
         }
-
         if isPanning {
             viewX = e.clientX - panStartX;
             viewY = e.clientY - panStartY;
@@ -190,56 +423,96 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         isPanning      = False;
     }
 
-    # ── edges ──────────────────────────────────────────────────────────────
-    edge_elements = [];
-    for edge in edges {
-        sx = midX(edge["source"]); sy = midY(edge["source"]);
-        tx = midX(edge["target"]); ty = midY(edge["target"]);
-        mx = (sx + tx) / 2.0;     my = (sy + ty) / 2.0;
-        color  = edgeColor(edge["type"]);
-        dash   = edgeDash(edge["type"]);
-        path_d = makePath(sx, sy, tx, ty);
-        mkr_id = "mk-" + edge["type"].toLowerCase();
+    def handleNodeClickInternal(nodeItem: dict) -> None {
+        if onNodeClick and not dragDidMove { onNodeClick(nodeItem); }
+    }
+
+    # ── Build edge SVG elements ──
+    edge_elements: list = [];
+    ei = 0;
+    while ei < len(edges) {
+        cur_e = edges[ei];
+        s_pos = getPos(cur_e["source"]);
+        t_pos = getPos(cur_e["target"]);
+        sx = s_pos["x"]; sy = s_pos["y"];
+        tx = t_pos["x"]; ty = t_pos["y"];
+        mid_y = (sy + 40 + ty - 40) / 2.0;
+        mx = (sx + tx) / 2.0;
+        color  = edgeColor(cur_e["type"]);
+        dash   = edgeDash(cur_e["type"]);
+
+        path_d = f"M {sx},{sy + 40} C {sx},{mid_y} {tx},{mid_y} {tx},{ty - 40}";
+
+        e_type = cur_e["type"];
+        mkr_id = "mk-sup";
+        if e_type == "CONTRADICTS" { mkr_id = "mk-con"; }
+        elif e_type == "DEPENDS_ON" { mkr_id = "mk-dep"; }
+        elif e_type == "ADDRESSES" { mkr_id = "mk-adr"; }
+
+        both_in = isInBranch(cur_e["source"]) and isInBranch(cur_e["target"]);
+        e_opacity = "0.7" if both_in else "0.1";
+        e_width = "2" if both_in else "1";
+
+        label_bg = "#13131f" if isDark else "#fff";
+        label_border = "rgba(255,255,255,0.07)" if isDark else "rgba(0,0,0,0.08)";
+        label_text = EDGE_LABELS[e_type] if e_type in EDGE_LABELS else "REL";
+
+        e_weight = cur_e["weight"] if "weight" in cur_e else None;
+        display_label = (str(int(e_weight * 100)) + "%") if e_weight else label_text;
+
         edge_elements.append(
-            <g key={edge["id"]}>
-                <path d={path_d} stroke={color} strokeWidth="2"
+            <g key={cur_e["id"]} opacity={e_opacity}>
+                <path d={path_d} stroke={color} strokeWidth={e_width}
                       strokeDasharray={dash} fill="none"
                       markerEnd={f"url(#{mkr_id})"} />
-                <rect x={mx-32} y={my-10} width="64" height="18" rx="4"
-                      fill="white" fillOpacity="0.92" />
-                <text x={mx} y={my+4} textAnchor="middle" fontSize="9"
-                      fontWeight="600" fill={color}
-                      fontFamily="DM Sans, sans-serif">{edge["type"]}</text>
+                <rect x={str(mx - 20)} y={str(mid_y - 10)} width="40" height="20" rx="10"
+                      fill={label_bg} stroke={label_border} strokeWidth="1" />
+                <text x={str(mx)} y={str(mid_y + 4)} textAnchor="middle" fontSize="9"
+                      fill={color} fontWeight="600" fontFamily="DM Sans, sans-serif">
+                    {display_label}
+                </text>
             </g>
         );
+        ei = ei + 1;
     }
 
-    # ── nodes ──────────────────────────────────────────────────────────────
-    node_elements = [];
-    for node_item in nodes {
-        pos         = getPos(node_item["id"]);
+    # ── Build node SVG elements ──
+    node_elements: list = [];
+    ni = 0;
+    while ni < len(nodes) {
+        node_item = nodes[ni];
+        pos = getPos(node_item["id"]);
         is_dragging = draggingNodeId == node_item["id"];
-        drop_shadow = "drop-shadow(0 8px 20px rgba(0,0,0,0.22))" if is_dragging else "drop-shadow(0 2px 6px rgba(0,0,0,0.08))";
-        node_cursor = "grabbing" if is_dragging else ("default" if isLocked else "grab");
+        is_sel = selectedNodeId == node_item["id"];
+        is_dim = not isInBranch(node_item["id"]);
+        node_cursor = "grabbing" if is_dragging else "grab";
+        nid = node_item["id"];
+
         node_elements.append(
-            <foreignObject
-                key={node_item["id"]}
-                x={pos["x"]} y={pos["y"]}
-                width={NODE_W} height={NODE_H}
-                style={{"cursor": node_cursor, "filter": drop_shadow, "overflow": "visible"}}
-                onMouseDown={lambda e -> None { handleNodeMouseDown(e, node_item["id"]); }}
-                onClick={lambda -> None {
-                    if onNodeClick and not dragDidMove { onNodeClick(node_item); }
-                }}
+            <g key={nid}
+                transform={f"translate({pos['x']}, {pos['y']})"}
+                style={{"cursor": node_cursor, "transition": "transform 0.05s ease-out" if not is_dragging else "none"}}
+                onMouseDown={lambda e -> None { handleNodeMouseDown(e, nid); }}
+                onClick={lambda -> None { handleNodeClickInternal(node_item); }}
             >
-                <div xmlns="http://www.w3.org/1999/xhtml">
-                    <ArgumentNodeComponent node={node_item} />
-                </div>
-            </foreignObject>
+                <ArgumentNodeComponent
+                    node={node_item}
+                    isSelected={is_sel}
+                    isDimmed={is_dim}
+                    isDark={isDark}
+                />
+            </g>
         );
+        ni = ni + 1;
     }
 
-    lock_class = "graph-control-btn graph-control-btn-active" if isLocked else "graph-control-btn";
+    bg_color = "#0f0f17" if isDark else "#f4f1ee";
+    hint_bg = "rgba(255,255,255,0.04)" if isDark else "rgba(0,0,0,0.03)";
+    hint_border = "1px solid rgba(255,255,255,0.07)" if isDark else "1px solid rgba(0,0,0,0.08)";
+    hint_color = "#64748b" if isDark else "#94a3b8";
+    ctrl_bg = "rgba(255,255,255,0.06)" if isDark else "rgba(255,255,255,0.9)";
+    ctrl_border = "1px solid rgba(255,255,255,0.1)" if isDark else "1px solid rgba(0,0,0,0.08)";
+    ctrl_color = "#94a3b8" if isDark else "#64748b";
 
     return (
         <div
@@ -250,6 +523,7 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
             onWheel={handleWheel}
+            style={{"background": bg_color}}
         >
             <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -265,25 +539,65 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                 }}
             >
                 <defs>
-                    <marker id="mk-supports"    markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#10b981" /></marker>
-                    <marker id="mk-contradicts" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#ef4444" /></marker>
-                    <marker id="mk-depends_on"  markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#f59e0b" /></marker>
-                    <marker id="mk-addresses"   markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#8b5cf6" /></marker>
-                    <marker id="mk-default"     markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#6b7280" /></marker>
+                    <marker id="mk-sup" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                        <polygon points="0 0,8 3,0 6" fill="#10b981" />
+                    </marker>
+                    <marker id="mk-con" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                        <polygon points="0 0,8 3,0 6" fill="#ef4444" />
+                    </marker>
+                    <marker id="mk-dep" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                        <polygon points="0 0,8 3,0 6" fill="#f59e0b" />
+                    </marker>
+                    <marker id="mk-adr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                        <polygon points="0 0,8 3,0 6" fill="#8b5cf6" />
+                    </marker>
+                    <filter id="drop-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="2" stdDeviation="4" floodOpacity="0.1" />
+                    </filter>
+                    <filter id="glow-selected" x="-30%" y="-30%" width="160%" height="160%">
+                        <feGaussianBlur stdDeviation="6" result="blur" />
+                        <feMerge>
+                            <feMergeNode in="blur" />
+                            <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                    </filter>
                 </defs>
                 {edge_elements}
                 {node_elements}
             </svg>
 
-            <div className="graph-controls">
-                <button className="graph-control-btn" onClick={zoomIn}    title="Zoom in">+</button>
-                <button className="graph-control-btn" onClick={zoomOut}   title="Zoom out">−</button>
-                <button className="graph-control-btn" onClick={resetView} title="Reset view">⊙</button>
-                <button className={lock_class}         onClick={toggleLock}
-                        title={"Unlock view" if isLocked else "Lock view"}>
-                    {"🔒" if isLocked else "🔓"}
-                </button>
+            <div style={{
+                "position": "absolute", "top": "12px", "right": "12px",
+                "display": "flex", "flexDirection": "column", "gap": "4px",
+                "background": ctrl_bg, "border": ctrl_border,
+                "borderRadius": "10px", "padding": "4px",
+                "boxShadow": "0 2px 8px rgba(0,0,0,0.1)"
+            }}>
+                <button onClick={zoomIn} style={{
+                    "width": "32px", "height": "32px", "border": "none", "background": "transparent",
+                    "color": ctrl_color, "fontSize": "18px", "cursor": "pointer", "borderRadius": "6px"
+                }} title="Zoom in">+</button>
+                <button onClick={zoomOut} style={{
+                    "width": "32px", "height": "32px", "border": "none", "background": "transparent",
+                    "color": ctrl_color, "fontSize": "18px", "cursor": "pointer", "borderRadius": "6px"
+                }} title="Zoom out">−</button>
+                <button onClick={resetView} style={{
+                    "width": "32px", "height": "32px", "border": "none", "background": "transparent",
+                    "color": ctrl_color, "fontSize": "14px", "cursor": "pointer", "borderRadius": "6px"
+                }} title="Reset view">⊙</button>
             </div>
+
+            {(
+                <div style={{
+                    "position": "absolute", "bottom": "16px", "left": "50%",
+                    "transform": "translateX(-50%)", "padding": "6px 14px",
+                    "background": hint_bg,
+                    "border": hint_border,
+                    "borderRadius": "16px", "fontSize": "12px",
+                    "color": hint_color,
+                    "pointerEvents": "none"
+                }}>Click a node for details · Drag to rearrange · Scroll to zoom</div>
+            ) if not selectedNodeId else None}
         </div>
     );
 }

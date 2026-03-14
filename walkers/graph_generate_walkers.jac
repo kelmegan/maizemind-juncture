@@ -17,12 +17,16 @@ walker:pub GenerateArgumentGraph {
         docs: list[Document] = [];
         # Retry up to 2 times if LLM returns empty
         result = generate_argument_graph(self.notes, docs);
-        if not result.get("nodes", []) {
+        result_nodes = result["nodes"] if "nodes" in result else [];
+        print(f"  [First attempt] Got {len(result_nodes)} nodes");
+        if not result_nodes or len(result_nodes) == 0 {
             print("  [RETRY] LLM returned empty, retrying...");
             result = generate_argument_graph(self.notes, docs);
+            result_nodes = result["nodes"] if "nodes" in result else [];
+            print(f"  [Retry] Got {len(result_nodes)} nodes");
         }
-        raw_nodes = result.get("nodes", []);
-        raw_edges = result.get("edges", []);
+        raw_nodes = result["nodes"] if "nodes" in result else [];
+        raw_edges = result["edges"] if "edges" in result else [];
 
         type_map: dict[str, str] = {
             "thesis": "THESIS",
@@ -125,6 +129,7 @@ walker:pub GenerateArgumentGraph {
                 "id": nid,
                 "type": fe_type,
                 "content": n.get("text", ""),
+                "confidence": conf,
                 "isWeak": conf < 0.5,
                 "issues": issues_list,
                 "position": {"x": x_pos, "y": y_pos}
