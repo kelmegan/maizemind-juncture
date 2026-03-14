@@ -32,21 +32,26 @@ walker:pub GenerateArgumentGraph {
             "thesis": "THESIS",
             "claim": "CLAIM",
             "evidence": "EVIDENCE",
-            "assumption": "ASSUMPTION",
+            "assumption": "EVIDENCE",
             "counterarg": "COUNTERARGUMENT"
         };
         edge_type_map: dict[str, str] = {
             "supports": "SUPPORTS",
             "contradicts": "CONTRADICTS",
-            "depends_on": "DEPENDS_ON",
+            "depends_on": "SUPPORTS",
             "addresses": "ADDRESSES"
+        };
+        # Evidence quality base weights by category
+        category_weights: dict[str, float] = {
+            "empirical_data": 0.9, "expert_testimony": 0.8,
+            "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
         };
 
         parent_map: dict[str, str] = {};
         children_map: dict[str, list[str]] = {};
         for e in raw_edges {
             etype = e.get("type", "").lower();
-            if etype in ["supports", "depends_on"] {
+            if etype in ["supports", "depends_on", "addresses"] {
                 fid = e.get("from_id", "");
                 tid = e.get("to_id", "");
                 parent_map[fid] = tid;
@@ -125,6 +130,16 @@ walker:pub GenerateArgumentGraph {
                 conf = 0.5;
             }
 
+            # Extract evidence_category and assumptions
+            ev_cat = n.get("evidence_category", "");
+            if not ev_cat and fe_type == "EVIDENCE" {
+                ev_cat = "logical_reasoning";
+            }
+            node_assumptions = n.get("assumptions", []);
+            if not isinstance(node_assumptions, list) {
+                node_assumptions = [];
+            }
+
             fe_nodes.append({
                 "id": nid,
                 "type": fe_type,
@@ -132,7 +147,10 @@ walker:pub GenerateArgumentGraph {
                 "confidence": conf,
                 "isWeak": conf < 0.5,
                 "issues": issues_list,
-                "position": {"x": x_pos, "y": y_pos}
+                "position": {"x": x_pos, "y": y_pos},
+                "evidence_category": ev_cat,
+                "assumptions": node_assumptions,
+                "nodeScore": 50
             });
         }
 
@@ -140,11 +158,21 @@ walker:pub GenerateArgumentGraph {
         for (i, e) in enumerate(raw_edges) {
             raw_etype = e.get("type", "supports").lower();
             fe_etype = edge_type_map.get(raw_etype, "SUPPORTS");
+            e_weight = 0.5;
+            try {
+                e_weight = float(e.get("weight", "0.5"));
+            } except Exception {
+                e_weight = 0.5;
+            }
+            e_reasoning = e.get("reasoning_type", "inductive");
+            if not e_reasoning { e_reasoning = "inductive"; }
             fe_edges.append({
                 "id": f"edge_{i+1}",
                 "source": e.get("from_id", ""),
                 "target": e.get("to_id", ""),
-                "type": fe_etype
+                "type": fe_etype,
+                "weight": e_weight,
+                "reasoning_type": e_reasoning
             });
         }
 
@@ -156,31 +184,391 @@ walker:pub GenerateArgumentGraph {
             updatedAt=str(int(time.time()))
         ))[0];
 
-        sc = result.get("reasoning_score", {});
+        # ============================================================
+        # COMPREHENSIVE SCORING & ISSUE DETECTION
+        # ============================================================
+
+        # --- Step 1: Collect LLM-identified issues ---
+        summary = result.get("summary", {});
+        top_issues = summary.get("top_issues", []);
+        improve_nodes = summary.get("improvement_nodes", []);
+        suggested_counterargs = summary.get("suggested_counterarguments", []);
+
+        llm_flagged_ids: list[str] = [];
+        llm_issue_map: dict[str, list[str]] = {};
+        for (i, issue_text) in enumerate(top_issues) {
+            target_nid = improve_nodes[i] if i < len(improve_nodes) else "";
+            if target_nid {
+                if target_nid not in llm_flagged_ids {
+                    llm_flagged_ids.append(target_nid);
+                }
+                if target_nid not in llm_issue_map {
+                    llm_issue_map[target_nid] = [];
+                }
+                llm_issue_map[target_nid].append(str(issue_text));
+            }
+        }
+
+        # --- Step 2: Score evidence quality ---
+        evidence_nodes = [n for n in fe_nodes if n["type"] == "EVIDENCE"];
+        evidence_quality: dict[str, float] = {};
+        for ev in evidence_nodes {
+            ev_cat = ev.get("evidence_category", "logical_reasoning");
+            if not ev_cat { ev_cat = "logical_reasoning"; }
+            base = category_weights.get(ev_cat, 0.6);
+            # Each assumption reduces quality by 15%
+            assumption_count = len(ev.get("assumptions", []));
+            penalty = assumption_count * 0.15;
+            quality = base - penalty;
+            if quality < 0.1 { quality = 0.1; }
+            evidence_quality[ev["id"]] = quality;
+            # Set per-node score for evidence
+            ev["nodeScore"] = int(quality * 100);
+        }
+
+        # --- Step 3: Build weak node set ---
+        weak_ids: list[str] = [];
+        # Evidence with low quality is weak
+        for ev in evidence_nodes {
+            q = evidence_quality.get(ev["id"], 0.5);
+            if q < 0.4 {
+                weak_ids.append(ev["id"]);
+            }
+        }
+        # LLM-flagged nodes
+        for lid in llm_flagged_ids {
+            if lid not in weak_ids {
+                weak_ids.append(lid);
+            }
+        }
+
+        # --- Step 4: Propagate weakness upward ---
+        changed = True;
+        max_iters = 10;
+        iter_count = 0;
+        while changed and iter_count < max_iters {
+            changed = False;
+            iter_count = iter_count + 1;
+            for e in fe_edges {
+                src = e.get("source", "");
+                tgt = e.get("target", "");
+                etype = e.get("type", "");
+                if etype == "SUPPORTS" and src in weak_ids and tgt not in weak_ids {
+                    all_supporters: list[str] = [];
+                    for e2 in fe_edges {
+                        if e2.get("target") == tgt and e2.get("type") == "SUPPORTS" {
+                            all_supporters.append(e2.get("source", ""));
+                        }
+                    }
+                    all_weak = True;
+                    for sup_id in all_supporters {
+                        if sup_id not in weak_ids {
+                            all_weak = False;
+                            break;
+                        }
+                    }
+                    if all_weak and len(all_supporters) > 0 {
+                        weak_ids.append(tgt);
+                        changed = True;
+                    }
+                }
+            }
+        }
+
+        # --- Step 5: Check evidence sufficiency & per-node scoring ---
+        claim_nodes = [n for n in fe_nodes if n["type"] in ["CLAIM", "THESIS"]];
+        thin_support_ids: list[str] = [];
+        for c in claim_nodes {
+            supporters: list[str] = [];
+            sup_qualities: list[float] = [];
+            for e in fe_edges {
+                if e.get("target") == c["id"] and e.get("type") == "SUPPORTS" {
+                    supporters.append(e.get("source", ""));
+                    q = evidence_quality.get(e.get("source", ""), 0.5);
+                    sup_qualities.append(q);
+                }
+            }
+            # Per-node score for claims: weighted avg of supporter quality
+            if sup_qualities {
+                avg_q = sum(sup_qualities) / len(sup_qualities);
+                c["nodeScore"] = int(avg_q * 100);
+            } else {
+                c["nodeScore"] = 0;
+            }
+            if len(supporters) == 1 {
+                thin_support_ids.append(c["id"]);
+            }
+            if len(supporters) == 0 and c["id"] not in weak_ids {
+                weak_ids.append(c["id"]);
+            }
+        }
+
+        # --- Step 6: Calculate global score ---
+        total_claims = len(claim_nodes);
+        if total_claims > 0 {
+            supported_ids_list: list[str] = [];
+            for e in fe_edges {
+                if e.get("type") == "SUPPORTS" {
+                    supported_ids_list.append(e.get("target", ""));
+                }
+            }
+            supported_count = len([c for c in claim_nodes if c["id"] in supported_ids_list]);
+            support_val = int(supported_count / total_claims * 100);
+
+            # Penalty: low quality evidence
+            weak_evidence_penalty = 0;
+            for c in claim_nodes {
+                if c["id"] in supported_ids_list {
+                    all_sup: list[str] = [];
+                    for e in fe_edges {
+                        if e.get("target") == c["id"] and e.get("type") == "SUPPORTS" {
+                            all_sup.append(e.get("source", ""));
+                        }
+                    }
+                    all_sup_weak = True;
+                    for sid in all_sup {
+                        if sid not in weak_ids {
+                            all_sup_weak = False;
+                            break;
+                        }
+                    }
+                    if all_sup_weak and len(all_sup) > 0 {
+                        weak_evidence_penalty = weak_evidence_penalty + 20;
+                    }
+                }
+            }
+            if weak_evidence_penalty > 40 { weak_evidence_penalty = 40; }
+
+            thin_penalty = len(thin_support_ids) * 10;
+            if thin_penalty > 20 { thin_penalty = 20; }
+
+            support_val = support_val - weak_evidence_penalty - thin_penalty;
+            if support_val < 0 { support_val = 0; }
+
+            claims_weak = len([c for c in claim_nodes if c["id"] in weak_ids]);
+            premise_val = int((1 - claims_weak / total_claims) * 100);
+            if premise_val < 0 { premise_val = 0; }
+
+            counterarg_nodes = [n for n in fe_nodes if n["type"] == "COUNTERARGUMENT"];
+            addr_ids: list[str] = [];
+            for e in fe_edges {
+                if e.get("type") == "ADDRESSES" {
+                    addr_ids.append(e.get("target", ""));
+                }
+            }
+            if counterarg_nodes {
+                unresolved = len([ca for ca in counterarg_nodes if ca["id"] not in addr_ids]);
+                consistency_val = int((1 - unresolved / len(counterarg_nodes)) * 100);
+            } else {
+                consistency_val = 100;
+            }
+
+            overall_val = int(0.4 * support_val + 0.4 * premise_val + 0.2 * consistency_val);
+        } else {
+            support_val = 0;
+            premise_val = 0;
+            consistency_val = 0;
+            overall_val = 0;
+        }
+
         fe_score = {
-            "overall": int(sc.get("overall", "0")),
-            "support": int(sc.get("support_coverage", "0")),
-            "premise": int(sc.get("premise_coverage", "0")),
-            "consistency": int(sc.get("consistency", "0")),
+            "overall": overall_val,
+            "support": support_val,
+            "premise": premise_val,
+            "consistency": consistency_val,
             "unsupportedClaims": 0,
             "unresolvedContradictions": 0
         };
 
-        summary = result.get("summary", {});
-        top_issues = summary.get("top_issues", []);
-        improve_nodes = summary.get("improvement_nodes", []);
+        # --- Step 7: Build detailed issues list ---
         fe_issues: list[dict] = [];
-        for (i, issue_text) in enumerate(top_issues) {
-            target_nid = improve_nodes[i] if i < len(improve_nodes) else (fe_nodes[0].get("id", "") if fe_nodes else "");
-            severity = "high" if i == 0 else ("medium" if i == 1 else "low");
-            fe_issues.append({
-                "id": f"issue_{i+1}",
-                "nodeId": target_nid,
-                "severity": severity,
-                "type": "unsupported_claim",
-                "description": str(issue_text),
-                "suggestedAction": f"Address: {issue_text}"
-            });
+        issue_counter = 0;
+
+        # 7a. Low quality evidence (anecdotal, many assumptions)
+        for ev in evidence_nodes {
+            q = evidence_quality.get(ev["id"], 0.5);
+            ev_cat = ev.get("evidence_category", "logical_reasoning");
+            ev_assumptions = ev.get("assumptions", []);
+            if q < 0.4 {
+                issue_counter = issue_counter + 1;
+                if ev_cat == "anecdotal" {
+                    fe_issues.append({
+                        "id": f"issue_{issue_counter}",
+                        "nodeId": ev["id"],
+                        "severity": "high",
+                        "type": "low_quality_evidence",
+                        "description": "Anecdotal evidence cannot support broad claims",
+                        "suggestedAction": "Replace with empirical data, peer-reviewed studies, or expert testimony. Personal observations are the weakest form of evidence."
+                    });
+                } elif len(ev_assumptions) > 1 {
+                    fe_issues.append({
+                        "id": f"issue_{issue_counter}",
+                        "nodeId": ev["id"],
+                        "severity": "high",
+                        "type": "assumption_heavy",
+                        "description": f"This evidence relies on {len(ev_assumptions)} unaddressed assumptions",
+                        "suggestedAction": "Acknowledge or address the underlying assumptions. Consider providing separate evidence for each assumption."
+                    });
+                } else {
+                    fe_issues.append({
+                        "id": f"issue_{issue_counter}",
+                        "nodeId": ev["id"],
+                        "severity": "medium",
+                        "type": "weak_evidence",
+                        "description": "This evidence has low credibility",
+                        "suggestedAction": "Strengthen by citing credible sources, adding data, or upgrading the evidence type."
+                    });
+                }
+            }
+        }
+
+        # 7b. LLM-identified issues
+        for nid in llm_flagged_ids {
+            issue_texts = llm_issue_map.get(nid, []);
+            node_type_str = "";
+            for n in fe_nodes {
+                if n["id"] == nid {
+                    node_type_str = n["type"].lower();
+                    break;
+                }
+            }
+            for issue_text in issue_texts {
+                issue_counter = issue_counter + 1;
+                suggestion = "";
+                issue_lower = str(issue_text).lower();
+                if "anecdotal" in issue_lower {
+                    suggestion = "Replace personal observation with scientific data, peer-reviewed studies, or statistical evidence.";
+                } elif "vague" in issue_lower or "unclear" in issue_lower {
+                    suggestion = "Make this statement more specific and measurable. Define key terms.";
+                } elif "source" in issue_lower or "citation" in issue_lower {
+                    suggestion = "Add credible sources such as academic papers, official reports, or expert analysis.";
+                } elif "bias" in issue_lower or "one-sided" in issue_lower {
+                    suggestion = "Consider alternative perspectives and counterarguments.";
+                } else {
+                    suggestion = f"Strengthen this {node_type_str} by adding more rigorous evidence.";
+                }
+                fe_issues.append({
+                    "id": f"issue_{issue_counter}",
+                    "nodeId": nid,
+                    "severity": "high",
+                    "type": "llm_identified",
+                    "description": str(issue_text),
+                    "suggestedAction": suggestion
+                });
+            }
+        }
+
+        # 7c. Weakened claims (propagated)
+        for c in claim_nodes {
+            if c["id"] in weak_ids {
+                already_flagged = False;
+                for existing in fe_issues {
+                    if existing["nodeId"] == c["id"] {
+                        already_flagged = True;
+                        break;
+                    }
+                }
+                if not already_flagged {
+                    has_any_support = False;
+                    for e in fe_edges {
+                        if e.get("target") == c["id"] and e.get("type") == "SUPPORTS" {
+                            has_any_support = True;
+                            break;
+                        }
+                    }
+                    issue_counter = issue_counter + 1;
+                    c_type = c["type"].lower();
+                    if not has_any_support {
+                        fe_issues.append({
+                            "id": f"issue_{issue_counter}",
+                            "nodeId": c["id"],
+                            "severity": "high",
+                            "type": "unsupported_claim",
+                            "description": f"This {c_type} has no supporting evidence",
+                            "suggestedAction": f"Add evidence with credible sources to support this {c_type}."
+                        });
+                    } else {
+                        fe_issues.append({
+                            "id": f"issue_{issue_counter}",
+                            "nodeId": c["id"],
+                            "severity": "high",
+                            "type": "weak_foundation",
+                            "description": f"All supporting evidence for this {c_type} is weak or low quality",
+                            "suggestedAction": f"Add stronger, independent evidence. Current support relies on weak reasoning."
+                        });
+                    }
+                }
+            }
+        }
+
+        # 7d. Thinly supported claims
+        for tid in thin_support_ids {
+            already_flagged = False;
+            for existing in fe_issues {
+                if existing["nodeId"] == tid {
+                    already_flagged = True;
+                    break;
+                }
+            }
+            if not already_flagged {
+                t_type = "";
+                for n in fe_nodes {
+                    if n["id"] == tid {
+                        t_type = n["type"].lower();
+                        break;
+                    }
+                }
+                issue_counter = issue_counter + 1;
+                fe_issues.append({
+                    "id": f"issue_{issue_counter}",
+                    "nodeId": tid,
+                    "severity": "medium",
+                    "type": "thin_support",
+                    "description": f"This {t_type} relies on only a single piece of evidence",
+                    "suggestedAction": f"Add additional evidence from different sources."
+                });
+            }
+        }
+
+        # 7e. Suggested counterarguments from LLM
+        for ca in suggested_counterargs {
+            if isinstance(ca, dict) {
+                target = ca.get("target_node", "");
+                ca_text = ca.get("text", "");
+                ca_sev = ca.get("severity", "medium");
+                if target and ca_text {
+                    issue_counter = issue_counter + 1;
+                    fe_issues.append({
+                        "id": f"issue_{issue_counter}",
+                        "nodeId": target,
+                        "severity": ca_sev,
+                        "type": "counterargument_suggestion",
+                        "description": f"Potential counterargument: {ca_text}",
+                        "suggestedAction": "Consider adding a counterargument node to address this critique, or strengthen your evidence to preempt it."
+                    });
+                }
+            }
+        }
+
+        fe_issues = fe_issues[:8];
+
+        # --- Step 8: Adjust node confidence based on quality ---
+        for n in fe_nodes {
+            nid = n["id"];
+            if n["type"] == "EVIDENCE" {
+                q = evidence_quality.get(nid, 0.5);
+                n["confidence"] = q;
+                n["isWeak"] = q < 0.4;
+            } elif nid in weak_ids {
+                if n["confidence"] > 0.3 {
+                    n["confidence"] = 0.3;
+                }
+                n["isWeak"] = True;
+            } elif nid in thin_support_ids {
+                if n["confidence"] > 0.5 {
+                    n["confidence"] = 0.5;
+                }
+            }
         }
 
         report {
@@ -192,7 +580,8 @@ walker:pub GenerateArgumentGraph {
                 "updatedAt": new_graph.updatedAt
             },
             "score": fe_score,
-            "issues": fe_issues
+            "issues": fe_issues,
+            "suggested_counterarguments": suggested_counterargs
         };
         } except Exception as e {
             print(f"=== GenerateArgumentGraph ERROR: {e} ===");
@@ -225,7 +614,79 @@ walker:pub GetGraphWithScoring {
         };
     }
 
+    def find_weak_nodes(nodes: list, edges: list) -> list {
+        """Find all weak node IDs based on evidence quality and propagation."""
+        category_weights: dict[str, float] = {
+            "empirical_data": 0.9, "expert_testimony": 0.8,
+            "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
+        };
+        weak_ids: list[str] = [];
+
+        # Evidence with low quality
+        evidence_nodes = [n for n in nodes if n["type"] == "EVIDENCE"];
+        for ev in evidence_nodes {
+            ev_cat = ev.get("evidence_category", "logical_reasoning");
+            if not ev_cat { ev_cat = "logical_reasoning"; }
+            base = category_weights.get(ev_cat, 0.6);
+            assumption_count = len(ev.get("assumptions", []));
+            quality = base - assumption_count * 0.15;
+            if quality < 0.1 { quality = 0.1; }
+            if quality < 0.4 and ev["id"] not in weak_ids {
+                weak_ids.append(ev["id"]);
+            }
+        }
+
+        # Nodes with low confidence
+        for n in nodes {
+            conf = n.get("confidence", 0.5);
+            if isinstance(conf, str) {
+                try { conf = float(conf); } except Exception { conf = 0.5; }
+            }
+            if conf < 0.4 and n["id"] not in weak_ids {
+                weak_ids.append(n["id"]);
+            }
+        }
+
+        # Propagate upward
+        changed = True;
+        max_iters = 10;
+        iter_count = 0;
+        while changed and iter_count < max_iters {
+            changed = False;
+            iter_count = iter_count + 1;
+            for e in edges {
+                src = e.get("source", "");
+                tgt = e.get("target", "");
+                etype = e.get("type", "");
+                if etype == "SUPPORTS" and src in weak_ids and tgt not in weak_ids {
+                    all_sup: list[str] = [];
+                    for e2 in edges {
+                        if e2.get("target") == tgt and e2.get("type") == "SUPPORTS" {
+                            all_sup.append(e2.get("source", ""));
+                        }
+                    }
+                    all_weak = True;
+                    for sid in all_sup {
+                        if sid not in weak_ids {
+                            all_weak = False;
+                            break;
+                        }
+                    }
+                    if all_weak and len(all_sup) > 0 {
+                        weak_ids.append(tgt);
+                        changed = True;
+                    }
+                }
+            }
+        }
+        return weak_ids;
+    }
+
     def calculate_score(nodes: list, edges: list) -> dict {
+        category_weights: dict[str, float] = {
+            "empirical_data": 0.9, "expert_testimony": 0.8,
+            "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
+        };
         claims = [n for n in nodes if n["type"] in ["CLAIM", "THESIS"]];
         total_claims = len(claims);
         if total_claims == 0 {
@@ -233,7 +694,22 @@ walker:pub GetGraphWithScoring {
                     "unsupportedClaims": 0, "unresolvedContradictions": 0};
         }
 
-        # Support coverage
+        weak_ids = self.find_weak_nodes(nodes, edges);
+
+        # Evidence quality scores
+        evidence_quality: dict[str, float] = {};
+        evidence_nodes = [n for n in nodes if n["type"] == "EVIDENCE"];
+        for ev in evidence_nodes {
+            ev_cat = ev.get("evidence_category", "logical_reasoning");
+            if not ev_cat { ev_cat = "logical_reasoning"; }
+            base = category_weights.get(ev_cat, 0.6);
+            assumption_count = len(ev.get("assumptions", []));
+            quality = base - assumption_count * 0.15;
+            if quality < 0.1 { quality = 0.1; }
+            evidence_quality[ev["id"]] = quality;
+        }
+
+        # --- Support coverage ---
         supported_ids: list[str] = [];
         for e in edges {
             if e.get("type") == "SUPPORTS" {
@@ -243,11 +719,51 @@ walker:pub GetGraphWithScoring {
         supported_count = len([c for c in claims if c["id"] in supported_ids]);
         support_score = int(supported_count / total_claims * 100);
 
-        # Premise coverage
-        claims_with_issues = len([c for c in claims if c.get("issues", [])]);
-        premise_score = int((1 - claims_with_issues / total_claims) * 100);
+        # Penalty: low quality evidence
+        weak_evidence_penalty = 0;
+        for c in claims {
+            if c["id"] in supported_ids {
+                all_sup: list[str] = [];
+                for e in edges {
+                    if e.get("target") == c["id"] and e.get("type") == "SUPPORTS" {
+                        all_sup.append(e.get("source", ""));
+                    }
+                }
+                all_sup_weak = True;
+                for sid in all_sup {
+                    if sid not in weak_ids {
+                        all_sup_weak = False;
+                        break;
+                    }
+                }
+                if all_sup_weak and len(all_sup) > 0 {
+                    weak_evidence_penalty = weak_evidence_penalty + 20;
+                }
+            }
+        }
+        if weak_evidence_penalty > 40 { weak_evidence_penalty = 40; }
 
-        # Consistency
+        thin_penalty = 0;
+        for c in claims {
+            sups: list[str] = [];
+            for e in edges {
+                if e.get("target") == c["id"] and e.get("type") == "SUPPORTS" {
+                    sups.append(e.get("source", ""));
+                }
+            }
+            if len(sups) == 1 { thin_penalty = thin_penalty + 10; }
+        }
+        if thin_penalty > 20 { thin_penalty = 20; }
+
+        support_score = support_score - weak_evidence_penalty - thin_penalty;
+        if support_score < 0 { support_score = 0; }
+
+        # --- Premise ---
+        claims_weak = len([c for c in claims if c["id"] in weak_ids]);
+        premise_score = int((1 - claims_weak / total_claims) * 100);
+        if premise_score < 0 { premise_score = 0; }
+
+        # --- Consistency ---
         counterargs = [n for n in nodes if n["type"] == "COUNTERARGUMENT"];
         addressed_ids: list[str] = [];
         for e in edges {
@@ -276,24 +792,118 @@ walker:pub GetGraphWithScoring {
     }
 
     def identify_issues(nodes: list, edges: list) -> list {
+        category_weights: dict[str, float] = {
+            "empirical_data": 0.9, "expert_testimony": 0.8,
+            "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
+        };
         issues: list[dict] = [];
+        weak_ids = self.find_weak_nodes(nodes, edges);
         claims = [n for n in nodes if n["type"] in ["CLAIM", "THESIS"]];
 
-        for claim in claims {
-            supporting = [e for e in edges if e.get("target") == claim["id"] and e.get("type") == "SUPPORTS"];
-            if len(supporting) == 0 {
-                issues.append({
-                    "id": f"issue_{claim['id']}",
-                    "nodeId": claim["id"],
-                    "severity": "high",
-                    "type": "unsupported_claim",
-                    "description": f"'{claim.get('content', '')[:50]}...' lacks supporting evidence",
-                    "suggestedAction": "Add evidence, statistics, or citations to support this claim"
-                });
+        # --- 1. Low quality evidence ---
+        evidence_nodes = [n for n in nodes if n["type"] == "EVIDENCE"];
+        for ev in evidence_nodes {
+            ev_cat = ev.get("evidence_category", "logical_reasoning");
+            if not ev_cat { ev_cat = "logical_reasoning"; }
+            base = category_weights.get(ev_cat, 0.6);
+            ev_assumptions = ev.get("assumptions", []);
+            quality = base - len(ev_assumptions) * 0.15;
+            if quality < 0.1 { quality = 0.1; }
+            if quality < 0.4 {
+                if ev_cat == "anecdotal" {
+                    issues.append({
+                        "id": f"issue_ev_{ev['id']}",
+                        "nodeId": ev["id"],
+                        "severity": "high",
+                        "type": "low_quality_evidence",
+                        "description": "Anecdotal evidence cannot support broad claims",
+                        "suggestedAction": "Replace with empirical data, peer-reviewed studies, or expert testimony."
+                    });
+                } elif len(ev_assumptions) > 1 {
+                    issues.append({
+                        "id": f"issue_ev_{ev['id']}",
+                        "nodeId": ev["id"],
+                        "severity": "high",
+                        "type": "assumption_heavy",
+                        "description": f"This evidence relies on {len(ev_assumptions)} unaddressed assumptions",
+                        "suggestedAction": "Acknowledge or address the underlying assumptions."
+                    });
+                } else {
+                    issues.append({
+                        "id": f"issue_ev_{ev['id']}",
+                        "nodeId": ev["id"],
+                        "severity": "medium",
+                        "type": "weak_evidence",
+                        "description": "This evidence has low credibility",
+                        "suggestedAction": "Strengthen by citing credible sources or upgrading evidence type."
+                    });
+                }
             }
         }
 
-        # Check for unaddressed counterarguments
+        # --- 2. Weakened claims ---
+        for c in claims {
+            if c["id"] in weak_ids {
+                all_sup: list[str] = [];
+                for e in edges {
+                    if e.get("target") == c["id"] and e.get("type") == "SUPPORTS" {
+                        all_sup.append(e.get("source", ""));
+                    }
+                }
+                c_type = c["type"].lower();
+                if len(all_sup) == 0 {
+                    issues.append({
+                        "id": f"issue_{c['id']}",
+                        "nodeId": c["id"],
+                        "severity": "high",
+                        "type": "unsupported_claim",
+                        "description": f"This {c_type} has no supporting evidence",
+                        "suggestedAction": f"Add evidence with credible sources to support this {c_type}."
+                    });
+                } else {
+                    issues.append({
+                        "id": f"issue_weak_{c['id']}",
+                        "nodeId": c["id"],
+                        "severity": "high",
+                        "type": "weak_foundation",
+                        "description": f"All supporting evidence for this {c_type} is weak or low quality",
+                        "suggestedAction": f"Add stronger, independent evidence to support this {c_type}."
+                    });
+                }
+            }
+        }
+
+        # --- 3. Thin support ---
+        for c in claims {
+            already = False;
+            for existing in issues {
+                if existing["nodeId"] == c["id"] {
+                    already = True;
+                    break;
+                }
+            }
+            if not already {
+                sups: list[str] = [];
+                for e in edges {
+                    if e.get("target") == c["id"] and e.get("type") == "SUPPORTS" {
+                        sups.append(e.get("source", ""));
+                    }
+                }
+                if len(sups) == 1 {
+                    c_type = c["type"].lower();
+                    issues.append({
+                        "id": f"issue_thin_{c['id']}",
+                        "nodeId": c["id"],
+                        "severity": "medium",
+                        "type": "thin_support",
+                        "description": f"This {c_type} relies on only a single piece of evidence",
+                        "suggestedAction": f"Add additional evidence from different sources."
+                    });
+                }
+            }
+        }
+
+        # --- 4. Unaddressed counterarguments ---
         counterargs = [n for n in nodes if n["type"] == "COUNTERARGUMENT"];
         addressed_ids: list[str] = [];
         for e in edges {
@@ -308,12 +918,12 @@ walker:pub GetGraphWithScoring {
                     "nodeId": ca["id"],
                     "severity": "high",
                     "type": "contradiction",
-                    "description": f"Counterargument not addressed: '{ca.get('content', '')[:50]}...'",
-                    "suggestedAction": "Address this counterargument with evidence or acknowledgment"
+                    "description": "Counterargument not addressed",
+                    "suggestedAction": "Address this counterargument with evidence or acknowledgment."
                 });
             }
         }
 
-        return issues[:3];
+        return issues[:8];
     }
 }

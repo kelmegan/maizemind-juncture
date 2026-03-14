@@ -19,11 +19,17 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
 
     EDGE_COLORS = {
         "SUPPORTS": "#10b981", "CONTRADICTS": "#ef4444",
-        "DEPENDS_ON": "#f59e0b", "ADDRESSES": "#8b5cf6"
+        "ADDRESSES": "#8b5cf6"
     };
     EDGE_LABELS = {
         "SUPPORTS": "SUP", "CONTRADICTS": "CON",
-        "DEPENDS_ON": "DEP", "ADDRESSES": "ADR"
+        "ADDRESSES": "ADR"
+    };
+    # Reasoning type short labels for edge display
+    REASONING_LABELS = {
+        "deductive": "DED", "inductive": "IND",
+        "causal": "CAUSE", "correlational": "CORR",
+        "analogical": "ANAL"
     };
 
     has nodePositions: dict    = {},
@@ -330,13 +336,13 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         result: list = [rootId];
         ei = 0;
         while ei < len(edges) {
-            if edges[ei]["target"] == rootId and (edges[ei]["type"] == "SUPPORTS" or edges[ei]["type"] == "DEPENDS_ON") {
+            if edges[ei]["target"] == rootId and (edges[ei]["type"] == "SUPPORTS" or edges[ei]["type"] == "ADDRESSES") {
                 src = edges[ei]["source"];
                 if src not in result {
                     result.append(src);
                     ei2 = 0;
                     while ei2 < len(edges) {
-                        if edges[ei2]["target"] == src and (edges[ei2]["type"] == "SUPPORTS" or edges[ei2]["type"] == "DEPENDS_ON") {
+                        if edges[ei2]["target"] == src and (edges[ei2]["type"] == "SUPPORTS" or edges[ei2]["type"] == "ADDRESSES") {
                             if edges[ei2]["source"] not in result { result.append(edges[ei2]["source"]); }
                         }
                         ei2 = ei2 + 1;
@@ -360,7 +366,7 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
     }
 
     def edgeDash(t: str) -> str {
-        return "6,4" if t == "CONTRADICTS" or t == "DEPENDS_ON" else "none";
+        return "6,4" if t == "CONTRADICTS" else "none";
     }
 
     # ── Zoom / Pan / Drag ──
@@ -446,7 +452,6 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         e_type = cur_e["type"];
         mkr_id = "mk-sup";
         if e_type == "CONTRADICTS" { mkr_id = "mk-con"; }
-        elif e_type == "DEPENDS_ON" { mkr_id = "mk-dep"; }
         elif e_type == "ADDRESSES" { mkr_id = "mk-adr"; }
 
         both_in = isInBranch(cur_e["source"]) and isInBranch(cur_e["target"]);
@@ -458,7 +463,10 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         label_text = EDGE_LABELS[e_type] if e_type in EDGE_LABELS else "REL";
 
         e_weight = cur_e["weight"] if "weight" in cur_e else None;
-        display_label = (str(int(e_weight * 100)) + "%") if e_weight else label_text;
+        e_reasoning = cur_e["reasoning_type"] if "reasoning_type" in cur_e else "";
+        reasoning_label = REASONING_LABELS[e_reasoning] if e_reasoning in REASONING_LABELS else "";
+        # Show reasoning type label if available, otherwise edge type
+        display_label = reasoning_label if reasoning_label else label_text;
 
         edge_elements.append(
             <g key={cur_e["id"]} opacity={e_opacity}>
@@ -544,9 +552,6 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                     </marker>
                     <marker id="mk-con" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
                         <polygon points="0 0,8 3,0 6" fill="#ef4444" />
-                    </marker>
-                    <marker id="mk-dep" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                        <polygon points="0 0,8 3,0 6" fill="#f59e0b" />
                     </marker>
                     <marker id="mk-adr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
                         <polygon points="0 0,8 3,0 6" fill="#8b5cf6" />

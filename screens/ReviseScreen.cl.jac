@@ -1,6 +1,6 @@
 """Juncture - Revise Screen for editing and improving argument nodes."""
 
-sv import from ...main { AddEvidenceToNode, AddAssumptionToNode, UpdateNodeContent, DeleteNode, GetGraphWithScoring }
+sv import from ...main { AddEvidenceToNode, AddAssumptionToEvidence, UpdateNodeContent, DeleteNode, GetGraphWithScoring }
 import from "lucide-react" { Plus, Check, X, Info }
 
 import from ..components.Alert { Alert }
@@ -65,10 +65,10 @@ def:pub ReviseScreen(props: any) -> JsxElement {
                 evidenceContent=inputValue
             );
         } elif actionType == "assumption" {
-            await root spawn AddAssumptionToNode(
+            await root spawn AddAssumptionToEvidence(
                 graphId=graphId,
                 nodeId=nodeId,
-                assumptionContent=inputValue
+                assumptionText=inputValue
             );
         } elif actionType == "clarify" {
             await root spawn UpdateNodeContent(
@@ -160,7 +160,6 @@ def:pub ReviseScreen(props: any) -> JsxElement {
         "THESIS":           "revise-node-card-thesis",
         "CLAIM":            "revise-node-card-claim",
         "EVIDENCE":         "revise-node-card-evidence",
-        "ASSUMPTION":       "revise-node-card-assumption",
         "COUNTERARGUMENT":  "revise-node-card-counterargument"
     };
 
@@ -168,7 +167,6 @@ def:pub ReviseScreen(props: any) -> JsxElement {
         "THESIS": "🎯",
         "CLAIM": "💭",
         "EVIDENCE": "📊",
-        "ASSUMPTION": "🔗",
         "COUNTERARGUMENT": "⚠️"
     };
 
@@ -233,12 +231,14 @@ def:pub ReviseScreen(props: any) -> JsxElement {
                                 className="revise-action-btn"
                             />
 
-                            <Button
-                                label={(<><span className="revise-action-label">🔗 Add Assumption</span><span className="revise-action-sub">Missing logical link</span></>)}
-                                variant={"default" if actionType == "assumption" else "outline"}
-                                onClick={selectAssumption}
-                                className="revise-action-btn"
-                            />
+                            {(
+                                <Button
+                                    label={(<><span className="revise-action-label">🔗 Acknowledge Assumption</span><span className="revise-action-sub">What this evidence assumes</span></>)}
+                                    variant={"default" if actionType == "assumption" else "outline"}
+                                    onClick={selectAssumption}
+                                    className="revise-action-btn"
+                                />
+                            ) if currentNode["type"] == "EVIDENCE" else None}
 
                             <Button
                                 label={(<><span className="revise-action-label">✏️ Clarify Wording</span><span className="revise-action-sub">Rewrite for clarity</span></>)}
@@ -269,7 +269,7 @@ def:pub ReviseScreen(props: any) -> JsxElement {
                                         placeholder={
                                             "e.g., A 2024 Stanford study found that 87% of remote workers reported higher productivity..."
                                             if actionType == "evidence" else
-                                            "e.g., Assumes that reduced commute time is used productively..."
+                                            "e.g., This assumes that the study sample is representative of all workers..."
                                             if actionType == "assumption" else
                                             "Enter clearer wording..."
                                         }

@@ -13,10 +13,17 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
                              "dfill": "#1c1430", "dstroke": "#b794f4", "dheader": "#9f7aea", "dtext": "#d6bcfa"},
         "EVIDENCE":         {"fill": "#d1fae5", "stroke": "#10b981", "header": "#10b981", "text": "#065f46", "ht": "#fff", "label": "EVIDENCE",
                              "dfill": "#0d2818", "dstroke": "#6ee7b7", "dheader": "#10b981", "dtext": "#a7f3d0"},
-        "ASSUMPTION":       {"fill": "#fef3c7", "stroke": "#f59e0b", "header": "#f59e0b", "text": "#92400e", "ht": "#fff", "label": "ASSUMPTION",
-                             "dfill": "#2a2008", "dstroke": "#fcd34d", "dheader": "#f59e0b", "dtext": "#fde68a"},
         "COUNTERARGUMENT":  {"fill": "#fee2e2", "stroke": "#ef4444", "header": "#ef4444", "text": "#991b1b", "ht": "#fff", "label": "COUNTER",
                              "dfill": "#2a1215", "dstroke": "#f87171", "dheader": "#ef4444", "dtext": "#fca5a5"}
+    };
+
+    # Evidence category short labels
+    categoryLabels = {
+        "empirical_data": "EMPIRICAL",
+        "expert_testimony": "EXPERT",
+        "anecdotal": "ANECDOTAL",
+        "logical_reasoning": "LOGICAL",
+        "analogy": "ANALOGY"
     };
 
     node_type = node_data["type"] if "type" in node_data else "CLAIM";
@@ -27,6 +34,15 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
     confidence = node_data["confidence"] if "confidence" in node_data else 0.5;
 
     config = nodeTypeConfig[node_type] if node_type in nodeTypeConfig else nodeTypeConfig["CLAIM"];
+
+    # Evidence category info
+    ev_category = node_data["evidence_category"] if "evidence_category" in node_data else "";
+    ev_cat_label = categoryLabels[ev_category] if ev_category in categoryLabels else "";
+    node_assumptions = node_data["assumptions"] if "assumptions" in node_data else [];
+    has_assumptions = len(node_assumptions) > 0;
+
+    # Pre-compute header label
+    header_label = ev_cat_label if ev_cat_label else config["label"];
 
     # Colors based on theme
     fill_color = config["dfill"] if isDark else config["fill"];
@@ -99,7 +115,7 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
 
             <text x={str(-w/2 + 12)} y={str(-h/2 + 17)} fontSize="9.5" fontWeight="600"
                 letterSpacing="0.8" fill={ht_color} fontFamily="DM Sans, sans-serif">
-                {config["label"]}
+                {header_label}
             </text>
 
             <rect x={str(w/2 - 38)} y={str(-h/2 + 4)} width="32" height="18"
@@ -118,6 +134,10 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
                         textAnchor="middle" fontWeight="700">!</text>
                 </g>
             ) if has_issues else None}
+
+            {(
+                <circle cx={str(w/2 - 30)} cy={str(h/2 - 14)} r="5" fill="#f59e0b" opacity="0.8" />
+            ) if has_assumptions else None}
         </g>
     );
 }

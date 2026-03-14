@@ -162,7 +162,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         {"key": "THESIS", "color": "#7c3aed", "bg": "#ede9fe", "label": "Thesis"},
         {"key": "CLAIM", "color": "#9f7aea", "bg": "#e8e0fc", "label": "Claim"},
         {"key": "EVIDENCE", "color": "#10b981", "bg": "#d1fae5", "label": "Evidence"},
-        {"key": "ASSUMPTION", "color": "#f59e0b", "bg": "#fef3c7", "label": "Assumption"},
         {"key": "COUNTERARGUMENT", "color": "#ef4444", "bg": "#fee2e2", "label": "Counter"}
     ];
 
@@ -189,7 +188,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
     typeColorMap = {
         "THESIS": "#7c3aed", "CLAIM": "#9f7aea", "EVIDENCE": "#10b981",
-        "ASSUMPTION": "#f59e0b", "COUNTERARGUMENT": "#ef4444"
+        "COUNTERARGUMENT": "#ef4444"
     };
     sel_type_color = typeColorMap[sel_type] if sel_type in typeColorMap else "#9f7aea";
 
@@ -269,9 +268,9 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     edge_count_str = str(len(graph_edges)) if graph_edges else "0";
 
     return (
-        <div style={{"minHeight": "100vh", "fontFamily": "'DM Sans', system-ui, sans-serif",
+        <div style={{"height": "100vh", "fontFamily": "'DM Sans', system-ui, sans-serif",
                       "color": textColor, "display": "flex", "flexDirection": "column",
-                      "background": bgColor}}>
+                      "overflow": "hidden", "background": bgColor}}>
 
             <div style={{"padding": "10px 20px", "borderBottom": f"1px solid {borderColor}",
                           "display": "flex", "alignItems": "center", "justifyContent": "space-between",
@@ -445,6 +444,30 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                                    "background": "#8b5cf6", "borderRadius": "3px"}}></span>
                                     Suggested Actions
                                 </div>
+                                {(
+                                    <button onClick={goToRevise}
+                                        style={{
+                                            "display": "block", "width": "100%", "padding": "10px 14px",
+                                            "marginBottom": "6px",
+                                            "background": action_bg,
+                                            "border": action_border,
+                                            "borderRadius": "10px", "fontSize": "13px",
+                                            "color": action_text_color,
+                                            "textAlign": "left", "cursor": "pointer"
+                                        }}>📊 Add Evidence</button>
+                                ) if sel_type in ["CLAIM", "THESIS"] else None}
+                                {(
+                                    <button onClick={goToRevise}
+                                        style={{
+                                            "display": "block", "width": "100%", "padding": "10px 14px",
+                                            "marginBottom": "6px",
+                                            "background": action_bg,
+                                            "border": action_border,
+                                            "borderRadius": "10px", "fontSize": "13px",
+                                            "color": action_text_color,
+                                            "textAlign": "left", "cursor": "pointer"
+                                        }}>🔗 Acknowledge Assumption</button>
+                                ) if sel_type == "EVIDENCE" else None}
                                 <button onClick={goToRevise}
                                     style={{
                                         "display": "block", "width": "100%", "padding": "10px 14px",
@@ -454,28 +477,62 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                         "borderRadius": "10px", "fontSize": "13px",
                                         "color": action_text_color,
                                         "textAlign": "left", "cursor": "pointer"
-                                    }}>Add Evidence</button>
-                                <button onClick={goToRevise}
-                                    style={{
-                                        "display": "block", "width": "100%", "padding": "10px 14px",
-                                        "marginBottom": "6px",
-                                        "background": action_bg,
-                                        "border": action_border,
-                                        "borderRadius": "10px", "fontSize": "13px",
-                                        "color": action_text_color,
-                                        "textAlign": "left", "cursor": "pointer"
-                                    }}>Add Assumption</button>
-                                <button onClick={goToRevise}
-                                    style={{
-                                        "display": "block", "width": "100%", "padding": "10px 14px",
-                                        "marginBottom": "6px",
-                                        "background": action_bg,
-                                        "border": action_border,
-                                        "borderRadius": "10px", "fontSize": "13px",
-                                        "color": action_text_color,
-                                        "textAlign": "left", "cursor": "pointer"
-                                    }}>Clarify Wording</button>
+                                    }}>✏️ Clarify Wording</button>
                             </div>
+
+                            {(
+                                <div style={{"marginBottom": "18px"}}>
+                                    <div style={{"color": "#f59e0b", "fontSize": "11px", "fontWeight": "700",
+                                                  "textTransform": "uppercase", "letterSpacing": "1.5px",
+                                                  "marginBottom": "10px", "display": "flex",
+                                                  "alignItems": "center", "gap": "8px"}}>
+                                        <span style={{"width": "6px", "height": "6px",
+                                                       "background": "#f59e0b", "borderRadius": "3px"}}></span>
+                                        Underlying Assumptions
+                                    </div>
+                                    {selectedNode["assumptions"].map(lambda assumption -> any {
+                                        return <div key={assumption} style={{
+                                            "padding": "8px 12px",
+                                            "background": "rgba(245,158,11,0.08)",
+                                            "border": "1px solid rgba(245,158,11,0.15)",
+                                            "borderRadius": "8px", "marginBottom": "4px",
+                                            "fontSize": "12px", "color": mutedColor
+                                        }}>⚠️ {assumption}</div>;
+                                    })}
+                                </div>
+                            ) if selectedNode and "assumptions" in selectedNode and len(selectedNode["assumptions"]) > 0 else None}
+
+                            {(
+                                <div style={{"marginBottom": "18px"}}>
+                                    <div style={{"color": "#06b6d4", "fontSize": "11px", "fontWeight": "700",
+                                                  "textTransform": "uppercase", "letterSpacing": "1.5px",
+                                                  "marginBottom": "10px", "display": "flex",
+                                                  "alignItems": "center", "gap": "8px"}}>
+                                        <span style={{"width": "6px", "height": "6px",
+                                                       "background": "#06b6d4", "borderRadius": "3px"}}></span>
+                                        Evidence Details
+                                    </div>
+                                    <div style={{
+                                        "padding": "8px 12px",
+                                        "background": "rgba(6,182,212,0.06)",
+                                        "border": "1px solid rgba(6,182,212,0.12)",
+                                        "borderRadius": "8px", "fontSize": "12px"
+                                    }}>
+                                        <div style={{"display": "flex", "justifyContent": "space-between", "marginBottom": "4px"}}>
+                                            <span style={{"color": mutedColor}}>Category</span>
+                                            <span style={{"fontWeight": "600", "color": textColor, "textTransform": "capitalize"}}>
+                                                {(selectedNode["evidence_category"] if "evidence_category" in selectedNode else "logical_reasoning").replace("_", " ")}
+                                            </span>
+                                        </div>
+                                        <div style={{"display": "flex", "justifyContent": "space-between"}}>
+                                            <span style={{"color": mutedColor}}>Quality Score</span>
+                                            <span style={{"fontWeight": "600", "color": sel_str_color}}>
+                                                {str(selectedNode["nodeScore"] if "nodeScore" in selectedNode else 50)}%
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) if selectedNode and sel_type == "EVIDENCE" else None}
 
                             <div style={{"marginBottom": "18px"}}>
                                 <div style={{"color": "#3b82f6", "fontSize": "11px", "fontWeight": "700",
@@ -484,8 +541,17 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                               "alignItems": "center", "gap": "8px"}}>
                                     <span style={{"width": "6px", "height": "6px",
                                                    "background": "#3b82f6", "borderRadius": "3px"}}></span>
-                                    Score Breakdown
+                                    {"Node Score" if selectedNode else "Score Breakdown"}
                                 </div>
+                                {(
+                                    <div style={{"textAlign": "center", "padding": "12px",
+                                                  "background": cardBg, "borderRadius": "10px", "marginBottom": "8px"}}>
+                                        <div style={{"fontSize": "32px", "fontWeight": "700", "color": sel_str_color}}>
+                                            {str(selectedNode["nodeScore"] if "nodeScore" in selectedNode else 50)}
+                                        </div>
+                                        <div style={{"color": mutedColor, "fontSize": "11px"}}>Node Quality</div>
+                                    </div>
+                                ) if selectedNode and "nodeScore" in selectedNode else None}
                                 <div style={{"marginBottom": "8px"}}>
                                     <div style={{"display": "flex", "justifyContent": "space-between",
                                                   "fontSize": "12px", "marginBottom": "4px"}}>

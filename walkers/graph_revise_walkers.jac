@@ -46,10 +46,10 @@ walker:pub AddEvidenceToNode {
 }
 
 
-walker:pub AddAssumptionToNode {
+walker:pub AddAssumptionToEvidence {
     has graphId: str,
         nodeId: str,
-        assumptionContent: str;
+        assumptionText: str;
 
     can run with Root entry {
         graph_node = None;
@@ -65,24 +65,28 @@ walker:pub AddAssumptionToNode {
             return;
         }
 
-        assumption_id = f"node_assumption_{now()}";
-        new_assumption = {
-            "id": assumption_id,
-            "type": "ASSUMPTION",
-            "content": self.assumptionContent,
-            "position": {"x": 0, "y": 0}
-        };
+        # Find the evidence node and add assumption to its assumptions list
+        for node in graph_node.nodes {
+            if node["id"] == self.nodeId {
+                existing_assumptions = node.get("assumptions", []);
+                if not isinstance(existing_assumptions, list) {
+                    existing_assumptions = [];
+                }
+                existing_assumptions.append(self.assumptionText);
+                updated_node = {
+                    "id": node["id"],
+                    "type": node["type"],
+                    "content": node["content"],
+                    "position": node["position"],
+                    "assumptions": existing_assumptions,
+                    "evidence_category": node.get("evidence_category", "")
+                };
+                idx = graph_node.nodes.index(node);
+                graph_node.nodes[idx] = updated_node;
+                break;
+            }
+        }
 
-        graph_node.nodes.append(new_assumption);
-
-        new_edge = {
-            "id": f"edge_{assumption_id}",
-            "source": assumption_id,
-            "target": self.nodeId,
-            "type": "DEPENDS_ON"
-        };
-
-        graph_node.edges.append(new_edge);
         graph_node.updatedAt = str(now());
 
         report {"success": True, "graph": graph_node};

@@ -27,14 +27,17 @@ obj GraphNode {
         confidence: float = 0.5,
         status: str = "needs_work",
         issues: list[str] = [],
-        suggestions: list[str] = [];
+        suggestions: list[str] = [],
+        evidence_category: str = "",
+        assumptions: list[str] = [];
 }
 
 obj GraphEdge {
     has from_id: str,
         to_id: str,
         label: str = "supports",
-        weight: float = 0.5;
+        weight: float = 0.5,
+        reasoning_type: str = "inductive";
 }
 
 obj Document {
@@ -53,7 +56,8 @@ obj ReasoningScore {
 obj GraphSummary {
     has top_issues: list[str] = [],
         strength_nodes: list[str] = [],
-        improvement_nodes: list[str] = [];
+        improvement_nodes: list[str] = [],
+        suggested_counterarguments: list[dict] = [];
 }
 
 
@@ -63,9 +67,9 @@ obj GraphSummary {
 # ============================================================
 
 """Extract an argument graph from notes. Return JSON:
-{"nodes":[{"id":"n1","kind":"thesis|claim|evidence|assumption|counterarg","text":"..."},...],
-"edges":[{"from_id":"n2","to_id":"n1","kind":"supports|contradicts|depends_on|addresses"},...]}
-Rules: exactly 1 thesis node. Keep nodes concise (one sentence each). Max 8 nodes."""
+{"nodes":[{"id":"n1","kind":"thesis|claim|evidence|counterarg","text":"...","evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["implicit assumption 1"]},...],
+"edges":[{"from_id":"n2","to_id":"n1","kind":"supports|contradicts|addresses","reasoning_type":"deductive|inductive|causal|correlational|analogical","weight":0.8},...]}
+Rules: exactly 1 thesis. Max 8 nodes. For evidence nodes, set evidence_category and list any implicit assumptions the evidence relies on. Edge weight is 0.0-1.0 reflecting connection strength. reasoning_type describes HOW the source supports/contradicts the target."""
 def parse_notes_and_edges(
     notes: str,
     documents: list[Document]
@@ -75,8 +79,9 @@ by llm(temperature=0.2);
 """Given argument graph nodes and edges as JSON, return:
 {"top_issues":["issue1","issue2","issue3"],
 "strength_nodes":["n1"],
-"improvement_nodes":["n3","n4"]}
-List the 3 most critical weaknesses. Be brief."""
+"improvement_nodes":["n3","n4"],
+"counterarguments":[{"target_node":"n2","text":"A specific counterargument","severity":"high|medium|low"}]}
+List the 3 most critical weaknesses. Suggest 1-3 specific counterarguments someone could raise against the weakest claims. Be brief."""
 def analyze_and_summarize_llm(
     all_nodes_json: str,
     all_edges_json: str,
@@ -151,6 +156,22 @@ def dict_to_graphnode(d: dict[str, object]) -> GraphNode {
         sugg_list = [str(s) for s in raw_sugg];
     }
 
+    # Evidence category
+    raw_cat = d.get("evidence_category", d.get("category", ""));
+    ev_cat = str(raw_cat) if raw_cat else "";
+
+    # Assumptions list
+    raw_assumptions = d.get("assumptions", []);
+    assumption_list: list[str] = [];
+    if raw_assumptions is None {
+        raw_assumptions = [];
+    }
+    if isinstance(raw_assumptions, str) and raw_assumptions {
+        assumption_list = [s.strip() for s in raw_assumptions.split(",")];
+    } elif isinstance(raw_assumptions, list) {
+        assumption_list = [str(a) for a in raw_assumptions];
+    }
+
     gn = GraphNode(id=nid);
     gn.label = nkind;
     gn.text = ntext;
@@ -159,6 +180,8 @@ def dict_to_graphnode(d: dict[str, object]) -> GraphNode {
     gn.status = nstatus;
     gn.issues = issue_list;
     gn.suggestions = sugg_list;
+    gn.evidence_category = ev_cat;
+    gn.assumptions = assumption_list;
     return gn;
 }
 
@@ -173,9 +196,13 @@ def dict_to_graphedge(d: dict[str, object]) -> GraphEdge {
     } except Exception {
         ew = 0.5;
     }
+    raw_rt = d.get("reasoning_type", d.get("reasoningType", d.get("reason_type", "inductive")));
+    ert = str(raw_rt) if raw_rt else "inductive";
+
     ge = GraphEdge(from_id=efrom, to_id=eto);
     ge.label = ekind;
     ge.weight = ew;
+    ge.reasoning_type = ert;
     return ge;
 }
 
@@ -192,10 +219,22 @@ def normalize_nodes(nodes: list[GraphNode]) -> list[GraphNode] {
         "sub_claim": "claim", "subclaim": "claim",
         "evidence": "evidence", "document": "evidence",
         "source": "evidence", "fact": "evidence", "statistic": "evidence",
-        "assumption": "assumption", "premise": "assumption",
+        "assumption": "evidence", "premise": "evidence",
         "counterarg": "counterarg", "counterargument": "counterarg",
         "counter_argument": "counterarg", "counter": "counterarg",
         "rebuttal": "counterarg"
+    };
+    category_map: dict[str, str] = {
+        "empirical_data": "empirical_data", "empirical": "empirical_data",
+        "expert_testimony": "expert_testimony", "expert": "expert_testimony",
+        "anecdotal": "anecdotal", "personal": "anecdotal",
+        "logical_reasoning": "logical_reasoning", "logical": "logical_reasoning",
+        "analogy": "analogy"
+    };
+    reasoning_type_map: dict[str, str] = {
+        "deductive": "deductive", "inductive": "inductive",
+        "causal": "causal", "correlational": "correlational",
+        "analogical": "analogical"
     };
     status_map: dict[str, str] = {
         "ok": "ok", "valid": "ok", "strong": "ok",
@@ -218,10 +257,21 @@ def normalize_nodes(nodes: list[GraphNode]) -> list[GraphNode] {
     };
 
     for n in nodes {
-        n.label = type_map.get(n.label.lower().strip(), "claim");
+        # If LLM returned "assumption" type, convert to evidence and note the assumption
+        old_label = n.label.lower().strip();
+        if old_label in ["assumption", "premise"] and not n.assumptions {
+            n.assumptions = [n.text];
+        }
+        n.label = type_map.get(old_label, "claim");
         n.status = status_map.get(n.status.lower().strip(), "needs_work");
         if not n.parent_id {
             n.parent_id = "";
+        }
+        # Normalize evidence category
+        if n.evidence_category {
+            n.evidence_category = category_map.get(n.evidence_category.lower().strip(), "logical_reasoning");
+        } elif n.label == "evidence" {
+            n.evidence_category = "logical_reasoning";
         }
         fixed: list[str] = [];
         for iss in n.issues {
@@ -238,12 +288,18 @@ def normalize_edges(edges: list[GraphEdge]) -> list[GraphEdge] {
         "supports": "supports", "support": "supports",
         "contradicts": "contradicts", "contradict": "contradicts",
         "counterarguments": "contradicts", "counterargument": "contradicts",
-        "depends_on": "depends_on", "depends": "depends_on",
+        "depends_on": "supports", "depends": "supports",
         "addresses": "addresses", "address": "addresses",
         "rebuts": "addresses", "rebuttal": "addresses"
     };
+    reasoning_map: dict[str, str] = {
+        "deductive": "deductive", "inductive": "inductive",
+        "causal": "causal", "correlational": "correlational",
+        "analogical": "analogical"
+    };
     for e in edges {
         e.label = edge_map.get(e.label.lower().strip(), "supports");
+        e.reasoning_type = reasoning_map.get(e.reasoning_type.lower().strip(), "inductive");
     }
     return edges;
 }
@@ -253,7 +309,7 @@ def normalize_edges(edges: list[GraphEdge]) -> list[GraphEdge] {
 # 5. SCORING - Rule-based, NOT LLM
 # ============================================================
 
-"Calculate reasoning score from graph structure."
+"Calculate reasoning score from graph structure with evidence quality weighting."
 def calculate_score(
     nodes: list[GraphNode],
     edges: list[GraphEdge]
@@ -265,6 +321,26 @@ def calculate_score(
         return ReasoningScore();
     }
 
+    # Evidence quality base weights by category
+    category_weights: dict[str, float] = {
+        "empirical_data": 0.9, "expert_testimony": 0.8,
+        "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
+    };
+
+    # Score each evidence node by category and assumptions
+    evidence_nodes = [n for n in nodes if n.label == "evidence"];
+    evidence_scores: dict[str, float] = {};
+    for ev in evidence_nodes {
+        base = category_weights.get(ev.evidence_category, 0.6);
+        # Each unaddressed assumption reduces quality by 15%
+        assumption_count = len(ev.assumptions) if ev.assumptions else 0;
+        penalty = assumption_count * 0.15;
+        quality = base - penalty;
+        if quality < 0.1 { quality = 0.1; }
+        evidence_scores[ev.id] = quality;
+    }
+
+    # --- Support coverage ---
     supported_ids: list[str] = [];
     for e in edges {
         if e.label == "supports" {
@@ -281,11 +357,74 @@ def calculate_score(
             thesis_penalty = 15;
         }
     }
-    support_score_val = max(0, int(support_pct * 100) - thesis_penalty);
 
+    # Penalty: low quality evidence supporting claims
+    weak_evidence_penalty = 0;
+    for c in claims {
+        if c.id in supported_ids {
+            # Get average quality of supporting evidence
+            sup_qualities: list[float] = [];
+            for e in edges {
+                if e.to_id == c.id and e.label == "supports" {
+                    q = evidence_scores.get(e.from_id, 0.5);
+                    sup_qualities.append(q);
+                }
+            }
+            if sup_qualities {
+                avg_q = sum(sup_qualities) / len(sup_qualities);
+                if avg_q < 0.4 {
+                    weak_evidence_penalty = weak_evidence_penalty + 20;
+                } elif avg_q < 0.6 {
+                    weak_evidence_penalty = weak_evidence_penalty + 10;
+                }
+            }
+        }
+    }
+    if weak_evidence_penalty > 40 { weak_evidence_penalty = 40; }
+
+    # Penalty: thin support (only 1 evidence)
+    thin_penalty = 0;
+    for c in claims {
+        sups: list[str] = [];
+        for e in edges {
+            if e.to_id == c.id and e.label == "supports" {
+                sups.append(e.from_id);
+            }
+        }
+        if len(sups) == 1 { thin_penalty = thin_penalty + 10; }
+    }
+    if thin_penalty > 20 { thin_penalty = 20; }
+
+    support_score_val = max(0, int(support_pct * 100) - thesis_penalty - weak_evidence_penalty - thin_penalty);
+
+    # --- Premise coverage ---
+    # Claims with weak evidence quality are "weak premise"
     claims_missing = len([c for c in claims if "missing_premise" in c.issues]);
-    premise_score_val = int((1 - claims_missing / total_claims) * 100);
+    claims_weak_premise = 0;
+    for c in claims {
+        if "missing_premise" not in c.issues {
+            sup_qualities2: list[float] = [];
+            for e in edges {
+                if e.to_id == c.id and e.label == "supports" {
+                    q2 = evidence_scores.get(e.from_id, 0.5);
+                    sup_qualities2.append(q2);
+                }
+            }
+            if sup_qualities2 {
+                avg_q2 = sum(sup_qualities2) / len(sup_qualities2);
+                if avg_q2 < 0.4 {
+                    claims_weak_premise = claims_weak_premise + 1;
+                }
+            }
+        }
+    }
+    total_premise_issues = claims_missing + claims_weak_premise;
+    premise_score_val = int((1 - total_premise_issues / total_claims) * 100);
+    if premise_score_val < 0 {
+        premise_score_val = 0;
+    }
 
+    # --- Consistency ---
     counterargs = [n for n in nodes if n.label == "counterarg"];
     total_contras = len(counterargs);
     addressed_ids: list[str] = [];
@@ -388,6 +527,10 @@ def generate_argument_graph(
         summary.top_issues = parsed_result.get("top_issues", []);
         summary.strength_nodes = parsed_result.get("strength_nodes", []);
         summary.improvement_nodes = parsed_result.get("improvement_nodes", []);
+        raw_counters = parsed_result.get("counterarguments", []);
+        if isinstance(raw_counters, list) {
+            summary.suggested_counterarguments = raw_counters;
+        }
     }
 
     # Step 3: Calculate score (rule-based, no LLM)
@@ -402,7 +545,9 @@ def generate_argument_graph(
             "id": n.id, "type": n.label, "text": n.text,
             "parent_id": n.parent_id, "confidence": str(n.confidence),
             "status": n.status, "issues": ",".join(n.issues),
-            "suggestions": ",".join(n.suggestions)
+            "suggestions": ",".join(n.suggestions),
+            "evidence_category": n.evidence_category,
+            "assumptions": n.assumptions
         };
         node_dicts.append(nd);
     }
@@ -411,7 +556,8 @@ def generate_argument_graph(
     for e in all_edges {
         ed: dict[str, str] = {
             "from_id": e.from_id, "to_id": e.to_id,
-            "type": e.label, "weight": str(e.weight)
+            "type": e.label, "weight": str(e.weight),
+            "reasoning_type": e.reasoning_type
         };
         edge_dicts.append(ed);
     }
@@ -430,7 +576,8 @@ def generate_argument_graph(
         "summary": {
             "top_issues": summary.top_issues,
             "strength_nodes": summary.strength_nodes,
-            "improvement_nodes": summary.improvement_nodes
+            "improvement_nodes": summary.improvement_nodes,
+            "suggested_counterarguments": summary.suggested_counterarguments
         }
     };
 }
