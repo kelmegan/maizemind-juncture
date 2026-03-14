@@ -2,26 +2,93 @@
 
 ## Description
 
-Juncture is a visual reasoning tool to organize data and evalutate critical thinking. It creates a visual graph from ideation to creation to help strcuture an argument or presentation.
+Juncture is a visual reasoning tool that transforms messy notes into structured argument graphs with AI-powered analysis. It creates an interactive visual map from your ideas, evaluates reasoning quality, and provides actionable feedback to strengthen your arguments.
+
+Built with [Jac/Jaseci](https://www.jac-lang.org/) — full-stack (server walkers + client React components).
 
 ## Setup
-0. Open python environment `source jaseci-env/bin/activate` or other path if different
-    * Can create environment with `python -m venv jac-env`
 
-1. Install jac: `pip install jaseci`
+### 1. Python environment
 
-2. Verify installation with `jac --version`
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
 
-3. Set environment variable for LLM API key via terminal 
+### 2. Install Jaseci
 
-    `export ANTHROPIC_API_KEY="sk-ant-..."`
+```bash
+pip install jaseci jaclang jac-cloud jac-splice
+```
 
-    * Can use other keys such as OpenAI or Google but must update the model in main.jac accordingly
+Verify with `jac --version`.
 
-4. Run `jac start main.jac`
+### 3. LLM setup
+
+Juncture uses `by llm()` for AI-powered graph generation. The model is configured in `jac.toml`:
+
+```toml
+[plugins.byllm.model]
+default_model = "ollama/minimax-m2.5:cloud"
+verbose = true
+
+[plugins.byllm.call_params]
+temperature = 0.3
+max_tokens = 1500
+```
+
+**Using MiniMax (current default):**
+
+MiniMax M2.5 is a free cloud model accessed through Ollama's cloud routing. To set it up:
+
+1. Install Ollama: https://ollama.com/download
+2. Install litellm: `pip install litellm`
+3. No API key needed — MiniMax cloud is free through Ollama
+
+**Using other models:**
+
+You can swap the model in `jac.toml` by changing `default_model`. Examples:
+
+| Model | Config value | Requires |
+|-------|-------------|----------|
+| MiniMax (free) | `ollama/minimax-m2.5:cloud` | Ollama installed |
+| Llama 3 (local) | `ollama/llama3` | `ollama pull llama3` |
+| GPT-4o Mini | `openai/gpt-4o-mini` | `OPENAI_API_KEY` env var |
+| Claude Sonnet | `anthropic/claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` env var |
+
+Set API keys as environment variables:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+# or
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+### 4. Run
+
+```bash
+jac start main.jac
+```
+
+The app will be available at `http://localhost:8000/`.
+
+To clear cached data and start fresh:
+
+```bash
+rm -rf .jac && jac start main.jac
+```
+
+## Architecture
+
+- `main.jac` — Entry point, imports all walkers, renders client app
+- `src/graph_generator.jac` — LLM pipeline (2 calls: parse notes into graph, analyze weaknesses)
+- `walkers/` — Server-side walkers for graph generation, revision, user/session management
+- `screens/` — Client `.cl.jac` React screens (Welcome, Generate, Review, Revise, Export, Profile)
+- `components/` — Reusable UI components (ArgumentGraphView, Button, Card, etc.)
+- `graph/` — Node schema definitions (AppContext, User, Session, ArgumentGraph)
 
 ## Team
 
-**MaizeMind (Group 9):** 
+**MaizeMind (Group 9):**
 
 Megan Kelly, Maya Hillegonds, Justin Cha, Kaelyn Lin, Lyra Sharma
