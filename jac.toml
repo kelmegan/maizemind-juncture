@@ -23,3 +23,6 @@ base_route_app = "app"
 
 [plugins.client]
 debug = true
+
+[plugins.byllm.model]
+default_model = "ollama/minimax-m2.5:cloud"
