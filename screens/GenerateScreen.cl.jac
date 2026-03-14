@@ -21,6 +21,16 @@ def:pub GenerateScreen(props: any) -> JsxElement {
         showConfirmRegenerate: bool = False,
         hasExistingGraph: bool = False;
 
+    def extractWalkerData(result: any) -> dict {
+        if result and "reports" in result and result.reports and len(result.reports) > 0 {
+            return result.reports[0];
+        }
+        if result and "graph" in result {
+            return result;
+        }
+        return {};
+    }
+
     async def loadContext() -> None {
         try {
             ctx = await root spawn GetContext();
@@ -59,7 +69,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                 userId=currentUserId
             );
 
-            data = result.reports[0] if result.reports else {};
+            data = extractWalkerData(result);
 
             # Check for error
             if "error" in data {
@@ -73,10 +83,15 @@ def:pub GenerateScreen(props: any) -> JsxElement {
             issuesData = data["issues"] if "issues" in data else [];
             counterargSuggestions = data["suggested_counterarguments"] if "suggested_counterarguments" in data else [];
 
-            # Check for empty graph (LLM returned nothing)
-            nodes_list = graphData["nodes"] if "nodes" in graphData else [];
-            if len(nodes_list) == 0 {
-                generateStatus = "The AI returned an empty graph. This sometimes happens. Please try again.";
+            has_graph = graphData and "nodes" in graphData and len(graphData["nodes"]) > 0;
+            has_score = scoreData and "overall" in scoreData;
+
+            if not has_graph or not has_score {
+                if "error" in data and data["error"] {
+                    generateStatus = "Generation failed: " + data["error"];
+                } else {
+                    generateStatus = "No graph was generated. Check the server logs or model setup and try again.";
+                }
                 isGenerating = False;
                 return;
             }
@@ -98,7 +113,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
             }
         } except Exception as e {
             print(f"Generation error: {e}");
-            generateStatus = f"Error generating graph. Please try again.";
+            generateStatus = f"Error: {e}. Please try again.";
             isGenerating = False;
         }
     }

@@ -88,6 +88,8 @@ def:pub ExportScreen(props: any) -> JsxElement {
                 for ev in claim_evidence {
                     outline += f"   • {ev['content']}\n";
                 }
+            } elif includeFlags {
+                outline += "   • Needs evidence\n";
             }
             i += 1;
         }
