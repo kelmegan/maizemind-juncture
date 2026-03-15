@@ -1,6 +1,6 @@
 """Juncture - Review Screen with inline editing workshop, ghost nodes, and score delta."""
 
-sv import from ...main { GetContext, GetGraphWithScoring, AddEvidenceToNode, AddAssumptionToEvidence, UpdateNodeContent, DeleteNode, AddCounterargumentNode, AddAddressEdge, EvaluateNewNode, GenerateCounter, ClarifyNode }
+sv import from ...main { GetContext, GetGraphWithScoring, AddEvidenceToNode, AddAssumptionToEvidence, UpdateNodeContent, DeleteNode, AddCounterargumentNode, AddAddressEdge, EvaluateNewNode, GenerateCounter, ClarifyNode, ExpandBranch }
 
 import from ..components.ArgumentGraphView { ArgumentGraphView }
 import from ..components.Button { Button }
@@ -17,6 +17,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         focusBranch: str = None,
         editMode: str = "",
         editInputValue: str = "",
+        sourceUrlValue: str = "",
         isSaving: bool = False,
         prevScore: int = 0,
         scoreDelta: int = 0,
@@ -188,11 +189,16 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     def cancelEdit() -> None {
         editMode = "";
         editInputValue = "";
+        sourceUrlValue = "";
         showConfirmDelete = False;
     }
 
     def handleEditInput(e: any) -> None {
         editInputValue = e.target.value;
+    }
+
+    def handleSourceUrlInput(e: any) -> None {
+        sourceUrlValue = e.target.value;
     }
 
     async def saveEdit() -> None {
@@ -226,8 +232,9 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         try {
             mutResult = None;
             if _seMode == "evidence" {
+                _seSourceUrl = sourceUrlValue.strip() if sourceUrlValue else "";
                 mutResult = await root spawn AddEvidenceToNode(
-                    graphId=_seGraphId, nodeId=_seNodeId, evidenceContent=_seContent
+                    graphId=_seGraphId, nodeId=_seNodeId, evidenceContent=_seContent, sourceUrl=_seSourceUrl
                 );
             } elif _seMode == "assumption" {
                 mutResult = await root spawn AddAssumptionToEvidence(
@@ -259,6 +266,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
         editMode = "";
         editInputValue = "";
+        sourceUrlValue = "";
         isSaving = False;
     }
 
@@ -308,6 +316,30 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             if "issues" in addData { currentIssues = addData["issues"]; }
         } except Exception { }
 
+        isSaving = False;
+    }
+
+    async def handleExpandBranch() -> None {
+        if not selectedNode or not currentGraph { return; }
+        isSaving = True;
+        _ebGraphId = currentGraph["id"] if "id" in currentGraph else "";
+        _ebNodeId = selectedNode["id"];
+        try {
+            mutResult = await root spawn ExpandBranch(graphId=_ebGraphId, nodeId=_ebNodeId);
+            mutData = mutResult.reports[0] if mutResult.reports else {};
+            if "graph" in mutData { currentGraph = mutData["graph"]; }
+            if "score" in mutData { currentScore = mutData["score"]; }
+            if "issues" in mutData { currentIssues = mutData["issues"]; }
+            # Re-select same node
+            _ebNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
+            _ebFound = None;
+            _ebi = 0;
+            while _ebi < len(_ebNodes) {
+                if _ebNodes[_ebi]["id"] == _ebNodeId { _ebFound = _ebNodes[_ebi]; break; }
+                _ebi = _ebi + 1;
+            }
+            selectedNode = _ebFound;
+        } except Exception { }
         isSaving = False;
     }
 
@@ -392,11 +424,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     sel_ev_category = "";
     sel_assumptions: list = [];
     sel_has_assumptions = False;
+    sel_source_url = "";
     if selectedNode {
         sel_ev_category = selectedNode["evidence_category"] if "evidence_category" in selectedNode else "";
         sel_assumptions = selectedNode["assumptions"] if "assumptions" in selectedNode else [];
         sel_has_assumptions = len(sel_assumptions) > 0;
+        sel_source_url = selectedNode["sourceUrl"] if "sourceUrl" in selectedNode else "";
     }
+    sel_has_source = len(sel_source_url) > 0 if sel_source_url else False;
     sel_ev_cat_display = sel_ev_category.replace("_", " ") if sel_ev_category else "logical reasoning";
 
     # More Information (populated by Clarify button)
@@ -667,6 +702,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     show_acknowledge_assumption = sel_is_evidence;
     show_add_counter = sel_type == "CLAIM" or sel_type == "THESIS";
     show_address = sel_type == "COUNTERARGUMENT";
+    show_expand = sel_type == "CLAIM" or sel_type == "THESIS";
+
+    # Evidence mode shows source URL input
+    show_source_input = editMode == "evidence";
 
     return (
         <div style={{"height": "100vh", "fontFamily": "'DM Sans', system-ui, sans-serif",
@@ -902,6 +941,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                             "color": "#10b981", "cursor": "pointer"
                                         }}>💬 Respond</button>
                                     ) if show_address else None}
+                                    {(
+                                        <button onClick={handleExpandBranch} style={{
+                                            "padding": "7px 12px", "background": "rgba(6,182,212,0.08)",
+                                            "border": "1px solid rgba(6,182,212,0.2)", "borderRadius": "8px",
+                                            "fontSize": "11px", "fontWeight": "600",
+                                            "color": "#06b6d4", "cursor": "pointer"
+                                        }}>🌿 Expand</button>
+                                    ) if show_expand else None}
                                     <button onClick={lambda -> None { startEdit("clarify"); }} style={{
                                         "padding": "7px 12px", "background": action_bg,
                                         "border": action_border, "borderRadius": "8px",
@@ -936,6 +983,21 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                             "boxSizing": "border-box"
                                         }}
                                     />
+                                    {(
+                                        <input
+                                            type="text"
+                                            value={sourceUrlValue}
+                                            onChange={handleSourceUrlInput}
+                                            placeholder="Source URL (optional) — e.g. https://example.com/study"
+                                            style={{
+                                                "width": "100%", "padding": "8px 10px", "marginTop": "6px",
+                                                "background": cardBg, "border": f"1px solid {borderColor}",
+                                                "borderRadius": "8px", "fontSize": "11px", "color": textColor,
+                                                "fontFamily": "'DM Sans', system-ui, sans-serif",
+                                                "boxSizing": "border-box"
+                                            }}
+                                        />
+                                    ) if show_source_input else None}
                                     <div style={{"display": "flex", "gap": "8px", "marginTop": "8px"}}>
                                         <button onClick={saveEdit} style={{
                                             "flex": "1", "padding": "8px 14px",
@@ -1043,6 +1105,21 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                                 {str(sel_node_score)}%
                                             </span>
                                         </div>
+                                        {(
+                                            <div style={{"marginTop": "8px", "paddingTop": "8px",
+                                                          "borderTop": f"1px solid {borderColor}"}}>
+                                                <div style={{"display": "flex", "justifyContent": "space-between", "alignItems": "center"}}>
+                                                    <span style={{"color": mutedColor}}>Source</span>
+                                                    <a href={sel_source_url} target="_blank" rel="noopener noreferrer"
+                                                       style={{"fontSize": "11px", "color": "#3b82f6",
+                                                                "textDecoration": "underline", "maxWidth": "200px",
+                                                                "overflow": "hidden", "textOverflow": "ellipsis",
+                                                                "whiteSpace": "nowrap", "display": "inline-block"}}>
+                                                        {sel_source_url}
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        ) if sel_has_source else None}
                                     </div>
                                 </div>
                             ) if sel_is_evidence else None}

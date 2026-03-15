@@ -1,7 +1,7 @@
 """Walkers for revising argument graph nodes."""
 
 import from graph.argument_graph_nodes { ArgumentGraph }
-import from src.graph_generator { evaluate_single_evidence, generate_counterargument, clarify_node_content, extract_llm_text }
+import from src.graph_generator { evaluate_single_evidence, generate_counterargument, clarify_node_content, extract_llm_text, categorize_evidence_fast, expand_branch }
 import from walkers.graph_generate_walkers { GetGraphWithScoring }
 import time;
 import json;
@@ -9,7 +9,8 @@ import json;
 walker:pub AddEvidenceToNode {
     has graphId: str,
         nodeId: str,
-        evidenceContent: str;
+        evidenceContent: str,
+        sourceUrl: str = "";
 
     can run with Root entry {
         try {
@@ -36,67 +37,13 @@ walker:pub AddEvidenceToNode {
             ev_content = ev_content[0].upper();
         }
 
-        # Find thesis text for evaluation context
-        thesis_text = "";
-        for tn in graph_node.nodes {
-            if tn["type"] == "THESIS" {
-                thesis_text = tn.get("content", "");
-                break;
-            }
-        }
-
-        # Evaluate evidence with LLM before creating node
-        ev_category = "logical_reasoning";
-        ev_assumptions: list = [];
-        ev_confidence = 0.5;
-        ev_node_score = 50;
-        try {
-            raw_result = evaluate_single_evidence(
-                evidence_text=ev_content,
-                thesis_text=thesis_text,
-                context_description=f"This evidence is used to support the thesis: '{thesis_text}'"
-            );
-            raw_str = extract_llm_text(raw_result).strip();
-            if raw_str.startswith("```") {
-                fence_lines = raw_str.split("\n");
-                fence_lines = fence_lines[1:];
-                if fence_lines and fence_lines[-1].strip().startswith("```") {
-                    fence_lines = fence_lines[:-1];
-                }
-                raw_str = "\n".join(fence_lines).strip();
-            }
-            parsed = json.loads(raw_str);
-            ev_category = parsed.get("evidence_category", "logical_reasoning");
-            if not ev_category { ev_category = "logical_reasoning"; }
-            raw_assumptions = parsed.get("assumptions", []);
-            if not isinstance(raw_assumptions, list) { raw_assumptions = []; }
-            for a in raw_assumptions {
-                a_str = str(a).strip();
-                if len(a_str) > 1 {
-                    ev_assumptions.append(a_str[0].upper() + a_str[1:]);
-                } elif len(a_str) == 1 {
-                    ev_assumptions.append(a_str[0].upper());
-                }
-            }
-            try {
-                ev_confidence = float(parsed.get("confidence", 0.5));
-            } except Exception {
-                ev_confidence = 0.5;
-            }
-            # Compute node score from category weights
-            cat_weights: dict[str, float] = {
-                "empirical_data": 0.9, "expert_testimony": 0.8,
-                "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
-            };
-            base_quality = cat_weights.get(ev_category, 0.6);
-            quality = base_quality - len(ev_assumptions) * 0.15;
-            if quality < 0.1 { quality = 0.1; }
-            combined = quality * 0.6 + ev_confidence * 0.4;
-            ev_node_score = int(combined * 100);
-            print(f"=== Evidence evaluated: category={ev_category}, confidence={ev_confidence}, assumptions={len(ev_assumptions)}, nodeScore={ev_node_score} ===");
-        } except Exception as eval_err {
-            print(f"=== Evidence evaluation failed (using defaults): {eval_err} ===");
-        }
+        # Fast keyword-based categorization (no LLM call = instant)
+        cat_result = categorize_evidence_fast(ev_content);
+        ev_category = cat_result.get("evidence_category", "logical_reasoning");
+        ev_assumptions: list = cat_result.get("assumptions", []);
+        ev_confidence = cat_result.get("confidence", 0.6);
+        ev_node_score = cat_result.get("nodeScore", 50);
+        print(f"=== Evidence categorized (fast): category={ev_category}, confidence={ev_confidence}, nodeScore={ev_node_score} ===");
 
         # Compute position below target node, offset to avoid overlap
         target_pos_x = 0.0;
@@ -118,6 +65,9 @@ walker:pub AddEvidenceToNode {
         new_x = target_pos_x + (sibling_count - 1) * 250.0;
         new_y = target_pos_y + 130.0;
 
+        # Prepare source URL
+        ev_source = self.sourceUrl.strip() if self.sourceUrl else "";
+
         new_evidence = {
             "id": evidence_id,
             "type": "EVIDENCE",
@@ -128,7 +78,8 @@ walker:pub AddEvidenceToNode {
             "position": {"x": new_x, "y": new_y},
             "evidence_category": ev_category,
             "assumptions": ev_assumptions,
-            "nodeScore": ev_node_score
+            "nodeScore": ev_node_score,
+            "sourceUrl": ev_source
         };
 
         graph_node.nodes.append(new_evidence);
@@ -193,7 +144,13 @@ walker:pub AddAssumptionToEvidence {
                     "content": node["content"],
                     "position": node["position"],
                     "assumptions": existing_assumptions,
-                    "evidence_category": node.get("evidence_category", "")
+                    "evidence_category": node.get("evidence_category", ""),
+                    "confidence": node.get("confidence", 0.5),
+                    "isWeak": node.get("isWeak", False),
+                    "issues": node.get("issues", []),
+                    "nodeScore": node.get("nodeScore", 50),
+                    "sourceUrl": node.get("sourceUrl", ""),
+                    "moreInfo": node.get("moreInfo", "")
                 };
                 idx = graph_node.nodes.index(node);
                 graph_node.nodes[idx] = updated_node;
@@ -261,7 +218,9 @@ walker:pub UpdateNodeContent {
                     "issues": node.get("issues", []),
                     "evidence_category": node.get("evidence_category", ""),
                     "assumptions": node.get("assumptions", []),
-                    "nodeScore": node.get("nodeScore", 50)
+                    "nodeScore": node.get("nodeScore", 50),
+                    "sourceUrl": node.get("sourceUrl", ""),
+                    "moreInfo": node.get("moreInfo", "")
                 };
                 idx = graph_node.nodes.index(node);
                 graph_node.nodes[idx] = updated_node;
@@ -856,6 +815,7 @@ walker:pub ClarifyNode {
         }
         parsed = json.loads(raw_str);
         more_info = parsed.get("moreInfo", "");
+        source_hint = parsed.get("sourceHint", "");
 
         if not more_info {
             report {"error": "LLM returned empty info"};
@@ -867,6 +827,11 @@ walker:pub ClarifyNode {
             more_info = more_info[0].upper() + more_info[1:];
         } elif len(more_info) == 1 {
             more_info = more_info[0].upper();
+        }
+
+        # Append source hint to moreInfo if present
+        if source_hint {
+            more_info = more_info + "\n\n📚 Source: " + source_hint;
         }
 
         # Store moreInfo on the node without replacing content
@@ -881,7 +846,8 @@ walker:pub ClarifyNode {
             "evidence_category": target_node.get("evidence_category", ""),
             "assumptions": target_node.get("assumptions", []),
             "nodeScore": target_node.get("nodeScore", 50),
-            "moreInfo": more_info
+            "moreInfo": more_info,
+            "sourceUrl": target_node.get("sourceUrl", "")
         };
 
         new_nodes: list = [];
@@ -907,6 +873,183 @@ walker:pub ClarifyNode {
         };
         } except Exception as e {
             print(f"ClarifyNode ERROR: {e}");
+            report {"error": str(e)};
+        }
+    }
+}
+
+
+walker:pub ExpandBranch {
+    has graphId: str,
+        nodeId: str;
+
+    can run with Root entry {
+        try {
+        graph_node = None;
+        for graph in [-->](?:ArgumentGraph) {
+            if graph.id == self.graphId {
+                graph_node = graph;
+                break;
+            }
+        }
+
+        if not graph_node {
+            report {"error": "Graph not found"};
+            return;
+        }
+
+        # Find target node and thesis
+        target_node = None;
+        thesis_text = "";
+        for n in graph_node.nodes {
+            if n["id"] == self.nodeId {
+                target_node = n;
+            }
+            if n["type"] == "THESIS" {
+                thesis_text = n.get("content", "");
+            }
+        }
+
+        if not target_node {
+            report {"error": "Node not found"};
+            return;
+        }
+
+        node_content = target_node.get("content", "");
+        node_type = target_node.get("type", "CLAIM");
+
+        # Call LLM to generate branches
+        raw_result = expand_branch(
+            node_text=node_content,
+            node_type=node_type,
+            thesis_text=thesis_text
+        );
+        raw_str = extract_llm_text(raw_result).strip();
+        if raw_str.startswith("```") {
+            fence_lines = raw_str.split("\n");
+            fence_lines = fence_lines[1:];
+            if fence_lines and fence_lines[-1].strip().startswith("```") {
+                fence_lines = fence_lines[:-1];
+            }
+            raw_str = "\n".join(fence_lines).strip();
+        }
+        parsed = json.loads(raw_str);
+        branches = parsed.get("branches", []);
+
+        if not branches {
+            report {"error": "LLM returned empty branches"};
+            return;
+        }
+
+        # Get target position for layout
+        target_pos_x = 0.0;
+        target_pos_y = 0.0;
+        for tn in graph_node.nodes {
+            if tn["id"] == self.nodeId {
+                tp = tn.get("position", {"x": 0, "y": 0});
+                target_pos_x = float(tp.get("x", 0));
+                target_pos_y = float(tp.get("y", 0));
+            }
+        }
+
+        # Count existing children for offset
+        existing_children = 0;
+        for te in graph_node.edges {
+            if te.get("target") == self.nodeId and te.get("type") == "SUPPORTS" {
+                existing_children = existing_children + 1;
+            }
+        }
+
+        now_ts = int(time.time());
+        branch_idx = 0;
+        for b in branches {
+            if branch_idx >= 3 { break; }  # Max 3 branches
+            b_content = b.get("content", "");
+            b_type_raw = b.get("type", "claim").upper();
+            if b_type_raw == "EVIDENCE" {
+                b_type = "EVIDENCE";
+            } else {
+                b_type = "CLAIM";
+            }
+
+            if not b_content { branch_idx = branch_idx + 1; continue; }
+
+            # Capitalize
+            if len(b_content) > 1 {
+                b_content = b_content[0].upper() + b_content[1:];
+            } elif len(b_content) == 1 {
+                b_content = b_content[0].upper();
+            }
+
+            branch_id = f"node_branch_{now_ts}_{branch_idx}";
+            offset = existing_children + branch_idx;
+            new_x = target_pos_x + (offset - 1) * 250.0;
+            new_y = target_pos_y + 130.0;
+
+            # Use LLM-provided confidence if available, else fast categorizer
+            b_raw_conf = b.get("confidence", 0.5);
+            try {
+                b_confidence = float(b_raw_conf);
+            } except Exception {
+                b_confidence = 0.5;
+            }
+            if b_confidence > 1.0 { b_confidence = 1.0; }
+            if b_confidence < 0.1 { b_confidence = 0.1; }
+
+            b_category = "";
+            b_node_score = int(b_confidence * 100);
+            if b_type == "EVIDENCE" {
+                cat_res = categorize_evidence_fast(b_content);
+                b_category = cat_res.get("evidence_category", "logical_reasoning");
+                # Use LLM confidence but cap by category quality
+                cat_weights: dict[str, float] = {
+                    "empirical_data": 0.9, "expert_testimony": 0.8,
+                    "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
+                };
+                cat_quality = cat_weights.get(b_category, 0.6);
+                combined = cat_quality * 0.4 + b_confidence * 0.6;
+                b_node_score = int(combined * 100);
+            }
+
+            new_node = {
+                "id": branch_id,
+                "type": b_type,
+                "content": b_content,
+                "confidence": b_confidence,
+                "isWeak": b_confidence < 0.5,
+                "issues": [],
+                "position": {"x": new_x, "y": new_y},
+                "evidence_category": b_category,
+                "assumptions": [],
+                "nodeScore": b_node_score,
+                "sourceUrl": ""
+            };
+            graph_node.nodes.append(new_node);
+
+            new_edge = {
+                "id": f"edge_{branch_id}",
+                "source": branch_id,
+                "target": self.nodeId,
+                "type": "SUPPORTS"
+            };
+            graph_node.edges.append(new_edge);
+            branch_idx = branch_idx + 1;
+        }
+
+        graph_node.updatedAt = str(int(time.time()));
+
+        # Return full scored result
+        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scored.reports[0] if scored.reports else {};
+        report {
+            "success": True,
+            "branchCount": branch_idx,
+            "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
+            "score": scored_data.get("score", {}),
+            "issues": scored_data.get("issues", [])
+        };
+        } except Exception as e {
+            print(f"ExpandBranch ERROR: {e}");
             report {"error": str(e)};
         }
     }

@@ -108,9 +108,32 @@ def:pub generate_counterargument(
 by llm(temperature=0.4);
 
 """Provide additional context, explanation, or detail about this node's content. Do NOT rewrite the original — instead expand on it.
-Return JSON: {"moreInfo":"1-3 sentences of additional context, background, or explanation that helps the reader understand this point better."}
-Be informative and specific. If it's evidence, explain methodology or context. If it's a claim, explain the reasoning behind it."""
+Return JSON: {"moreInfo":"1-3 sentences of additional context, background, or explanation.", "sourceHint":"A specific source, study, book, or expert to look up for more info (e.g. 'Eratosthenes experiment, 240 BC' or 'NASA Earth Observatory satellite data'). If none relevant, empty string."}
+Rules:
+- Be informative and specific. Name real studies, researchers, dates, or data.
+- If it's evidence, explain methodology or context.
+- If it's a claim, explain the reasoning behind it.
+- If it's a COUNTERARGUMENT, explain what factual basis it draws from and cite the specific source, experiment, or expert.
+- sourceHint should point the user to a real, verifiable source they can look up."""
 def:pub clarify_node_content(
+    node_text: str,
+    node_type: str,
+    thesis_text: str
+) -> str
+by llm(temperature=0.3);
+
+"""Given a claim in an argument, generate 2-3 sub-claims or supporting evidence points that break it down.
+Return JSON: {"branches":[{"content":"<sub-claim or evidence text, max 25 words>","type":"claim|evidence","confidence":0.3}]}
+Rules:
+- Each branch should be a distinct talking point people actually use in this debate.
+- Be specific, not generic. Max 3 branches.
+- confidence: 0.0-1.0 = how factually defensible is this point? Be HONEST.
+  - Conspiracy theories, unfounded claims = 0.1-0.2
+  - Common misconceptions with some basis = 0.2-0.4
+  - Debatable but reasonable positions = 0.4-0.7
+  - Well-established facts with evidence = 0.7-0.9
+- The goal is to map out what people argue, while honestly scoring quality."""
+def:pub expand_branch(
     node_text: str,
     node_type: str,
     thesis_text: str
@@ -133,6 +156,128 @@ by llm(temperature=0.2);
 # ============================================================
 # 3. JSON PARSING HELPERS
 # ============================================================
+
+"Fast keyword-based evidence categorizer with quality detection — no LLM call needed."
+def:pub categorize_evidence_fast(text: str) -> dict {
+    lower = text.lower();
+    word_count = len(text.split());
+
+    # Keyword lists for each category
+    empirical_kw = ["study", "studies", "research", "data", "statistic", "percent", "survey",
+                     "experiment", "trial", "sample", "measured", "published", "journal",
+                     "findings", "analysis", "meta-analysis", "dataset", "observed rate"];
+    expert_kw = ["expert", "professor", "dr.", "according to", "authority", "specialist",
+                  "scholar", "researcher", "nobel", "institute", "university"];
+    anecdotal_kw = ["personally", "i saw", "my experience", "i believe", "i think",
+                     "my friend", "someone told", "i heard", "story", "anecdote"];
+    analogy_kw = ["similar to", "like", "analogous", "compared to", "just as",
+                   "resembles", "parallel", "equivalent"];
+
+    # Low-quality indicators — opinions, questions, vague claims
+    opinion_kw = ["what if", "maybe", "probably", "i think", "i believe", "i feel",
+                   "could be", "might be", "seems like", "obviously", "everyone knows",
+                   "clearly", "just", "simply"];
+    question_markers = ["?", "what if", "how come", "why do", "isn't it"];
+
+    # Count matches
+    emp_count = 0;
+    for kw in empirical_kw {
+        if kw in lower { emp_count = emp_count + 1; }
+    }
+    exp_count = 0;
+    for kw in expert_kw {
+        if kw in lower { exp_count = exp_count + 1; }
+    }
+    anec_count = 0;
+    for kw in anecdotal_kw {
+        if kw in lower { anec_count = anec_count + 1; }
+    }
+    anal_count = 0;
+    for kw in analogy_kw {
+        if kw in lower { anal_count = anal_count + 1; }
+    }
+    opinion_count = 0;
+    for kw in opinion_kw {
+        if kw in lower { opinion_count = opinion_count + 1; }
+    }
+    is_question = False;
+    for qm in question_markers {
+        if qm in lower { is_question = True; break; }
+    }
+
+    # Pick the best match
+    category = "logical_reasoning";
+    confidence = 0.4;
+    if emp_count >= exp_count and emp_count >= anec_count and emp_count >= anal_count and emp_count > 0 {
+        category = "empirical_data";
+        confidence = 0.75;
+    } elif exp_count >= anec_count and exp_count >= anal_count and exp_count > 0 {
+        category = "expert_testimony";
+        confidence = 0.7;
+    } elif anec_count > 0 {
+        category = "anecdotal";
+        confidence = 0.2;
+    } elif anal_count > 0 {
+        category = "analogy";
+        confidence = 0.4;
+    }
+
+    # Apply quality penalties
+    assumptions: list = [];
+
+    # Penalty: questions are not evidence
+    if is_question {
+        confidence = confidence - 0.2;
+        assumptions.append("This is phrased as a question, not a verifiable claim");
+    }
+
+    # Penalty: opinion markers
+    if opinion_count > 0 {
+        confidence = confidence - opinion_count * 0.1;
+        assumptions.append("Contains opinion language — needs factual backing");
+    }
+
+    # Penalty: very short claims without specific data
+    if word_count < 8 and emp_count == 0 and exp_count == 0 {
+        confidence = confidence - 0.15;
+        assumptions.append("Brief claim without specific evidence or citation");
+    }
+
+    # Penalty: no verifiable content (no numbers, no names, no citations)
+    has_number = False;
+    for ch in text {
+        if ch.isdigit() { has_number = True; break; }
+    }
+    has_specific = emp_count > 0 or exp_count > 0 or has_number;
+    if not has_specific and category == "logical_reasoning" {
+        confidence = confidence - 0.1;
+        assumptions.append("No specific data, study, or expert cited");
+    }
+
+    # Floor confidence at 0.1
+    if confidence < 0.1 { confidence = 0.1; }
+    if confidence > 1.0 { confidence = 1.0; }
+
+    # Compute node score from category weights + confidence
+    cat_weights: dict[str, float] = {
+        "empirical_data": 0.9, "expert_testimony": 0.8,
+        "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
+    };
+    base_quality = cat_weights.get(category, 0.6);
+    # Factor in confidence — low confidence drags down the score
+    quality = base_quality * 0.5 + confidence * 0.5;
+    assumption_penalty = len(assumptions) * 0.1;
+    quality = quality - assumption_penalty;
+    if quality < 0.1 { quality = 0.1; }
+    node_score = int(quality * 100);
+
+    return {
+        "evidence_category": category,
+        "confidence": confidence,
+        "assumptions": assumptions,
+        "nodeScore": node_score
+    };
+}
 
 "Extract text content from an LLM response (handles ChatCompletion objects)."
 def:pub extract_llm_text(raw: object) -> str {
