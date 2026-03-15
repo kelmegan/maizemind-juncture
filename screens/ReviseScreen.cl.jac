@@ -1,6 +1,5 @@
 """Juncture - Revise Screen for editing and improving argument nodes."""
 
-sv import from ...main { AddEvidenceToNode, AddAssumptionToEvidence, UpdateNodeContent, DeleteNode, GetGraphWithScoring }
 import from "lucide-react" { Plus, Check, X, Info }
 
 import from ..components.Alert { Alert }

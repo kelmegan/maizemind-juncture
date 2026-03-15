@@ -1,6 +1,5 @@
 """Juncture - Generate Screen for creating argument maps from notes."""
 
-sv import from ...main { GetContext, GenerateArgumentGraph, UpdateContext }
 import from "lucide-react" { Upload, Sparkles, ArrowRight }
 import from "pdfjs-dist" { getDocument, GlobalWorkerOptions }
 import from "mammoth" { extractRawText }

@@ -12,7 +12,6 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
     onNodeClick = props.onNodeClick if props.onNodeClick else None;
     onGhostAccept = props.onGhostAccept if props.onGhostAccept else None;
     selectedNodeId = props.selectedNodeId if props.selectedNodeId else None;
-    isDark      = props.isDark if props.isDark else False;
     focusBranch = props.focusBranch if props.focusBranch else None;
 
     NODE_W   = 200;
@@ -489,8 +488,6 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             }
         }
 
-        label_bg = "#13131f" if isDark else "#fff";
-        label_border = "rgba(255,255,255,0.07)" if isDark else "rgba(0,0,0,0.08)";
         lbl_half_w = 20 if show_edge_label else 0;
 
         if show_edge_label {
@@ -500,7 +497,8 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                           strokeDasharray={dash} fill="none"
                           markerEnd={f"url(#{mkr_id})"} />
                     <rect x={str(mx - lbl_half_w)} y={str(mid_y - 10)} width={str(lbl_half_w * 2)} height="20" rx="10"
-                          fill={label_bg} stroke={label_border} strokeWidth="1" />
+                          style={{"fill": "var(--color-edge-label-bg)", "stroke": "var(--color-edge-label-border)"}}
+                          strokeWidth="1" />
                     <text x={str(mx)} y={str(mid_y + 4)} textAnchor="middle" fontSize="8.5"
                           fill={color} fontWeight="600" fontFamily="DM Sans, sans-serif">
                         {edge_label_text}
@@ -553,21 +551,12 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                     node={node_item}
                     isSelected={is_sel}
                     isDimmed={is_dim}
-                    isDark={isDark}
                     isGhost={is_ghost_node}
                 />
             </g>
         );
         ni = ni + 1;
     }
-
-    bg_color = "#0f0f17" if isDark else "#f4f1ee";
-    hint_bg = "rgba(255,255,255,0.04)" if isDark else "rgba(0,0,0,0.03)";
-    hint_border = "1px solid rgba(255,255,255,0.07)" if isDark else "1px solid rgba(0,0,0,0.08)";
-    hint_color = "#64748b" if isDark else "#94a3b8";
-    ctrl_bg = "rgba(255,255,255,0.06)" if isDark else "rgba(255,255,255,0.9)";
-    ctrl_border = "1px solid rgba(255,255,255,0.1)" if isDark else "1px solid rgba(0,0,0,0.08)";
-    ctrl_color = "#94a3b8" if isDark else "#64748b";
 
     return (
         <div
@@ -578,7 +567,6 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
             onWheel={handleWheel}
-            style={{"background": bg_color}}
         >
             <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -611,35 +599,28 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                 </g>
             </svg>
 
-            <div
-                className="graph-zoom-controls"
-                style={{"background": ctrl_bg, "border": ctrl_border}}
-            >
+            <div className="graph-zoom-controls">
                 <button
                     className="graph-zoom-btn"
                     onClick={zoomIn}
-                    style={{"color": ctrl_color}}
                     title="Zoom in"
                 >+</button>
                 <button
                     className="graph-zoom-btn"
                     onClick={zoomOut}
-                    style={{"color": ctrl_color}}
                     title="Zoom out"
                 >−</button>
                 <button
                     className="graph-zoom-btn graph-zoom-btn-sm"
                     onClick={resetView}
-                    style={{"color": ctrl_color}}
                     title="Reset view"
                 >⊙</button>
             </div>
 
             {(
-                <div
-                    className="graph-hint"
-                    style={{"background": hint_bg, "border": hint_border, "color": hint_color}}
-                >Click a node for details · Drag to rearrange · Scroll to zoom</div>
+                <div className="graph-hint">
+                    Click a node for details · Drag to rearrange · Scroll to zoom
+                </div>
             ) if not selectedNodeId else None}
         </div>
     );
