@@ -38,10 +38,10 @@ walker:pub GetContext {
 
 
 walker:pub UpdateContext {
-    has currentUser: dict = None,
-        currentGraph: dict = None,
-        currentSession: dict = None,
-        currentScreen: str = None;
+    has currentUser: dict = {},
+        currentGraph: dict = {},
+        currentSession: dict = {},
+        currentScreen: str = "";
 
     can run with Root entry {
         ctx = None;
@@ -55,10 +55,10 @@ walker:pub UpdateContext {
             ctx = (root ++> AppContext())[0];
         }
 
-        if self.currentUser is not None { ctx.currentUser = self.currentUser; }
-        if self.currentGraph is not None { ctx.currentGraph = self.currentGraph; }
-        if self.currentSession is not None { ctx.currentSession = self.currentSession; }
-        if self.currentScreen is not None { ctx.currentScreen = self.currentScreen; }
+        if self.currentUser { ctx.currentUser = self.currentUser; }
+        if self.currentGraph { ctx.currentGraph = self.currentGraph; }
+        if self.currentSession { ctx.currentSession = self.currentSession; }
+        if self.currentScreen { ctx.currentScreen = self.currentScreen; }
 
         report ctx;
     }
