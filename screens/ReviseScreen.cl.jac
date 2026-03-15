@@ -64,7 +64,7 @@ def:pub ReviseScreen(props: any) -> JsxElement {
                 evidenceContent=inputValue
             );
         } elif actionType == "assumption" {
-            await root spawn AddAssumptionToNode(
+            await root spawn AddAssumptionToEvidence(
                 graphId=graphId,
                 nodeId=nodeId,
                 assumptionText=inputValue

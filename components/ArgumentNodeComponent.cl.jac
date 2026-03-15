@@ -10,7 +10,6 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
         "THESIS":           {"fill": "#ede9fe", "stroke": "#7c3aed", "header": "#7c3aed", "text": "#5b21b6", "ht": "#fff", "label": "THESIS"},
         "CLAIM":            {"fill": "#e8e0fc", "stroke": "#9f7aea", "header": "#9f7aea", "text": "#6d28d9", "ht": "#fff", "label": "CLAIM"},
         "EVIDENCE":         {"fill": "#d1fae5", "stroke": "#10b981", "header": "#10b981", "text": "#065f46", "ht": "#fff", "label": "EVIDENCE"},
-        "ASSUMPTION":       {"fill": "#fef3c7", "stroke": "#f59e0b", "header": "#f59e0b", "text": "#92400e", "ht": "#fff", "label": "ASSUMPTION"},
         "COUNTERARGUMENT":  {"fill": "#fee2e2", "stroke": "#ef4444", "header": "#ef4444", "text": "#991b1b", "ht": "#fff", "label": "COUNTER"}
     };
 
