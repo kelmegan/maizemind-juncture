@@ -598,7 +598,7 @@ walker:pub GenerateArgumentGraph {
     }
 
     def capitalize_text(text: str) -> str {
-        """Sentence-case: capitalize first letter of each sentence."""
+        # Sentence-case the first letter of each sentence.
         result = text;
         if len(text) > 0 {
             sentences = text.split(". ");
@@ -619,6 +619,7 @@ walker:pub GenerateArgumentGraph {
             result = text;
         }
         return result;
+    }
 
     def build_fallback_response(graph_id: str, notes: str, error_message: str) -> dict {
         import time;
@@ -988,7 +989,7 @@ walker:pub GetGraphWithScoring {
     }
 
     def update_node_scores(nodes: list, edges: list) -> None {
-        """Re-compute nodeScore for all nodes based on current metadata."""
+        # Re-compute nodeScore for all nodes based on current metadata.
         category_weights: dict[str, float] = {
             "empirical_data": 0.9, "expert_testimony": 0.8,
             "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
