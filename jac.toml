@@ -4,14 +4,13 @@ version = "1.0.0"
 description = "Jac client application: maizemind-juncture"
 entry-point = "main.jac"
 
-[dependencies]
-
 [dependencies.npm]
 jac-client-node = "1.0.4"
 lucide-react = "^0.483.0"
 pdfjs-dist = "^4.0.0"
 mammoth = "^1.8.0"
 d3-force = "^3.0.0"
+jspdf = "latest"
 
 [dependencies.npm.dev]
 "@jac-client/dev-deps" = "1.0.0"
