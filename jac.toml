@@ -27,6 +27,7 @@ debug = true
 
 [plugins.byllm.model]
 default_model = "ollama/minimax-m2.5:cloud"
+base_url = "http://localhost:11434"
 verbose = true
 
 [plugins.byllm.call_params]

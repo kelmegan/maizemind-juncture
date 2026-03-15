@@ -1,0 +1,8 @@
+jaseci==2.3.4
+jaclang==0.12.0
+jac-client==0.3.4
+jac-scale==0.2.4
+jac-super==0.1.6
+jac-mcp==0.1.3
+byllm==0.5.4
+litellm==1.82.0

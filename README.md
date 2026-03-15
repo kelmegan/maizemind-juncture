@@ -18,7 +18,7 @@ source .venv/bin/activate
 ### 2. Install Jaseci
 
 ```bash
-pip install jaseci jaclang jac-cloud jac-splice
+pip install jaseci
 ```
 
 Verify with `jac --version`.
