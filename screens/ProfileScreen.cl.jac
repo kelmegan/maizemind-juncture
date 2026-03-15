@@ -1,6 +1,6 @@
 """Juncture - Profile Screen for user settings, history, and statistics."""
 
-import from "lucide-react" { User, History, Target, TrendingUp, Award, Settings }
+import from "lucide-react" { User, UserPlus, LogIn, History, Target, TrendingUp, Award, Settings }
 
 import from ..components.Badge { Badge }
 import from ..components.Button { Button }
@@ -13,6 +13,8 @@ def:pub ProfileScreen(props: any) -> JsxElement {
     navigate = props.navigate;
     screen_data = props.screenData if props.screenData else {};
     back_to = screen_data["from"] if "from" in screen_data else "generate";
+    toggleTheme = props.toggleTheme if props.toggleTheme else None;
+    isDark = props.isDark if props.isDark else False;
 
     has userId: str = "",
         isGuest: bool = False,
@@ -30,10 +32,14 @@ def:pub ProfileScreen(props: any) -> JsxElement {
         loading = True;
         try {
             ctx = await root spawn GetContext();
+            if ctx and ctx["reports"]{
+                ctx = ctx["reports"][0];
+            }
             if ctx and ctx["currentUser"] and "id" in ctx["currentUser"] {
                 userId = ctx["currentUser"]["id"];
                 isGuest = ctx["currentUser"]["isGuest"] if "isGuest" in ctx["currentUser"] else False;
                 name = ctx["currentUser"]["name"] if "name" in ctx["currentUser"] else "";
+                if userId == "guest_local" { isGuest = True; }
                 userType = ctx["currentUser"]["userType"] if "userType" in ctx["currentUser"] else "student";
                 goals = ctx["currentUser"]["goals"] if "goals" in ctx["currentUser"] else [];
                 theme = ctx["currentUser"]["theme"] if "theme" in ctx["currentUser"] else "system";
@@ -124,12 +130,12 @@ def:pub ProfileScreen(props: any) -> JsxElement {
         userType = e.target.value;
     }
 
-    def handleThemeChange(v: str) -> None {
-        theme = v;
-    }
-
     def handleAccessibilityChange(v: bool) -> None {
         accessibilityMode = v;
+    }
+
+    if loading {
+        return <div className="review-loading"><p>Loading profile...</p></div>;
     }
 
     if isGuest {
@@ -289,18 +295,15 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                                 <div className="profile-prefs-list">
                                     <div className="profile-pref-row">
                                         <div className="profile-pref-info">
-                                            <label className="profile-label">Theme</label>
-                                            <p className="profile-pref-description">Choose your preferred color scheme</p>
+                                            <label className="profile-label">Dark Mode</label>
+                                            <p className="profile-pref-description">Toggle color scheme</p>
                                         </div>
-                                        <select
-                                            className="profile-select-sm"
-                                            value={theme}
-                                            onChange={handleThemeChange}
-                                        >
-                                            <option value="light">Light</option>
-                                            <option value="dark">Dark</option>
-                                            <option value="system">System</option>
-                                        </select>
+                                        <Switch
+                                            checked={isDark}
+                                            onCheckedChange={lambda v: bool -> None {
+                                                if toggleTheme { toggleTheme(); }
+                                            }}
+                                        />
                                     </div>
 
                                     <div className="profile-pref-row">

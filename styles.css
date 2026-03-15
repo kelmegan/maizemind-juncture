@@ -162,152 +162,6 @@
     --alert-icon-col-width: 16px;
 }
 
-.app-root {
-    min-height: 100vh;
-}
-
-.dark {
-    --color-card: #13131f;
-    --color-card-foreground: #f1f5f9;
-    --color-muted-foreground: #94a3b8;
-    --color-border: rgba(255, 255, 255, 0.07);
-
-    --color-primary: #f1f5f9;
-    --color-primary-foreground: #0f172a;
-    --color-primary-hover: #e2e8f0;
-    --color-primary-subtle: rgba(241, 245, 249, 0.1);
-    --color-primary-focus-ring: rgba(241, 245, 249, 0.2);
-
-    --color-secondary: rgba(255, 255, 255, 0.06);
-    --color-secondary-foreground: #f1f5f9;
-    --color-secondary-hover: rgba(255, 255, 255, 0.1);
-
-    --color-destructive: #f87171;
-    --color-destructive-foreground: #0f172a;
-    --color-destructive-hover: #ef4444;
-
-    --color-surface: #0f0f17;
-    --color-canvas: #0f0f17;
-    --color-overlay-white: rgba(19, 19, 31, 0.92);
-    --color-overlay-dark: rgba(0, 0, 0, 0.5);
-
-    --color-foreground: #f1f5f9;
-    --color-muted: rgba(255, 255, 255, 0.06);
-    --color-switch-background: #334155;
-
-    --color-accent: #818cf8;
-    --color-accent-dark: #6366f1;
-    --color-accent-to: #a855f7;
-    --color-accent-subtle: rgba(129, 140, 248, 0.1);
-    --color-accent-border-subtle: rgba(129, 140, 248, 0.25);
-    --color-accent-focus-ring: rgba(129, 140, 248, 0.15);
-    --color-accent-glow: rgba(129, 140, 248, 0.3);
-
-    --color-error: #f87171;
-    --color-error-bg: rgba(248, 113, 113, 0.1);
-    --color-error-border: rgba(248, 113, 113, 0.2);
-
-    --color-text-dark: #f1f5f9;
-    --color-text-light: #94a3b8;
-    --color-input-bg: rgba(255, 255, 255, 0.04);
-    --color-input-border: rgba(255, 255, 255, 0.1);
-
-    --color-body-gradient-from: #0f0f17;
-    --color-body-gradient-to: #13131f;
-
-    --color-gray-light: rgba(255, 255, 255, 0.04);
-    --color-gray-medium: rgba(255, 255, 255, 0.08);
-    --color-gray-dark: #94a3b8;
-
-    --color-hint: #64748b;
-    --color-link: #60a5fa;
-    --color-surface-subtle: rgba(255, 255, 255, 0.04);
-    --color-graph-bg: #0f0f17;
-    --color-graph-ctrl-bg: rgba(255, 255, 255, 0.06);
-    --color-graph-ctrl-border: rgba(255, 255, 255, 0.1);
-    --color-edge-label-bg: #13131f;
-    --color-edge-label-border: rgba(255, 255, 255, 0.07);
-    --color-cyan: #22d3ee;
-
-    --color-score-good: #4ade80;
-    --color-score-warning: #fbbf24;
-
-    --color-tips-bg: rgba(254, 252, 232, 0.04);
-    --color-tips-border: rgba(253, 230, 138, 0.15);
-
-    --color-node-thesis: #a78bfa;
-    --color-node-thesis-dark: #7c3aed;
-    --color-node-claim: #818cf8;
-    --color-node-evidence: #34d399;
-    --color-node-assumption: #fbbf24;
-    --color-node-counter: #f87171;
-
-    --color-node-thesis-bg: #1e1636;
-    --color-node-thesis-border: #a78bfa;
-    --color-node-claim-bg: #1c1430;
-    --color-node-claim-border: #818cf8;
-    --color-node-evidence-bg: #0d2818;
-    --color-node-evidence-border: #34d399;
-    --color-node-assumption-bg: #1f1a05;
-    --color-node-assumption-border: #fbbf24;
-    --color-node-counterargument-bg: #2a1215;
-    --color-node-counterargument-border: #f87171;
-    --color-node-default-bg: #1e1e2e;
-    --color-node-default-border: #475569;
-
-    --color-node-label: #94a3b8;
-    --color-node-content: #e2e8f0;
-    --color-node-icon-error: #f87171;
-    --color-node-icon-success: #4ade80;
-    --color-node-issues-count: #f87171;
-    --color-node-issues-outline: #f87171;
-    --color-node-issues-pulse-faded: rgba(248, 113, 113, 0.1);
-
-    --color-success-bg: rgba(74, 222, 128, 0.08);
-    --color-success-border: rgba(74, 222, 128, 0.2);
-    --color-success-text: #86efac;
-    --color-success-icon: #4ade80;
-
-    --color-warning-bg: rgba(251, 191, 36, 0.08);
-    --color-warning-border: rgba(251, 191, 36, 0.2);
-    --color-warning-icon: #fbbf24;
-
-    --color-assumption-bg: rgba(251, 191, 36, 0.08);
-    --color-assumption-border: rgba(251, 191, 36, 0.18);
-    --color-edit-panel-bg: rgba(129, 140, 248, 0.08);
-    --color-edit-panel-border: rgba(129, 140, 248, 0.2);
-    --color-info-panel-bg: rgba(99, 102, 241, 0.08);
-    --color-info-panel-border: rgba(99, 102, 241, 0.2);
-    --color-cyan-bg: rgba(34, 211, 238, 0.08);
-    --color-cyan-border: rgba(34, 211, 238, 0.18);
-    --color-counter-card-bg: rgba(248, 113, 113, 0.06);
-    --color-counter-card-border: rgba(248, 113, 113, 0.15);
-    --color-counter-accept-border: rgba(248, 113, 113, 0.25);
-    --color-delete-panel-bg: rgba(248, 113, 113, 0.06);
-    --color-delete-panel-border: rgba(248, 113, 113, 0.18);
-    --color-success-dim-bg: rgba(74, 222, 128, 0.06);
-    --color-success-dim-border: rgba(74, 222, 128, 0.15);
-    --color-respond-bg: rgba(52, 211, 153, 0.08);
-    --color-respond-border: rgba(52, 211, 153, 0.2);
-    --color-expand-bg: rgba(34, 211, 238, 0.08);
-    --color-expand-border: rgba(34, 211, 238, 0.2);
-
-    --color-achievement-gold-from: rgba(254, 252, 232, 0.05);
-    --color-achievement-gold-to: rgba(254, 249, 195, 0.05);
-    --color-achievement-gold-border: rgba(253, 224, 71, 0.2);
-    --color-achievement-green-from: rgba(240, 253, 244, 0.04);
-    --color-achievement-green-to: rgba(220, 252, 231, 0.04);
-    --color-achievement-green-border: rgba(134, 239, 172, 0.2);
-    --color-achievement-green-bg: rgba(220, 252, 231, 0.08);
-    --color-achievement-green-text: #4ade80;
-    --color-achievement-blue-from: rgba(239, 246, 255, 0.04);
-    --color-achievement-blue-to: rgba(219, 234, 254, 0.04);
-    --color-achievement-blue-border: rgba(147, 197, 253, 0.2);
-    --color-achievement-purple-from: rgba(250, 245, 255, 0.04);
-    --color-achievement-purple-to: rgba(243, 232, 255, 0.04);
-    --color-achievement-purple-border: rgba(216, 180, 254, 0.2);
-}
-
 body {
     font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background: linear-gradient(135deg, var(--color-body-gradient-from) 0%, var(--color-body-gradient-to) 100%);
@@ -3703,4 +3557,111 @@ body {
     border: 1px solid var(--color-accent-border-subtle);
     border-radius: 6px;
     cursor: pointer;
+}
+
+.guest-wall-outer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 60px);
+    padding: 24px;
+    background-color: var(--color-surface);
+}
+
+.guest-wall-card {
+    background-color: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    padding: 48px 40px;
+    max-width: 480px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
+}
+
+.guest-wall-icon-ring {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: var(--color-accent-subtle);
+    border: 2px solid var(--color-accent-border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+}
+
+.guest-wall-icon {
+    width: 32px;
+    height: 32px;
+    color: var(--color-accent);
+}
+
+.guest-wall-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-text-dark);
+    margin: 0;
+    line-height: 1.2;
+}
+
+.guest-wall-body {
+    font-size: 14px;
+    color: var(--color-text-light);
+    line-height: 1.6;
+    margin: 0;
+    max-width: 360px;
+}
+
+.guest-wall-actions {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+    margin-top: 8px;
+}
+
+.guest-wall-signup-btn {
+    flex: 1;
+}
+
+.guest-wall-login-btn {
+    flex: 1;
+}
+
+.guest-wall-btn-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+}
+
+.guest-wall-perks {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    padding: 16px;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    margin-top: 8px;
+}
+
+.guest-wall-perk {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--color-text-dark);
+    text-align: left;
+}
+
+.guest-wall-perk-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+    width: 24px;
+    text-align: center;
 }

@@ -39,7 +39,7 @@ def:pub Header(props: any) -> JsxElement {
 
     show_back = backTo != None or onBack != None;
     show_profile = screen != "profile";
-    show_logout = screen == "profile" and isGuest != None;
+    show_logout = screen == "profile" and isGuest != True;
     show_export = screen == "review";
 
     return (

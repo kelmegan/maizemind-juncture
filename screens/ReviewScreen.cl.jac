@@ -2,6 +2,7 @@
 
 import from ..components.ArgumentGraphView { ArgumentGraphView }
 import from ..components.Button { Button }
+import from ..components.Header { Header }
 
 def:pub ReviewScreen(props: any) -> JsxElement {
     navigate = props.navigate;

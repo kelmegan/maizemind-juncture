@@ -10,6 +10,7 @@ import "../styles.css";
 def:pub AppRouter -> JsxElement {
     has currentScreen: str = "welcome",
         screenData: dict = {},
+        isDark: bool = False,
         cachedGraphData: any = None,
         cachedScoreData: any = None,
         cachedIssuesData: list = [],
@@ -69,18 +70,21 @@ def:pub AppRouter -> JsxElement {
         currentScreen = screen;
     }
 
-    if currentScreen == "welcome" {
-        return <WelcomeScreen navigate={navigate} />;
-    } elif currentScreen == "export" {
-        return <ExportScreen navigate={navigate} screenData={screenData} />;
-    } elif currentScreen == "generate" {
-        return <GenerateScreen navigate={navigate} />;
-    } elif currentScreen == "review" {
-        return <ReviewScreen navigate={navigate} screenData={screenData} />;
-    } elif currentScreen == "profile" {
-        return <ProfileScreen navigate={navigate} screenData={screenData}/>;
-    } elif currentScreen == "revise" {
-        return <ReviseScreen navigate={navigate} screenData={screenData} />;
+    def toggleTheme() -> None {
+        isDark = not isDark;
     }
-    return <WelcomeScreen navigate={navigate} />;
+
+    wrapper_class = "app-root dark" if isDark else "app-root";
+
+    return <div className={wrapper_class}> 
+        {
+            <WelcomeScreen navigate={navigate} /> if currentScreen == "welcome" else
+            <ExportScreen navigate={navigate} screenData={screenData} /> if currentScreen == "export" else
+            <GenerateScreen navigate={navigate} /> if currentScreen == "generate" else
+            <ReviewScreen navigate={navigate} screenData={screenData} /> if currentScreen == "review" else
+            <ProfileScreen navigate={navigate} screenData={screenData} toggleTheme={toggleTheme} isDark={isDark}/> if currentScreen == "profile" else
+            <ReviseScreen navigate={navigate} screenData={screenData} /> if currentScreen == "revise" else
+            <WelcomeScreen navigate={navigate} />
+        }
+    </div>;
 }

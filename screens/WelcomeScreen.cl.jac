@@ -123,37 +123,20 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
     async def handleContinueAsGuest() -> None {
         error = "";
         loading = True;
-        guest_email = "guest@juncture.local";
-        # Guest mode should not block on external auth service availability.
-        # We use local app context and navigate immediately.
-        navigate("generate");
+        guest_email = "__guest__";
+        guest_pass = "__no_password__";
 
-        # Build/use a guest profile in app context regardless of auth result,
-        # so the button always moves the user forward.
-        try {
-            walker_result = await root spawn GetUserByEmail(email=guest_email);
-            user_data = walker_result.reports[0] if walker_result.reports else None;
-
-            if not user_data {
-                created = await root spawn CreateUser(
-                    name="Guest",
-                    email=guest_email,
-                    isGuest=True
-                );
-                user_data = created.reports[0] if created.reports else {};
+        success = await jacLogin(guest_email, guest_pass);
+        if not success {
+            try {
+                await jacSignup(guest_email, guest_pass);
+            } except Exception {
+                # ignore
             }
+            success = await jacLogin(guest_email, guest_pass);
+        }
 
-            await root spawn UpdateContext(
-                currentUser={
-                    "id": user_data["id"] if user_data and "id" in user_data else "guest_local",
-                    "name": user_data["name"] if user_data and "name" in user_data else "Guest",
-                    "email": guest_email,
-                    "userType": "student",
-                    "isGuest": True
-                },
-                currentScreen="generate"
-            );
-        } except Exception {
+        if success {
             try {
                 await root spawn UpdateContext(
                     currentUser={
@@ -162,15 +145,15 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
                         "email": guest_email,
                         "userType": "student",
                         "isGuest": True
-                    },
-                    currentScreen="generate"
+                    }
                 );
             } except Exception {
-                    # Context update failed, still navigate
+                # Context update failed, navigate anyway
             }
         }
 
         loading = False;
+        navigate("generate");
     }
 
     def handleTabChange(v: str) -> None {
