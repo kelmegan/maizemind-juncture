@@ -2,6 +2,7 @@
 
 sv import from ...main { GetContext, CreateSession }
 import from "lucide-react" { Download, FileText, AlertTriangle, CheckCircle2, Copy }
+import from "jspdf" { jsPDF }
 
 import from ..components.Alert { Alert }
 import from ..components.Badge { Badge }
@@ -17,6 +18,8 @@ def:pub ExportScreen(props: any) -> JsxElement {
         currentScore: dict = None,
         currentIssues: list = [],
         userId: str = "",
+        exportFormat: str = "text",
+        copyStatus: str = "", # "" | "success" | "failure" | "pdf-success" | "pdf-failure"
         saved: bool = False;
 
     async def loadContext() -> None {
@@ -44,71 +47,112 @@ def:pub ExportScreen(props: any) -> JsxElement {
         }
         nodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
         edges = currentGraph["edges"] if "edges" in currentGraph else [];
-        thesis = None;
-        claims = [];
-        evidence = [];
+
+        NL = chr(10);
+
+        thesis_node = None;
+        claim_nodes = [];
+        evidence_nodes = {};
 
         for node in nodes {
-            if node["type"] == "THESIS" {
-                thesis = node;
-            } elif node["type"] == "CLAIM" {
-                claims.append(node);
-            } elif node["type"] == "EVIDENCE" {
-                evidence.append(node);
-            }
+            if n["type"] == "THESIS" { thesis_node = n; }
+            elif n["type"] == "CLAIM" { claim_nodes.append(n); }
+            elif n["type"] == "EVIDENCE" { evidence_nodes[n["id"]] = n; }
         }
 
-        outline = "ARGUMENT OUTLINE\n";
-        outline += "==================================================\n\n";
-        if thesis {
-            outline += "THESIS:\n";
-            outline += thesis["content"] + "\n\n";
+        outline = "ARGUMENT OUTLINE" + NL;
+        outline += "==================================================" + NL + NL;
+
+        if thesis_node {
+            outline += "THESIS:" + NL;
+            outline += thesis_node["content"] + NL + NL;
         }
-        outline += "MAIN CLAIMS:\n";
 
-        i = 0;
-        for claim in claims {
-            claim_evidence = [];
+        if len(claim_nodes) > 0 {
+            outline += "MAIN CLAIMS:" + NL;
+            i = 1;
+            for claim in claim_nodes {
+                outline += str(i) + ". " + claim["content"] + NL;
 
-            for edge in edges {
-                if edge["target"] == claim["id"] and edge["type"] == "SUPPORTS" {
-                    for ev in evidence {
-                        if ev["id"] == edge["source"] {
-                            claim_evidence.append(ev);
-                            break;
+                supporting = [];
+                for edge in edges {
+                    if edge["target"] == claim["id"] and edge["type"] == "SUPPORTS" {
+                        if edge["source"] in evidence_nodes {
+                            supporting.append(evidence_nodes[edge["source"]]);
                         }
                     }
                 }
-            }
 
-            outline += f"\n{i + 1}. {claim['content']}\n";
-
-            if len(claim_evidence) > 0 {
-                outline += "   Supporting Evidence:\n";
-                for ev in claim_evidence {
-                    outline += f"   • {ev['content']}\n";
+                if len(supporting) > 0 {
+                    outline += "   Supporting Evidence:" + NL;
+                    for ev in supporting {
+                        outline += "   - " + ev["content"] + NL;
+                    }
                 }
+
+                outline += NL;
+                i += 1;
             }
-            i += 1;
         }
 
-        outline += "\n==================================================\n";
-        outline += f"Reasoning Score: {currentScore['overall']}/100\n";
+        outline += "==================================================" + NL;
+        outline += "Reasoning Score: " + str(currentScore["overall"]) + "/100" + NL;
 
         return outline;
     }
 
     def handleExportText() -> None {
         show_flags = currentScore["overall"] < 75;
-        outline = generateOutlineText(show_flags);
-        navigator.clipboard.writeText(outline);
+        outline_text = generateOutlineText(show_flags);
+
+        navigator.clipboard.writeText(outline_text)
+            .then(lambda _: any -> None {
+                copyStatus = "success";
+                setTimeout(lambda -> None { copyStatus = ""; }, 3000);
+            })
+            .catch(lambda _: any -> None {
+                copyStatus = "failure";
+                setTimeout(lambda -> None { copyStatus = ""; }, 3000);
+            });
     }
 
     def handleExportPDF() -> None {
         show_flags = currentScore["overall"] < 75;
         outline = generateOutlineText(show_flags);
-        print("Export PDF:");
-        print(outline);
+
+        # Reflect.construct is required because JAC bans the `new` keyword.
+        # jsPDF() with no args defaults to portrait, mm units, A4 page size.
+        doc = Reflect.construct(jsPDF, []);
+
+        # jsPDF.splitTextToSize wraps long lines to fit within the page width.
+        # A4 usable width is ~190mm (210mm - 10mm margin each side).
+        margin = 10;
+        page_width = doc.internal.pageSize.getWidth();
+        usable_width = page_width - (margin * 2);
+
+        doc.setFont("courier", "normal");
+        doc.setFontSize(10);
+
+        y = margin;
+        line_height = 5;
+
+        for raw_line in outline.split(chr(10)) {
+            # Wrap the line if it's too wide, then write each wrapped segment.
+            wrapped = doc.splitTextToSize(raw_line, usable_width);
+            for segment in wrapped {
+                # Add a new page if we've run out of vertical space.
+                if y + line_height > doc.internal.pageSize.getHeight() - margin {
+                    doc.addPage();
+                    y = margin;
+                }
+                doc.text(segment, margin, y);
+                y += line_height;
+            }
+        }
+
+        doc.save("argument-outline.pdf");
+        copyStatus = "pdf-success";
+        setTimeout(lambda -> None { copyStatus = ""; }, 3000);
     }
 
     async def handleSaveSession() -> None {
@@ -131,8 +175,38 @@ def:pub ExportScreen(props: any) -> JsxElement {
 
     show_warning = currentScore["overall"] < 75;
 
+    outline_lines = [];
+    i = 0;
+    for line in generateOutlineText(show_warning).split(chr(10)) {
+        outline_lines.append(<div key={str(i)}>{line}</div>);
+        i += 1;
+    }
+
     return (
         <div className="export-page">
+            <Header navigate={navigate} screen="export" title="Export Outline" backTo="review" />
+
+            {(
+                <Alert className="export-alert-success">
+                    <CheckCircle2 className="export-alert-success-icon" />
+                    <p className="export-alert-success-text">Outline copied to clipboard successfully!</p>
+                </Alert>
+            ) if copyStatus == "success" else (
+                <Alert className="export-alert-warning">
+                    <AlertTriangle className="export-alert-warning-icon" />
+                    <p>Copy to clipboard failed. Please try again.</p>
+                </Alert>
+            ) if copyStatus == "failure" else (
+                <Alert className="export-alert-success">
+                    <CheckCircle2 className="export-alert-success-icon" />
+                    <p className="export-alert-success-text">Outline downloaded successfully!</p>
+                </Alert>
+            ) if copyStatus == "pdf-success" else (
+                <Alert className="export-alert-warning">
+                    <AlertTriangle className="export-alert-warning-icon" />
+                    <p>Download failed. Please try again.</p>
+                </Alert>
+            ) if copyStatus == "pdf-failure" else None}
             <Header navigate={navigate} screen="export" title="Export Outline" backTo="review" />
 
             <div className="export-content">
@@ -167,14 +241,14 @@ def:pub ExportScreen(props: any) -> JsxElement {
 
                 <Card title="Outline Preview">
                     <div className="export-preview">
-                        {generateOutlineText(show_warning)}
+                        {outline_lines}
                     </div>
                 </Card>
 
                 <Card title="Export Options">
                     <div className="export-options-body">
                         <div className="export-options-grid">
-                            <Button label={(<><Copy className="export-btn-icon" />Copy Outline</>)} variant="outline" onClick={handleExportText} />
+                            <Button label={(<><Copy className="export-btn-icon" />Copy Outline</>)} variant="outline" onClick={handleCopyOutline} />
                             <Button label={(<><Download className="export-btn-icon" />Download PDF</>)} variant="outline" onClick={handleExportPDF} />
                         </div>
                         <Button

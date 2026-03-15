@@ -583,13 +583,11 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             <svg
                 xmlns="http://www.w3.org/2000/svg"
                 style={{
-                    "transform":       f"translate({viewX}px, {viewY}px) scale({scale})",
-                    "transformOrigin": "0 0",
                     "position":        "absolute",
                     "top":             "0",
                     "left":            "0",
-                    "width":           "4000px",
-                    "height":          "4000px",
+                    "width":           "100%",
+                    "height":          "100%",
                     "overflow":        "visible"
                 }}
             >
@@ -614,8 +612,10 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                         </feMerge>
                     </filter>
                 </defs>
-                {edge_elements}
-                {node_elements}
+                <g transform={f"translate({viewX}, {viewY}) scale({scale})"}>
+                    {edge_elements}
+                    {node_elements}
+                </g>
             </svg>
 
             <div style={{
