@@ -66,10 +66,19 @@ obj GraphSummary {
 # Optimized: 2 lean LLM calls with minimal output
 # ============================================================
 
-"""Extract an argument graph from notes. Return JSON:
-{"nodes":[{"id":"n1","kind":"thesis|claim|evidence|counterarg","text":"...","evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["implicit assumption 1"]},...],
+"""You MUST extract a complete argument graph from the user's notes. Return ONLY valid JSON, no explanation.
+Format: {"nodes":[{"id":"n1","kind":"thesis|claim|evidence|counterarg","text":"...","evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["Does X hold in this context?"]},...],
 "edges":[{"from_id":"n2","to_id":"n1","kind":"supports|contradicts|addresses","reasoning_type":"deductive|inductive|causal|correlational|analogical","weight":0.8},...]}
-Rules: exactly 1 thesis. Max 8 nodes. Discard meta-commentary or off-topic input (e.g. 'I won't change my mind') — only create nodes for actual claims/evidence. For evidence nodes, set evidence_category and list assumptions as questions (e.g. 'Does X hold in this context?'). Edge weight 0.0-1.0. empirical_data=published studies ONLY. Personal observations/religious texts=anecdotal."""
+STRICT RULES:
+1. EXACTLY 1 thesis node. Identify the user's main argument.
+2. Extract ALL claims and evidence from the notes — do NOT skip or summarize. Create a node for every distinct point.
+3. Max 8 nodes. If more than 8 points exist, keep the strongest.
+4. Every claim MUST connect to the thesis or another claim via edges. Every evidence MUST connect to what it supports.
+5. Discard meta-commentary ('I won't change my mind', 'this is my essay') — only real claims/evidence become nodes.
+6. evidence_category is REQUIRED for evidence nodes. empirical_data=published studies ONLY. Personal observations=anecdotal.
+7. assumptions: list as questions (e.g. 'Does this sample size generalize?').
+8. Edge weight 0.0-1.0 based on how strongly the source supports/contradicts the target.
+You MUST return valid JSON. Do NOT wrap in markdown fences."""
 def parse_notes_and_edges(
     notes: str,
     documents: list[Document]
@@ -125,9 +134,21 @@ by llm(temperature=0.2);
 # 3. JSON PARSING HELPERS
 # ============================================================
 
+"Extract text content from an LLM response (handles ChatCompletion objects)."
+def:pub extract_llm_text(raw: object) -> str {
+    if isinstance(raw, str) {
+        return raw;
+    }
+    # Handle ChatCompletion object from OpenAI-compatible APIs
+    if hasattr(raw, 'choices') {
+        return str(raw.choices[0].message.content);
+    }
+    return str(raw);
+}
+
 "Parse JSON string from LLM, handling markdown fences."
-def safe_parse_json(raw: str) -> list {
-    cleaned = raw.strip();
+def safe_parse_json(raw: object) -> list {
+    cleaned = extract_llm_text(raw).strip();
     if cleaned.startswith("```") {
         lines = cleaned.split("\n");
         if lines[0].startswith("```") {

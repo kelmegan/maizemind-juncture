@@ -1,7 +1,8 @@
 """Walkers for revising argument graph nodes."""
 
 import from graph.argument_graph_nodes { ArgumentGraph }
-import from src.graph_generator { evaluate_single_evidence, generate_counterargument, clarify_node_content }
+import from src.graph_generator { evaluate_single_evidence, generate_counterargument, clarify_node_content, extract_llm_text }
+import from walkers.graph_generate_walkers { GetGraphWithScoring }
 import time;
 import json;
 
@@ -55,7 +56,7 @@ walker:pub AddEvidenceToNode {
                 thesis_text=thesis_text,
                 context_description=f"This evidence is used to support the thesis: '{thesis_text}'"
             );
-            raw_str = str(raw_result).strip();
+            raw_str = extract_llm_text(raw_result).strip();
             if raw_str.startswith("```") {
                 fence_lines = raw_str.split("\n");
                 fence_lines = fence_lines[1:];
@@ -142,15 +143,14 @@ walker:pub AddEvidenceToNode {
         graph_node.edges.append(new_edge);
         graph_node.updatedAt = str(int(time.time()));
 
+        # Return full scored result so client needs only 1 await
+        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scored.reports[0] if scored.reports else {};
         report {
             "success": True,
-            "graph": {
-                "id": graph_node.id,
-                "nodes": graph_node.nodes,
-                "edges": graph_node.edges,
-                "createdAt": graph_node.createdAt,
-                "updatedAt": graph_node.updatedAt
-            }
+            "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
+            "score": scored_data.get("score", {}),
+            "issues": scored_data.get("issues", [])
         };
         } except Exception as e {
             print(f"AddEvidenceToNode ERROR: {e}");
@@ -203,15 +203,14 @@ walker:pub AddAssumptionToEvidence {
 
         graph_node.updatedAt = str(int(time.time()));
 
+        # Return full scored result so client needs only 1 await
+        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scored.reports[0] if scored.reports else {};
         report {
             "success": True,
-            "graph": {
-                "id": graph_node.id,
-                "nodes": graph_node.nodes,
-                "edges": graph_node.edges,
-                "createdAt": graph_node.createdAt,
-                "updatedAt": graph_node.updatedAt
-            }
+            "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
+            "score": scored_data.get("score", {}),
+            "issues": scored_data.get("issues", [])
         };
         } except Exception as e {
             print(f"AddAssumptionToEvidence ERROR: {e}");
@@ -272,15 +271,14 @@ walker:pub UpdateNodeContent {
 
         graph_node.updatedAt = str(int(time.time()));
 
+        # Return full scored result so client needs only 1 await
+        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scored.reports[0] if scored.reports else {};
         report {
             "success": True,
-            "graph": {
-                "id": graph_node.id,
-                "nodes": graph_node.nodes,
-                "edges": graph_node.edges,
-                "createdAt": graph_node.createdAt,
-                "updatedAt": graph_node.updatedAt
-            }
+            "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
+            "score": scored_data.get("score", {}),
+            "issues": scored_data.get("issues", [])
         };
         } except Exception as e {
             print(f"UpdateNodeContent ERROR: {e}");
@@ -316,15 +314,14 @@ walker:pub DeleteNode {
         ];
         graph_node.updatedAt = str(int(time.time()));
 
+        # Return full scored result so client needs only 1 await
+        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scored.reports[0] if scored.reports else {};
         report {
             "success": True,
-            "graph": {
-                "id": graph_node.id,
-                "nodes": graph_node.nodes,
-                "edges": graph_node.edges,
-                "createdAt": graph_node.createdAt,
-                "updatedAt": graph_node.updatedAt
-            }
+            "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
+            "score": scored_data.get("score", {}),
+            "issues": scored_data.get("issues", [])
         };
         } except Exception as e {
             print(f"DeleteNode ERROR: {e}");
@@ -409,15 +406,14 @@ walker:pub AddCounterargumentNode {
         graph_node.edges.append(new_edge);
         graph_node.updatedAt = str(int(time.time()));
 
+        # Return full scored result so client needs only 1 await
+        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scored.reports[0] if scored.reports else {};
         report {
             "success": True,
-            "graph": {
-                "id": graph_node.id,
-                "nodes": graph_node.nodes,
-                "edges": graph_node.edges,
-                "createdAt": graph_node.createdAt,
-                "updatedAt": graph_node.updatedAt
-            }
+            "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
+            "score": scored_data.get("score", {}),
+            "issues": scored_data.get("issues", [])
         };
         } except Exception as e {
             print(f"AddCounterargumentNode ERROR: {e}");
@@ -503,15 +499,14 @@ walker:pub AddAddressEdge {
         graph_node.edges.append(address_edge);
         graph_node.updatedAt = str(int(time.time()));
 
+        # Return full scored result so client needs only 1 await
+        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scored.reports[0] if scored.reports else {};
         report {
             "success": True,
-            "graph": {
-                "id": graph_node.id,
-                "nodes": graph_node.nodes,
-                "edges": graph_node.edges,
-                "createdAt": graph_node.createdAt,
-                "updatedAt": graph_node.updatedAt
-            }
+            "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
+            "score": scored_data.get("score", {}),
+            "issues": scored_data.get("issues", [])
         };
         } except Exception as e {
             print(f"AddAddressEdge ERROR: {e}");
@@ -576,7 +571,7 @@ walker:pub EvaluateNewNode {
             # Parse LLM response
             parsed = {};
             try {
-                raw_str = str(raw_result).strip();
+                raw_str = extract_llm_text(raw_result).strip();
                 # Handle markdown fences
                 if raw_str.startswith("```") {
                     fence_lines = raw_str.split("\n");
@@ -720,7 +715,7 @@ walker:pub GenerateCounter {
             claim_text=target_content,
             thesis_text=thesis_text
         );
-        raw_str = str(raw_result).strip();
+        raw_str = extract_llm_text(raw_result).strip();
         if raw_str.startswith("```") {
             fence_lines = raw_str.split("\n");
             fence_lines = fence_lines[1:];
@@ -787,16 +782,15 @@ walker:pub GenerateCounter {
         });
         graph_node.updatedAt = str(int(time.time()));
 
+        # Return full scored result so client needs only 1 await
+        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scored.reports[0] if scored.reports else {};
         report {
             "success": True,
             "generatedText": ca_text,
-            "graph": {
-                "id": graph_node.id,
-                "nodes": graph_node.nodes,
-                "edges": graph_node.edges,
-                "createdAt": graph_node.createdAt,
-                "updatedAt": graph_node.updatedAt
-            }
+            "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
+            "score": scored_data.get("score", {}),
+            "issues": scored_data.get("issues", [])
         };
         } except Exception as e {
             print(f"GenerateCounter ERROR: {e}");
@@ -851,7 +845,7 @@ walker:pub ClarifyNode {
             node_type=node_type,
             thesis_text=thesis_text
         );
-        raw_str = str(raw_result).strip();
+        raw_str = extract_llm_text(raw_result).strip();
         if raw_str.startswith("```") {
             fence_lines = raw_str.split("\n");
             fence_lines = fence_lines[1:];
@@ -901,16 +895,15 @@ walker:pub ClarifyNode {
         graph_node.nodes = new_nodes;
         graph_node.updatedAt = str(int(time.time()));
 
+        # Return full scored result so client needs only 1 await
+        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scored.reports[0] if scored.reports else {};
         report {
             "success": True,
             "moreInfo": more_info,
-            "graph": {
-                "id": graph_node.id,
-                "nodes": graph_node.nodes,
-                "edges": graph_node.edges,
-                "createdAt": graph_node.createdAt,
-                "updatedAt": graph_node.updatedAt
-            }
+            "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
+            "score": scored_data.get("score", {}),
+            "issues": scored_data.get("issues", [])
         };
         } except Exception as e {
             print(f"ClarifyNode ERROR: {e}");

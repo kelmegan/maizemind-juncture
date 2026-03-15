@@ -64,6 +64,28 @@ export OPENAI_API_KEY="sk-..."
 export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
+**Using a custom OpenAI-compatible endpoint (e.g. self-hosted, reasoning models):**
+
+If you're running a model through an OpenAI-compatible server, add `base_url`, `proxy`, and `api_key` to your `jac.toml`:
+
+```toml
+[plugins.byllm.model]
+default_model = "openai/your-model-name"
+base_url = "http://your-server:port/v1"
+proxy = true
+api_key = "your-key"
+verbose = true
+
+[plugins.byllm.call_params]
+temperature = 0.3
+max_tokens = 16384
+```
+
+Notes:
+- Reasoning models that use tokens for internal thinking (e.g. o1, QwQ) need a higher `max_tokens` (16384+). The default 1500 will cause truncated responses.
+- `proxy = true` is required when using `base_url` — without it, the base URL is ignored.
+- The `extract_llm_text()` helper in `graph_generator.jac` handles both string and ChatCompletion response formats, so any OpenAI-compatible API should work.
+
 ### 4. Run
 
 ```bash

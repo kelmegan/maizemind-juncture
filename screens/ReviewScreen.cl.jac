@@ -142,36 +142,22 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     async def handleGenerateCounter() -> None {
         if not selectedNode or not currentGraph { return; }
         isSaving = True;
-        _gcPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         _gcGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _gcNodeId = selectedNode["id"];
-
         try {
-            await root spawn GenerateCounter(graphId=_gcGraphId, targetNodeId=_gcNodeId);
-        } except Exception {
-            isSaving = False;
-            return;
-        }
-
-        try {
-            result = await root spawn GetGraphWithScoring(graphId=_gcGraphId);
-            data = result.reports[0] if result.reports else {};
-            if "error" not in data {
-                currentGraph = data["graph"] if "graph" in data else currentGraph;
-                currentScore = data["score"] if "score" in data else currentScore;
-                currentIssues = data["issues"] if "issues" in data else currentIssues;
-                newOverall = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
-                scoreDelta = newOverall - _gcPrevScore;
-                showScoreDelta = True;
-                updatedNodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
-                foundNode = None;
-                _gci = 0;
-                while _gci < len(updatedNodes) {
-                    if updatedNodes[_gci]["id"] == _gcNodeId { foundNode = updatedNodes[_gci]; break; }
-                    _gci = _gci + 1;
-                }
-                selectedNode = foundNode;
+            mutResult = await root spawn GenerateCounter(graphId=_gcGraphId, targetNodeId=_gcNodeId);
+            mutData = mutResult.reports[0] if mutResult.reports else {};
+            if "graph" in mutData { currentGraph = mutData["graph"]; }
+            if "score" in mutData { currentScore = mutData["score"]; }
+            if "issues" in mutData { currentIssues = mutData["issues"]; }
+            _gcNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
+            _gcFound = None;
+            _gci = 0;
+            while _gci < len(_gcNodes) {
+                if _gcNodes[_gci]["id"] == _gcNodeId { _gcFound = _gcNodes[_gci]; break; }
+                _gci = _gci + 1;
             }
+            selectedNode = _gcFound;
         } except Exception { }
         isSaving = False;
     }
@@ -179,36 +165,22 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     async def handleClarifyNode() -> None {
         if not selectedNode or not currentGraph { return; }
         isSaving = True;
-        _clPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         _clGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _clNodeId = selectedNode["id"];
-
         try {
-            await root spawn ClarifyNode(graphId=_clGraphId, nodeId=_clNodeId);
-        } except Exception {
-            isSaving = False;
-            return;
-        }
-
-        try {
-            result = await root spawn GetGraphWithScoring(graphId=_clGraphId);
-            data = result.reports[0] if result.reports else {};
-            if "error" not in data {
-                currentGraph = data["graph"] if "graph" in data else currentGraph;
-                currentScore = data["score"] if "score" in data else currentScore;
-                currentIssues = data["issues"] if "issues" in data else currentIssues;
-                newOverall = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
-                scoreDelta = newOverall - _clPrevScore;
-                showScoreDelta = True;
-                updatedNodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
-                foundNode = None;
-                _cli = 0;
-                while _cli < len(updatedNodes) {
-                    if updatedNodes[_cli]["id"] == _clNodeId { foundNode = updatedNodes[_cli]; break; }
-                    _cli = _cli + 1;
-                }
-                selectedNode = foundNode;
+            mutResult = await root spawn ClarifyNode(graphId=_clGraphId, nodeId=_clNodeId);
+            mutData = mutResult.reports[0] if mutResult.reports else {};
+            if "graph" in mutData { currentGraph = mutData["graph"]; }
+            if "score" in mutData { currentScore = mutData["score"]; }
+            if "issues" in mutData { currentIssues = mutData["issues"]; }
+            _clNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
+            _clFound = None;
+            _cli = 0;
+            while _cli < len(_clNodes) {
+                if _clNodes[_cli]["id"] == _clNodeId { _clFound = _clNodes[_cli]; break; }
+                _cli = _cli + 1;
             }
+            selectedNode = _clFound;
         } except Exception { }
         isSaving = False;
     }
@@ -226,79 +198,64 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     async def saveEdit() -> None {
         if not editInputValue.strip() or not selectedNode or not currentGraph { return; }
         isSaving = True;
-        prevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
-        graphId = currentGraph["id"] if "id" in currentGraph else "";
-        nodeId = selectedNode["id"];
-        saveSuccess = False;
+        _seGraphId = currentGraph["id"] if "id" in currentGraph else "";
+        _seNodeId = selectedNode["id"];
+        _seMode = editMode;
+        _seContent = editInputValue.strip();
+        _sePrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
 
+        # Pre-compute defendNodeId for address mode
+        _seDefendId = "";
+        if _seMode == "address" {
+            _seEdges = currentGraph["edges"] if "edges" in currentGraph else [];
+            _sei = 0;
+            while _sei < len(_seEdges) {
+                _see = _seEdges[_sei];
+                _seSrc = _see["source"] if "source" in _see else "";
+                _seTyp = _see["type"] if "type" in _see else "";
+                if _seSrc == _seNodeId and _seTyp == "CONTRADICTS" {
+                    _seDefendId = _see["target"] if "target" in _see else "";
+                    break;
+                }
+                _sei = _sei + 1;
+            }
+            if not _seDefendId { _seDefendId = _seNodeId; }
+        }
+
+        # Single await — walker now returns graph + score + issues
         try {
-            if editMode == "evidence" {
-                await root spawn AddEvidenceToNode(
-                    graphId=graphId, nodeId=nodeId, evidenceContent=editInputValue.strip()
+            mutResult = None;
+            if _seMode == "evidence" {
+                mutResult = await root spawn AddEvidenceToNode(
+                    graphId=_seGraphId, nodeId=_seNodeId, evidenceContent=_seContent
                 );
-                saveSuccess = True;
-            } elif editMode == "assumption" {
-                await root spawn AddAssumptionToEvidence(
-                    graphId=graphId, nodeId=nodeId, assumptionText=editInputValue.strip()
+            } elif _seMode == "assumption" {
+                mutResult = await root spawn AddAssumptionToEvidence(
+                    graphId=_seGraphId, nodeId=_seNodeId, assumptionText=_seContent
                 );
-                saveSuccess = True;
-            } elif editMode == "address" {
-                # Find the claim this counterarg targets via CONTRADICTS edge
-                defendNodeId = "";
-                addr_edges = currentGraph["edges"] if "edges" in currentGraph else [];
-                _aei = 0;
-                while _aei < len(addr_edges) {
-                    _ae = addr_edges[_aei];
-                    _ae_source = _ae["source"] if "source" in _ae else "";
-                    _ae_type = _ae["type"] if "type" in _ae else "";
-                    if _ae_source == nodeId and _ae_type == "CONTRADICTS" {
-                        defendNodeId = _ae["target"] if "target" in _ae else "";
-                        break;
-                    }
-                    _aei = _aei + 1;
-                }
-                if not defendNodeId { defendNodeId = nodeId; }
-                await root spawn AddAddressEdge(
-                    graphId=graphId,
-                    defendNodeId=defendNodeId,
-                    counterargNodeId=nodeId,
-                    addressContent=editInputValue.strip()
+            } elif _seMode == "address" {
+                mutResult = await root spawn AddAddressEdge(
+                    graphId=_seGraphId,
+                    defendNodeId=_seDefendId,
+                    counterargNodeId=_seNodeId,
+                    addressContent=_seContent
                 );
-                saveSuccess = True;
             }
-        } except Exception {
-            saveSuccess = False;
-        }
-
-        if saveSuccess {
-            try {
-                # Refresh graph data with updated scores
-                result = await root spawn GetGraphWithScoring(graphId=graphId);
-                data = result.reports[0] if result.reports else {};
-                if "error" not in data {
-                    currentGraph = data["graph"] if "graph" in data else currentGraph;
-                    currentScore = data["score"] if "score" in data else currentScore;
-                    currentIssues = data["issues"] if "issues" in data else currentIssues;
-
-                    newOverall = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
-                    scoreDelta = newOverall - prevScore;
-                    showScoreDelta = True;
-
-                    # Re-select same node from updated graph
-                    updatedNodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
-                    foundNode = None;
-                    for n in updatedNodes {
-                        if n["id"] == nodeId {
-                            foundNode = n;
-                            break;
-                        }
-                    }
-                    selectedNode = foundNode;
+            if mutResult {
+                mutData = mutResult.reports[0] if mutResult.reports else {};
+                if "graph" in mutData { currentGraph = mutData["graph"]; }
+                if "score" in mutData { currentScore = mutData["score"]; }
+                if "issues" in mutData { currentIssues = mutData["issues"]; }
+                _seNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
+                _seFound = None;
+                _sefi = 0;
+                while _sefi < len(_seNodes) {
+                    if _seNodes[_sefi]["id"] == _seNodeId { _seFound = _seNodes[_sefi]; break; }
+                    _sefi = _sefi + 1;
                 }
-            } except Exception {
-                # refresh failed
+                selectedNode = _seFound;
             }
-        }
+        } except Exception { }
 
         editMode = "";
         editInputValue = "";
@@ -307,38 +264,20 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
     async def handleDelete() -> None {
         if not currentGraph { return; }
-        # Capture nodeId before clearing selection
-        nodeId = selectedNode["id"] if selectedNode and "id" in selectedNode else "";
-        if not nodeId { return; }
+        _delNodeId = selectedNode["id"] if selectedNode and "id" in selectedNode else "";
+        if not _delNodeId { return; }
         isSaving = True;
-        prevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
-        graphId = currentGraph["id"] if "id" in currentGraph else "";
+        _delPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+        _delGraphId = currentGraph["id"] if "id" in currentGraph else "";
 
-        deleteSuccess = False;
+        # Single await — walker returns graph + score + issues
         try {
-            await root spawn DeleteNode(graphId=graphId, nodeId=nodeId);
-            deleteSuccess = True;
-        } except Exception {
-            deleteSuccess = False;
-        }
-
-        if deleteSuccess {
-            try {
-                result = await root spawn GetGraphWithScoring(graphId=graphId);
-                data = result.reports[0] if result.reports else {};
-                if "error" not in data {
-                    currentGraph = data["graph"] if "graph" in data else currentGraph;
-                    currentScore = data["score"] if "score" in data else currentScore;
-                    currentIssues = data["issues"] if "issues" in data else currentIssues;
-
-                    newOverall = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
-                    scoreDelta = newOverall - prevScore;
-                    showScoreDelta = True;
-                }
-            } except Exception {
-                # refresh failed but delete succeeded, clear stale data
-            }
-        }
+            mutResult = await root spawn DeleteNode(graphId=_delGraphId, nodeId=_delNodeId);
+            mutData = mutResult.reports[0] if mutResult.reports else {};
+            if "graph" in mutData { currentGraph = mutData["graph"]; }
+            if "score" in mutData { currentScore = mutData["score"]; }
+            if "issues" in mutData { currentIssues = mutData["issues"]; }
+        } except Exception { }
 
         selectedNode = None;
         showConfirmDelete = False;
@@ -352,40 +291,21 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         ca_target = ca["target_node"] if "target_node" in ca else "";
         if not ca_text or not ca_target { return; }
 
-        # Track accepted text so ghost is filtered out immediately
         newAccepted: list = list(_acceptedTexts);
         newAccepted.append(ca_text);
         _acceptedTexts = newAccepted;
 
         isSaving = True;
-        prevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
-        graphId = currentGraph["id"] if "id" in currentGraph else "";
+        _acGraphId = currentGraph["id"] if "id" in currentGraph else "";
 
         try {
-            # AddCounterargumentNode returns updated graph directly
             addResult = await root spawn AddCounterargumentNode(
-                graphId=graphId, targetNodeId=ca_target, counterargContent=ca_text
+                graphId=_acGraphId, targetNodeId=ca_target, counterargContent=ca_text
             );
             addData = addResult.reports[0] if addResult.reports else {};
-            if "error" not in addData and "graph" in addData {
-                # Use the graph from the add walker directly
-                currentGraph = addData["graph"];
-            }
-        } except Exception { }
-
-        # Now refresh scores in a separate await
-        try {
-            scoreResult = await root spawn GetGraphWithScoring(graphId=graphId);
-            scoreData = scoreResult.reports[0] if scoreResult.reports else {};
-            if "error" not in scoreData {
-                currentGraph = scoreData["graph"] if "graph" in scoreData else currentGraph;
-                currentScore = scoreData["score"] if "score" in scoreData else currentScore;
-                currentIssues = scoreData["issues"] if "issues" in scoreData else currentIssues;
-
-                newOverall = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
-                scoreDelta = newOverall - prevScore;
-                showScoreDelta = True;
-            }
+            if "graph" in addData { currentGraph = addData["graph"]; }
+            if "score" in addData { currentScore = addData["score"]; }
+            if "issues" in addData { currentIssues = addData["issues"]; }
         } except Exception { }
 
         isSaving = False;
