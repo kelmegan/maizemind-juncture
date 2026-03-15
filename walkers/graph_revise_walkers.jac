@@ -113,7 +113,7 @@ walker:pub AddEvidenceToNode {
 }
 
 
-walker:pub AddAssumptionToNode {
+walker:pub AddAssumptionToEvidence {
     has graphId: str,
         nodeId: str,
         assumptionText: str;
@@ -133,60 +133,34 @@ walker:pub AddAssumptionToNode {
             return;
         }
 
-        assumption_id = f"node_assumption_{int(time.time())}";
-
-        # Capitalize first letter of assumption content
-        assumption_content = self.assumptionText.strip();
-        if len(assumption_content) > 1 {
-            assumption_content = assumption_content[0].upper() + assumption_content[1:];
-        } elif len(assumption_content) == 1 {
-            assumption_content = assumption_content[0].upper();
-        }
-
-        # Position below target node, offset by existing assumptions
-        target_pos_x = 0.0;
-        target_pos_y = 0.0;
-        assumption_count = 0;
-        for tn in graph_node.nodes {
-            if tn["id"] == self.nodeId {
-                tp = tn.get("position", {"x": 0, "y": 0});
-                target_pos_x = float(tp.get("x", 0));
-                target_pos_y = float(tp.get("y", 0));
+        for node in graph_node.nodes {
+            if node["id"] == self.nodeId {
+                existing_assumptions = node.get("assumptions", []);
+                if not isinstance(existing_assumptions, list) {
+                    existing_assumptions = [];
+                }
+                existing_assumptions.append(self.assumptionText);
+                updated_node = {
+                    "id": node["id"],
+                    "type": node["type"],
+                    "content": node["content"],
+                    "position": node["position"],
+                    "assumptions": existing_assumptions,
+                    "evidence_category": node.get("evidence_category", ""),
+                    "confidence": node.get("confidence", 0.5),
+                    "isWeak": node.get("isWeak", False),
+                    "issues": node.get("issues", []),
+                    "llmIssueTypes": node.get("llmIssueTypes", []),
+                    "nodeScore": node.get("nodeScore", 50),
+                    "sourceUrl": node.get("sourceUrl", ""),
+                    "moreInfo": node.get("moreInfo", ""),
+                    "acknowledged": node.get("acknowledged", False)
+                };
+                idx = graph_node.nodes.index(node);
+                graph_node.nodes[idx] = updated_node;
+                break;
             }
         }
-        for te in graph_node.edges {
-            if te.get("target") == self.nodeId and te.get("type") == "DEPENDS_ON" {
-                assumption_count = assumption_count + 1;
-            }
-        }
-
-        new_assumption = {
-            "id": assumption_id,
-            "type": "ASSUMPTION",
-            "content": assumption_content,
-            "confidence": 0.5,
-            "isWeak": False,
-            "issues": [],
-            "llmIssueTypes": [],
-            "position": {
-                "x": target_pos_x - 180.0 + assumption_count * 200.0,
-                "y": target_pos_y + 140.0
-            },
-            "evidence_category": "",
-            "assumptions": [],
-            "nodeScore": 65,
-            "sourceUrl": "",
-            "moreInfo": ""
-        };
-        graph_node.nodes.append(new_assumption);
-
-        new_edge = {
-            "id": f"edge_dep_{assumption_id}",
-            "source": assumption_id,
-            "target": self.nodeId,
-            "type": "DEPENDS_ON"
-        };
-        graph_node.edges.append(new_edge);
 
         graph_node.updatedAt = str(int(time.time()));
 
@@ -201,7 +175,7 @@ walker:pub AddAssumptionToNode {
             "nextActions": scored_data.get("nextActions", [])
         };
         } except Exception as e {
-            print(f"AddAssumptionToNode ERROR: {e}");
+            print(f"AddAssumptionToEvidence ERROR: {e}");
             report {"error": str(e)};
         }
     }

@@ -1,6 +1,6 @@
 """Juncture - Revise Screen for editing and improving argument nodes."""
 
-sv import from ...main { AddEvidenceToNode, AddAssumptionToNode, UpdateNodeContent, DeleteNode, GetGraphWithScoring }
+sv import from ...main { AddEvidenceToNode, AddAssumptionToEvidence, UpdateNodeContent, DeleteNode, GetGraphWithScoring }
 import from "lucide-react" { Plus, Check, X, Info }
 
 import from ..components.Alert { Alert }
@@ -65,7 +65,7 @@ def:pub ReviseScreen(props: any) -> JsxElement {
                 evidenceContent=inputValue
             );
         } elif actionType == "assumption" {
-            await root spawn AddAssumptionToNode(
+            await root spawn AddAssumptionToEvidence(
                 graphId=graphId,
                 nodeId=nodeId,
                 assumptionText=inputValue

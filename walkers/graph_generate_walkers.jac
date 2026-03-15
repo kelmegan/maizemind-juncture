@@ -32,13 +32,13 @@ walker:pub GenerateArgumentGraph {
             "thesis": "THESIS",
             "claim": "CLAIM",
             "evidence": "EVIDENCE",
-            "assumption": "ASSUMPTION",
+            "assumption": "EVIDENCE",
             "counterarg": "COUNTERARGUMENT"
         };
         edge_type_map: dict[str, str] = {
             "supports": "SUPPORTS",
             "contradicts": "CONTRADICTS",
-            "depends_on": "DEPENDS_ON",
+            "depends_on": "SUPPORTS",
             "addresses": "ADDRESSES"
         };
 
@@ -391,6 +391,63 @@ walker:pub GetGraphWithScoring {
         return self.clamp01(quality);
     }
 
+    def find_weak_nodes(nodes: list, edges: list) -> list {
+        """Find all weak node IDs via evidence quality + upward propagation."""
+        weak_ids: list[str] = [];
+
+        # Evidence with low quality
+        for n in nodes {
+            if n.get("type", "") == "EVIDENCE" {
+                eq = self.evidence_quality(n);
+                if eq < 0.4 and n.get("id", "") not in weak_ids {
+                    weak_ids.append(n.get("id", ""));
+                }
+            }
+        }
+
+        # Nodes with low confidence
+        for n in nodes {
+            conf = self.to_float(n.get("confidence", 0.5), 0.5);
+            if conf < 0.4 and n.get("id", "") not in weak_ids {
+                weak_ids.append(n.get("id", ""));
+            }
+        }
+
+        # Propagate upward: if ALL supporters of a node are weak, it's weak too
+        changed = True;
+        max_iters = 10;
+        iter_count = 0;
+        while changed and iter_count < max_iters {
+            changed = False;
+            iter_count = iter_count + 1;
+            for e in edges {
+                src = e.get("source", "");
+                tgt = e.get("target", "");
+                etype = e.get("type", "");
+                if etype == "SUPPORTS" and src in weak_ids and tgt not in weak_ids {
+                    all_sup: list[str] = [];
+                    for e2 in edges {
+                        if e2.get("target", "") == tgt and e2.get("type", "") == "SUPPORTS" {
+                            all_sup.append(e2.get("source", ""));
+                        }
+                    }
+                    all_weak = True;
+                    for sid in all_sup {
+                        if sid not in weak_ids {
+                            all_weak = False;
+                            break;
+                        }
+                    }
+                    if all_weak and len(all_sup) > 0 {
+                        weak_ids.append(tgt);
+                        changed = True;
+                    }
+                }
+            }
+        }
+        return weak_ids;
+    }
+
     def has_evidence_support(nodes: list, edges: list, claim_id: str) -> bool {
         for e in edges {
             if e.get("type", "") == "SUPPORTS" and e.get("target", "") == claim_id {
@@ -424,12 +481,15 @@ walker:pub GetGraphWithScoring {
     }
 
     def has_assumption(nodes: list, edges: list, claim_id: str) -> bool {
+        """Check if a claim has assumptions — looks at supporting evidence nodes' assumptions lists."""
         for e in edges {
-            if e.get("type", "") == "DEPENDS_ON" and e.get("target", "") == claim_id {
-                src_id = e.get("source", "");
-                src_node = self.get_node(nodes, src_id);
-                if src_node and src_node.get("type", "") == "ASSUMPTION" {
-                    return True;
+            if e.get("type", "") == "SUPPORTS" and e.get("target", "") == claim_id {
+                src_node = self.get_node(nodes, e.get("source", ""));
+                if src_node and src_node.get("type", "") == "EVIDENCE" {
+                    assumptions = src_node.get("assumptions", []);
+                    if isinstance(assumptions, list) and len(assumptions) > 0 {
+                        return True;
+                    }
                 }
             }
         }
@@ -465,7 +525,7 @@ walker:pub GetGraphWithScoring {
 
             for e in edges {
                 et = e.get("type", "");
-                if et not in ["SUPPORTS", "DEPENDS_ON", "ADDRESSES", "CONTRADICTS"] {
+                if et not in ["SUPPORTS", "ADDRESSES", "CONTRADICTS"] {
                     continue;
                 }
                 nxt = "";
@@ -641,7 +701,7 @@ walker:pub GetGraphWithScoring {
 
         # 4) Counterargument Handling (25%)
         counterarg_nodes = [n for n in nodes if n.get("type", "") == "COUNTERARGUMENT"];
-        counterarg_handling = 0.80;
+        counterarg_handling = 0.50;
         if total_contradictions > 0 {
             counterarg_handling = self.clamp01(1.0 - (unresolved_contradictions / max(1, total_contradictions)));
         } else {
@@ -753,7 +813,7 @@ walker:pub GetGraphWithScoring {
                     "severity": "high" if c_support >= 0.10 else "medium",
                     "type": "missing_premise",
                     "description": f"This {ctype} depends on an unstated assumption",
-                    "suggestedAction": "Add an assumption node with a DEPENDS_ON edge to make the logic explicit.",
+                    "suggestedAction": "Add an assumption to the supporting evidence to make the logic explicit.",
                     "area": "Logical Soundness",
                     "estimatedLift": logical_unit + 3
                 });
@@ -823,7 +883,7 @@ walker:pub GetGraphWithScoring {
                     "severity": "medium",
                     "type": "disconnected_claim",
                     "description": "This claim is disconnected from the main thesis path",
-                    "suggestedAction": "Link this claim to thesis/parent claim with SUPPORTS or DEPENDS_ON edges.",
+                    "suggestedAction": "Link this claim to thesis/parent claim with a SUPPORTS edge.",
                     "area": "Coherence",
                     "estimatedLift": coherence_unit + 1
                 });
@@ -834,7 +894,7 @@ walker:pub GetGraphWithScoring {
         for n in nodes {
             nid = n.get("id", "");
             ntype = n.get("type", "");
-            if self.node_degree(edges, nid) == 0 and ntype in ["CLAIM", "EVIDENCE", "ASSUMPTION", "COUNTERARGUMENT"] {
+            if self.node_degree(edges, nid) == 0 and ntype in ["CLAIM", "EVIDENCE", "COUNTERARGUMENT"] {
                 issues.append({
                     "id": f"issue_{issue_index}",
                     "nodeId": nid,
@@ -958,11 +1018,14 @@ walker:pub GetGraphWithScoring {
             issue_map[nid].append(issue);
         }
 
+        # Propagate weakness upward through the graph
+        weak_ids = self.find_weak_nodes(nodes, edges);
+
         for n in nodes {
             nid = n.get("id", "");
             n_issues = issue_map.get(nid, []);
             n["issues"] = n_issues;
-            n["isWeak"] = len(n_issues) > 0;
+            n["isWeak"] = len(n_issues) > 0 or nid in weak_ids;
 
             ntype = n.get("type", "");
             if ntype in ["CLAIM", "THESIS"] {
@@ -984,8 +1047,6 @@ walker:pub GetGraphWithScoring {
                 n["nodeScore"] = int(0.6 * support_points + 0.4 * logical_points);
             } elif ntype == "EVIDENCE" {
                 n["nodeScore"] = int(self.evidence_quality(n) * 100);
-            } elif ntype == "ASSUMPTION" {
-                n["nodeScore"] = 65;
             } elif ntype == "COUNTERARGUMENT" {
                 addressed = False;
                 for e in edges {

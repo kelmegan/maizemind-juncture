@@ -1,6 +1,6 @@
 """Juncture - Review Screen with inline editing workshop, ghost nodes, and score delta."""
 
-sv import from ...main { GetContext, GetGraphWithScoring, AddEvidenceToNode, AddAssumptionToNode, UpdateNodeContent, DeleteNode, AddCounterargumentNode, AddAddressEdge, EvaluateNewNode, GenerateCounter, ClarifyNode, ExpandBranch }
+sv import from ...main { GetContext, GetGraphWithScoring, AddEvidenceToNode, AddAssumptionToEvidence, UpdateNodeContent, DeleteNode, AddCounterargumentNode, AddAddressEdge, EvaluateNewNode, GenerateCounter, ClarifyNode, ExpandBranch }
 
 import from ..components.ArgumentGraphView { ArgumentGraphView }
 import from ..components.Button { Button }
@@ -260,7 +260,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                     graphId=_seGraphId, nodeId=_seNodeId, evidenceContent=_seContent, sourceUrl=_seSourceUrl
                 );
             } elif _seMode == "assumption" {
-                mutResult = await root spawn AddAssumptionToNode(
+                mutResult = await root spawn AddAssumptionToEvidence(
                     graphId=_seGraphId, nodeId=_seNodeId, assumptionText=_seContent
                 );
             } elif _seMode == "address" {
@@ -444,7 +444,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         {"key": "THESIS", "color": "#7c3aed", "bg": "#ede9fe", "label": "Thesis"},
         {"key": "CLAIM", "color": "#9f7aea", "bg": "#e8e0fc", "label": "Claim"},
         {"key": "EVIDENCE", "color": "#10b981", "bg": "#d1fae5", "label": "Evidence"},
-        {"key": "ASSUMPTION", "color": "#f59e0b", "bg": "#fef3c7", "label": "Assumption"},
         {"key": "COUNTERARGUMENT", "color": "#ef4444", "bg": "#fee2e2", "label": "Counter"}
     ];
 
@@ -456,7 +455,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     sel_str_bg = "rgba(34,197,94,0.1)" if sel_conf_val >= 0.7 else ("rgba(250,204,21,0.15)" if sel_conf_val >= 0.5 else "rgba(239,68,68,0.1)");
 
     typeColorMap = {
-        "THESIS": "#7c3aed", "CLAIM": "#9f7aea", "EVIDENCE": "#10b981", "ASSUMPTION": "#f59e0b",
+        "THESIS": "#7c3aed", "CLAIM": "#9f7aea", "EVIDENCE": "#10b981",
         "COUNTERARGUMENT": "#ef4444"
     };
     sel_type_color = typeColorMap[sel_type] if sel_type in typeColorMap else "#9f7aea";
@@ -842,10 +841,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                     <div className="rs-legend-type-item">
                         <div className="rs-edge-line rs-edge-contradicts"></div>
                         <span className="rs-edge-label rs-edge-label-contradicts">contradicts</span>
-                    </div>
-                    <div style={{"display": "flex", "alignItems": "center", "gap": "3px"}}>
-                        <div style={{"width": "16px", "height": "2px", "background": "#f59e0b"}}></div>
-                        <span style={{"color": "#f59e0b", "fontSize": "10px"}}>depends_on</span>
                     </div>
                     <div style={{"display": "flex", "alignItems": "center", "gap": "3px"}}>
                         <div style={{"width": "16px", "height": "2px", "background": "#8b5cf6"}}></div>
