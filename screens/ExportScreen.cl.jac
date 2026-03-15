@@ -55,9 +55,9 @@ def:pub ExportScreen(props: any) -> JsxElement {
         evidence_nodes = {};
 
         for node in nodes {
-            if n["type"] == "THESIS" { thesis_node = n; }
-            elif n["type"] == "CLAIM" { claim_nodes.append(n); }
-            elif n["type"] == "EVIDENCE" { evidence_nodes[n["id"]] = n; }
+            if node["type"] == "THESIS" { thesis_node = node; }
+            elif node["type"] == "CLAIM" { claim_nodes.append(node); }
+            elif node["type"] == "EVIDENCE" { evidence_nodes[node["id"]] = node; }
         }
 
         outline = "ARGUMENT OUTLINE" + NL;

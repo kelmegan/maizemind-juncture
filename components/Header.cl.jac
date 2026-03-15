@@ -10,6 +10,8 @@ def:pub Header(props: any) -> JsxElement {
     title = props.title if props.title else None;
     backTo = props.backTo if props.backTo else None;
     onBack = props.onBack if props.onBack else None;
+    isGuest = props.isGuest if props.isGuest else None;
+
 
     def handleLogoClick() -> None {
         navigate("generate");
@@ -37,7 +39,7 @@ def:pub Header(props: any) -> JsxElement {
 
     show_back = backTo != None or onBack != None;
     show_profile = screen != "profile";
-    show_logout = screen == "profile";
+    show_logout = screen == "profile" and isGuest != None;
     show_export = screen == "review";
 
     return (

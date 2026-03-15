@@ -284,7 +284,7 @@ def:pub GraphViewer(
         focused_branch_root: str = "";
 
     # --- Node colors by type ---
-    can get_node_color(node_type: str) -> str {
+    def get_node_color(node_type: str) -> str {
         if node_type == "thesis" { return "#8b5cf6"; }     # purple
         if node_type == "claim" { return "#3b82f6"; }      # blue
         if node_type == "evidence" { return "#10b981"; }    # green
@@ -294,7 +294,7 @@ def:pub GraphViewer(
     }
 
     # --- Status border color ---
-    can get_status_color(status: str) -> str {
+    def get_status_color(status: str) -> str {
         if status == "ok" { return "#10b981"; }         # green
         if status == "needs_work" { return "#f59e0b"; } # yellow
         if status == "missing" { return "#ef4444"; }    # red
@@ -302,7 +302,7 @@ def:pub GraphViewer(
     }
 
     # --- Edge colors by type ---
-    can get_edge_color(edge_type: str) -> str {
+    def get_edge_color(edge_type: str) -> str {
         if edge_type == "supports" { return "#10b981"; }    # green
         if edge_type == "contradicts" { return "#ef4444"; }  # red
         if edge_type == "depends_on" { return "#f59e0b"; }   # yellow
@@ -311,14 +311,14 @@ def:pub GraphViewer(
     }
 
     # --- Edge dash pattern ---
-    can get_edge_dash(edge_type: str) -> str {
+    def get_edge_dash(edge_type: str) -> str {
         if edge_type == "contradicts" { return "8,4"; }
         if edge_type == "depends_on" { return "6,3"; }
         return "none";
     }
 
     # --- Calculate layout positions ---
-    can get_positions() -> dict[str, dict[str, float]] {
+    def get_positions() -> dict[str, dict[str, float]] {
         # Simple dict-based layout for client side
         pos_map: dict[str, dict[str, float]] = {};
         if not graph_nodes { return pos_map; }
@@ -395,12 +395,12 @@ def:pub GraphViewer(
     }
 
     # --- Event handlers ---
-    can handle_node_click(node_id: str) -> None {
+    def handle_node_click(node_id: str) -> None {
         selected_node_id = node_id;
         if on_node_select { on_node_select(node_id); }
     }
 
-    can handle_zoom_to_node(node_id: str) -> None {
+    def handle_zoom_to_node(node_id: str) -> None {
         positions = get_positions();
         if node_id in positions {
             p = positions[node_id];
@@ -414,14 +414,14 @@ def:pub GraphViewer(
         if on_branch_focus { on_branch_focus(node_id); }
     }
 
-    can handle_zoom_out() -> None {
+    def handle_zoom_out() -> None {
         zoom_level = 1.0;
         pan_x = 0.0;
         pan_y = 0.0;
         focused_branch_root = "";
     }
 
-    can handle_wheel(e: any) -> None {
+    def handle_wheel(e: any) -> None {
         e.preventDefault();
         delta = -e.deltaY * 0.001;
         new_zoom = zoom_level + delta;
@@ -430,7 +430,7 @@ def:pub GraphViewer(
         zoom_level = new_zoom;
     }
 
-    can handle_mouse_down(e: any) -> None {
+    def handle_mouse_down(e: any) -> None {
         if e.button == 0 {
             is_panning = True;
             pan_start_x = e.clientX - pan_x;
@@ -438,14 +438,14 @@ def:pub GraphViewer(
         }
     }
 
-    can handle_mouse_move(e: any) -> None {
+    def handle_mouse_move(e: any) -> None {
         if is_panning {
             pan_x = e.clientX - pan_start_x;
             pan_y = e.clientY - pan_start_y;
         }
     }
 
-    can handle_mouse_up(e: any) -> None {
+    def handle_mouse_up(e: any) -> None {
         is_panning = False;
     }
 
@@ -457,58 +457,34 @@ def:pub GraphViewer(
     svg_h = max(600, len(graph_nodes) * 80);
 
     return
-        <div className="graph-viewer-container"
-             style={{"position": "relative", "width": "100%", "height": "100%",
-                     "minHeight": "600px", "background": "#f8fafc",
-                     "borderRadius": "12px", "overflow": "hidden",
-                     "border": "1px solid #e2e8f0"}}>
+        <div className="gv-container">
 
-            {/* Zoom controls */}
-            <div style={{"position": "absolute", "top": "12px", "right": "12px",
-                         "zIndex": 10, "display": "flex", "gap": "6px",
-                         "flexDirection": "column"}}>
+            <div className="gv-zoom-controls">
                 <button
-                    onClick={lambda e: any -> None { zoom_level = min(4.0, zoom_level + 0.3); }}
-                    style={{"width": "36px", "height": "36px", "borderRadius": "8px",
-                            "border": "1px solid #e2e8f0", "background": "white",
-                            "cursor": "pointer", "fontSize": "18px",
-                            "display": "flex", "alignItems": "center",
-                            "justifyContent": "center", "boxShadow": "0 1px 3px rgba(0,0,0,0.1)"}}>
+                    className="gv-zoom-btn"
+                    onClick={lambda e: any -> None { zoom_level = min(4.0, zoom_level + 0.3); }}>
                     +
                 </button>
                 <button
-                    onClick={lambda e: any -> None { zoom_level = max(0.3, zoom_level - 0.3); }}
-                    style={{"width": "36px", "height": "36px", "borderRadius": "8px",
-                            "border": "1px solid #e2e8f0", "background": "white",
-                            "cursor": "pointer", "fontSize": "18px",
-                            "display": "flex", "alignItems": "center",
-                            "justifyContent": "center", "boxShadow": "0 1px 3px rgba(0,0,0,0.1)"}}>
+                    className="gv-zoom-btn"
+                    onClick={lambda e: any -> None { zoom_level = max(0.3, zoom_level - 0.3); }}>
                     -
                 </button>
                 <button
-                    onClick={lambda e: any -> None { handle_zoom_out(); }}
-                    style={{"width": "36px", "height": "36px", "borderRadius": "8px",
-                            "border": "1px solid #e2e8f0", "background": "white",
-                            "cursor": "pointer", "fontSize": "11px",
-                            "display": "flex", "alignItems": "center",
-                            "justifyContent": "center", "boxShadow": "0 1px 3px rgba(0,0,0,0.1)"}}>
+                    className="gv-zoom-btn gv-zoom-btn-fit"
+                    onClick={lambda e: any -> None { handle_zoom_out(); }}>
                     Fit
                 </button>
             </div>
 
-            {/* Branch focus indicator */}
             { focused_branch_root and
-                <div style={{"position": "absolute", "top": "12px", "left": "12px",
-                             "zIndex": 10, "padding": "6px 14px", "borderRadius": "8px",
-                             "background": "#6366f1", "color": "white",
-                             "fontSize": "13px", "cursor": "pointer",
-                             "boxShadow": "0 2px 6px rgba(99,102,241,0.3)"}}
-                     onClick={lambda e: any -> None { handle_zoom_out(); }}>
+                <div
+                    className="gv-branch-back-btn"
+                    onClick={lambda e: any -> None { handle_zoom_out(); }}>
                     ← Back to full map
                 </div>
             }
 
-            {/* SVG canvas */}
             <svg
                 width="100%"
                 height="100%"
@@ -522,7 +498,6 @@ def:pub GraphViewer(
 
                 <g transform={f"translate({pan_x},{pan_y}) scale({zoom_level})"}>
 
-                    {/* Render edges */}
                     { [
                         <g key={f"edge-{i}"}>
                             { (lambda e: any, ps: any -> JsxElement {
@@ -549,7 +524,6 @@ def:pub GraphViewer(
                                         strokeDasharray={ed if ed != "none" else ""}
                                         opacity="0.6"
                                         markerEnd="url(#arrowhead)" />
-                                    {/* Edge label */}
                                     <text
                                         x={(fx + tx) / 2 + 8}
                                         y={mid_y - 4}
@@ -564,7 +538,6 @@ def:pub GraphViewer(
                         for (i, edge) in enumerate(graph_edges)
                     ] }
 
-                    {/* Render nodes */}
                     { [
                         <g key={f"node-{i}"}
                            onClick={lambda e: any -> None {
@@ -579,13 +552,13 @@ def:pub GraphViewer(
                            onMouseLeave={lambda e: any -> None {
                                hovered_node_id = "";
                            }}
-                           style={{"cursor": "pointer"}}
+                           className="gv-node"
                            transform={
                                f"translate({positions.get(node.get('id', ''), {}).get('x', 0) - 90},"
                                f"{positions.get(node.get('id', ''), {}).get('y', 0) - 30})"
                            }>
-                            {/* Node card */}
                             <rect
+                                className="gv-node-rect"
                                 width="180" height="60"
                                 rx="12" ry="12"
                                 fill="white"
@@ -599,11 +572,9 @@ def:pub GraphViewer(
                                 style={{
                                     "filter": "drop-shadow(0 2px 4px rgba(0,0,0,0.08))"
                                              if node.get("id") != hovered_node_id
-                                             else "drop-shadow(0 4px 8px rgba(0,0,0,0.15))",
-                                    "transition": "filter 0.15s ease"
+                                             else "drop-shadow(0 4px 8px rgba(0,0,0,0.15))"
                                 }} />
 
-                            {/* Type header bar */}
                             <rect
                                 width="180" height="20"
                                 rx="12" ry="12"
@@ -612,19 +583,15 @@ def:pub GraphViewer(
                                 y="10" width="180" height="10"
                                 fill={get_node_color(node.get("type", ""))} />
 
-                            {/* Type label */}
                             <text x="10" y="14" fontSize="10" fill="white"
                                   fontWeight="600" fontFamily="system-ui">
                                 {node.get("type", "").upper()}
                             </text>
 
-                            {/* Confidence badge */}
                             <text x="155" y="14" fontSize="9" fill="white"
                                   fontWeight="500" textAnchor="end" fontFamily="system-ui">
                                 {f"{int(node.get('confidence', 0) * 100)}%"}
                             </text>
-
-                            {/* Node text (truncated) */}
                             <text x="10" y="38" fontSize="11" fill="#1e293b"
                                   fontFamily="system-ui">
                                 { node.get("text", "")[:28] }
@@ -634,7 +601,6 @@ def:pub GraphViewer(
                                 { node.get("text", "")[28:56] + ("..." if len(node.get("text", "")) > 56 else "") }
                             </text>
 
-                            {/* Issue badge */}
                             { node.get("issues", []) and
                                 <g>
                                     <circle cx="170" cy="50" r="8" fill="#ef4444" />
@@ -648,7 +614,6 @@ def:pub GraphViewer(
                         for (i, node) in enumerate(graph_nodes)
                     ] }
 
-                    {/* Arrow marker */}
                     <defs>
                         <marker id="arrowhead" markerWidth="8" markerHeight="6"
                                 refX="8" refY="3" orient="auto">
@@ -659,27 +624,18 @@ def:pub GraphViewer(
                 </g>
             </svg>
 
-            {/* Legend */}
-            <div style={{"position": "absolute", "bottom": "12px", "left": "12px",
-                         "display": "flex", "gap": "12px", "padding": "8px 14px",
-                         "background": "rgba(255,255,255,0.9)", "borderRadius": "8px",
-                         "border": "1px solid #e2e8f0", "fontSize": "11px",
-                         "color": "#64748b"}}>
-                <span><span style={{"color": "#8b5cf6"}}>●</span> Thesis</span>
-                <span><span style={{"color": "#3b82f6"}}>●</span> Claim</span>
-                <span><span style={{"color": "#10b981"}}>●</span> Evidence</span>
-                <span><span style={{"color": "#f59e0b"}}>●</span> Assumption</span>
-                <span><span style={{"color": "#ef4444"}}>●</span> Counter</span>
+            <div className="gv-legend">
+                <span><span className="gv-legend-dot-thesis">●</span> Thesis</span>
+                <span><span className="gv-legend-dot-claim">●</span> Claim</span>
+                <span><span className="gv-legend-dot-evidence">●</span> Evidence</span>
+                <span><span className="gv-legend-dot-assumption">●</span> Assumption</span>
+                <span><span className="gv-legend-dot-counter">●</span> Counter</span>
             </div>
 
-            {/* Interaction hints */}
-            <div style={{"position": "absolute", "bottom": "12px", "right": "12px",
-                         "padding": "6px 12px", "background": "rgba(255,255,255,0.9)",
-                         "borderRadius": "8px", "border": "1px solid #e2e8f0",
-                         "fontSize": "11px", "color": "#94a3b8"}}>
+            <div className="gv-hint">
                 Click: select · Double-click: zoom to branch · Scroll: zoom · Drag: pan
             </div>
         </div>;
 }
 
-} # end cl block
+}

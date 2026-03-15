@@ -133,6 +133,54 @@ def:pub ProfileScreen(props: any) -> JsxElement {
         accessibilityMode = v;
     }
 
+    if isGuest {
+        return (
+            <div className="profile-page">
+                <Header navigate={navigate} screen="profile" title="Profile" backTo={back_to} isGuest={isGuest} />
+                <div className="guest-wall-outer">
+                    <div className="guest-wall-card">
+                        <div className="guest-wall-icon-ring">
+                            <User className="guest-wall-icon" />
+                        </div>
+                        <h2 className="guest-wall-title">You're browsing as a guest</h2>
+                        <p className="guest-wall-body">
+                            Create a free account to save your argument maps, track your
+                            progress over time, and unlock your full reasoning history.
+                        </p>
+                        <div className="guest-wall-actions">
+                            <Button
+                                label={(<><UserPlus className="guest-wall-btn-icon" />Create Account</>)}
+                                onClick={lambda -> None { navigate("welcome", {"tab": "signup"}); }}
+                                className="guest-wall-signup-btn"
+                            />
+                            <Button
+                                label={(<><LogIn className="guest-wall-btn-icon" />Sign In</>)}
+                                variant="outline"
+                                onClick={lambda -> None { navigate("welcome", {"tab": "login"}); }}
+                                className="guest-wall-login-btn"
+                            />
+                        </div>
+                        <div className="guest-wall-perks">
+                            <div className="guest-wall-perk">
+                                <span className="guest-wall-perk-icon">📁</span>
+                                <span>Save and revisit past argument maps</span>
+                            </div>
+                            <div className="guest-wall-perk">
+                                <span className="guest-wall-perk-icon">📈</span>
+                                <span>Track your reasoning score over time</span>
+                            </div>
+                            <div className="guest-wall-perk">
+                                <span className="guest-wall-perk-icon">🏆</span>
+                                <span>Earn achievements as you improve</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+
     available_goals = [
         "Improve argument structure",
         "Add more evidence",
@@ -147,7 +195,7 @@ def:pub ProfileScreen(props: any) -> JsxElement {
 
     return (
         <div className="profile-page">
-            <Header navigate={navigate} screen="profile" title="Profile" backTo={back_to} />
+            <Header navigate={navigate} screen="profile" title="Profile" backTo={back_to} isGuest={isGuest}/>
 
             <div className="profile-content">
                 <Tabs value={activeTab} onValueChange={handleTabChange} className="profile-tabs">

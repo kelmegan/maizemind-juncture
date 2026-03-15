@@ -582,14 +582,7 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         >
             <svg
                 xmlns="http://www.w3.org/2000/svg"
-                style={{
-                    "position":        "absolute",
-                    "top":             "0",
-                    "left":            "0",
-                    "width":           "100%",
-                    "height":          "100%",
-                    "overflow":        "visible"
-                }}
+                className="graph-svg-layer"
             >
                 <defs>
                     <marker id="mk-sup" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
@@ -618,37 +611,35 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                 </g>
             </svg>
 
-            <div style={{
-                "position": "absolute", "top": "12px", "right": "12px",
-                "display": "flex", "flexDirection": "column", "gap": "4px",
-                "background": ctrl_bg, "border": ctrl_border,
-                "borderRadius": "10px", "padding": "4px",
-                "boxShadow": "0 2px 8px rgba(0,0,0,0.1)"
-            }}>
-                <button onClick={zoomIn} style={{
-                    "width": "32px", "height": "32px", "border": "none", "background": "transparent",
-                    "color": ctrl_color, "fontSize": "18px", "cursor": "pointer", "borderRadius": "6px"
-                }} title="Zoom in">+</button>
-                <button onClick={zoomOut} style={{
-                    "width": "32px", "height": "32px", "border": "none", "background": "transparent",
-                    "color": ctrl_color, "fontSize": "18px", "cursor": "pointer", "borderRadius": "6px"
-                }} title="Zoom out">−</button>
-                <button onClick={resetView} style={{
-                    "width": "32px", "height": "32px", "border": "none", "background": "transparent",
-                    "color": ctrl_color, "fontSize": "14px", "cursor": "pointer", "borderRadius": "6px"
-                }} title="Reset view">⊙</button>
+            <div
+                className="graph-zoom-controls"
+                style={{"background": ctrl_bg, "border": ctrl_border}}
+            >
+                <button
+                    className="graph-zoom-btn"
+                    onClick={zoomIn}
+                    style={{"color": ctrl_color}}
+                    title="Zoom in"
+                >+</button>
+                <button
+                    className="graph-zoom-btn"
+                    onClick={zoomOut}
+                    style={{"color": ctrl_color}}
+                    title="Zoom out"
+                >−</button>
+                <button
+                    className="graph-zoom-btn graph-zoom-btn-sm"
+                    onClick={resetView}
+                    style={{"color": ctrl_color}}
+                    title="Reset view"
+                >⊙</button>
             </div>
 
             {(
-                <div style={{
-                    "position": "absolute", "bottom": "16px", "left": "50%",
-                    "transform": "translateX(-50%)", "padding": "6px 14px",
-                    "background": hint_bg,
-                    "border": hint_border,
-                    "borderRadius": "16px", "fontSize": "12px",
-                    "color": hint_color,
-                    "pointerEvents": "none"
-                }}>Click a node for details · Drag to rearrange · Scroll to zoom</div>
+                <div
+                    className="graph-hint"
+                    style={{"background": hint_bg, "border": hint_border, "color": hint_color}}
+                >Click a node for details · Drag to rearrange · Scroll to zoom</div>
             ) if not selectedNodeId else None}
         </div>
     );

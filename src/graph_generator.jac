@@ -8,7 +8,6 @@ import time;
 
 # Model is configured in jac.toml under [plugins.byllm.model]
 
-
 # ============================================================
 # 1. DATA TYPES
 # ============================================================
@@ -320,7 +319,6 @@ def dict_to_graphnode(d: dict[str, object]) -> GraphNode {
     if nparent is None {
         nparent = "";
     }
-    nparent = str(nparent);
 
     raw_conf = d.get("confidence", d.get("score", d.get("strength", 0.5)));
     try {
@@ -372,7 +370,7 @@ def dict_to_graphnode(d: dict[str, object]) -> GraphNode {
     gn = GraphNode(id=nid);
     gn.label = nkind;
     gn.text = ntext;
-    gn.parent_id = nparent;
+    gn.parent_id = str(nparent);
     gn.confidence = nconf;
     gn.status = nstatus;
     gn.issues = issue_list;

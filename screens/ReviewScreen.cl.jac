@@ -84,7 +84,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     def toggleBranch() -> None {
         if selectedNode {
             if focusBranch == selectedNode["id"] {
-                focusBranch = None;
+                focusBranch = "";
             } else {
                 focusBranch = selectedNode["id"];
             }
@@ -118,7 +118,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         }
     }
 
-    # --- Inline edit handlers ---
     def startEdit(mode: str) -> None {
         showScoreDelta = False;
         showConfirmDelete = False;
@@ -127,7 +126,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             showConfirmDelete = True;
             return;
         }
-        # Counter and clarify are now LLM-powered, no textarea needed
         if mode == "counter" {
             handleGenerateCounter();
             return;
@@ -158,7 +156,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 if _gcNodes[_gci]["id"] == _gcNodeId { _gcFound = _gcNodes[_gci]; break; }
                 _gci = _gci + 1;
             }
-            selectedNode = _gcFound;
+            selectedNode = {_gcFound};
         } except Exception { }
         isSaving = False;
     }
@@ -181,7 +179,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 if _clNodes[_cli]["id"] == _clNodeId { _clFound = _clNodes[_cli]; break; }
                 _cli = _cli + 1;
             }
-            selectedNode = _clFound;
+            selectedNode = {_clFound};
         } except Exception { }
         isSaving = False;
     }
@@ -210,7 +208,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _seContent = editInputValue.strip();
         _sePrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
 
-        # Pre-compute defendNodeId for address mode
         _seDefendId = "";
         if _seMode == "address" {
             _seEdges = currentGraph["edges"] if "edges" in currentGraph else [];
@@ -228,7 +225,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             if not _seDefendId { _seDefendId = _seNodeId; }
         }
 
-        # Single await — walker now returns graph + score + issues
         try {
             mutResult = None;
             if _seMode == "evidence" {
@@ -260,7 +256,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                     if _seNodes[_sefi]["id"] == _seNodeId { _seFound = _seNodes[_sefi]; break; }
                     _sefi = _sefi + 1;
                 }
-                selectedNode = _seFound;
+                selectedNode = {_seFound};
             }
         } except Exception { }
 
@@ -278,7 +274,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _delPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         _delGraphId = currentGraph["id"] if "id" in currentGraph else "";
 
-        # Single await — walker returns graph + score + issues
         try {
             mutResult = await root spawn DeleteNode(graphId=_delGraphId, nodeId=_delNodeId);
             mutData = mutResult.reports[0] if mutResult.reports else {};
@@ -330,7 +325,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             if "graph" in mutData { currentGraph = mutData["graph"]; }
             if "score" in mutData { currentScore = mutData["score"]; }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
-            # Re-select same node
             _ebNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
             _ebFound = None;
             _ebi = 0;
@@ -338,18 +332,17 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 if _ebNodes[_ebi]["id"] == _ebNodeId { _ebFound = _ebNodes[_ebi]; break; }
                 _ebi = _ebi + 1;
             }
-            selectedNode = _ebFound;
+            selectedNode = {_ebFound};
         } except Exception { }
         isSaving = False;
     }
 
-    # --- Loading state ---
     if not currentGraph or not currentScore {
-        return <div style={{
-            "minHeight": "100vh", "display": "flex", "alignItems": "center",
-            "justifyContent": "center", "fontFamily": "'DM Sans', system-ui, sans-serif",
-            "color": "#64748b"
-        }}><p>Loading argument map...</p></div>;
+        return (
+            <div className="rs-loading" style={{"color": "#64748b"}}>
+                <p>Loading argument map...</p>
+            </div>
+        );
     }
 
     # --- Pre-compute all values before JSX ---
@@ -357,7 +350,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     overall = currentScore["overall"] if "overall" in currentScore else 0;
     scoreColor = "#16a34a" if overall >= 70 else ("#ca8a04" if overall >= 50 else "#dc2626");
 
-    # Score delta display
     delta_text = "";
     delta_color = "#16a34a";
     if showScoreDelta and scoreDelta != 0 {
@@ -366,7 +358,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         delta_color = "#16a34a" if scoreDelta > 0 else "#dc2626";
     }
 
-    # Theme colors
     bgColor = "#0f0f17" if isDark else "#f4f1ee";
     panelBg = "#13131f" if isDark else "#ffffff";
     borderColor = "rgba(255,255,255,0.07)" if isDark else "rgba(0,0,0,0.08)";
@@ -402,7 +393,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         {"key": "COUNTERARGUMENT", "color": "#ef4444", "bg": "#fee2e2", "label": "Counter"}
     ];
 
-    # Selected node info
     sel_type = selectedNode["type"] if selectedNode and "type" in selectedNode else "CLAIM";
     sel_content = selectedNode["content"] if selectedNode and "content" in selectedNode else "";
     sel_confidence = selectedNode["confidence"] if selectedNode and "confidence" in selectedNode else 0.5;
@@ -419,7 +409,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     sel_node_score = selectedNode["nodeScore"] if selectedNode and "nodeScore" in selectedNode else -1;
     sel_has_node_score = sel_node_score >= 0;
 
-    # Evidence-specific data
     sel_is_evidence = sel_type == "EVIDENCE";
     sel_ev_category = "";
     sel_assumptions: list = [];
@@ -434,14 +423,12 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     sel_has_source = len(sel_source_url) > 0 if sel_source_url else False;
     sel_ev_cat_display = sel_ev_category.replace("_", " ") if sel_ev_category else "logical reasoning";
 
-    # More Information (populated by Clarify button)
     sel_more_info = "";
     if selectedNode {
         sel_more_info = selectedNode["moreInfo"] if "moreInfo" in selectedNode else "";
     }
     sel_has_more_info = len(sel_more_info) > 0 if sel_more_info else False;
 
-    # Edit mode labels and placeholders
     edit_label = "Add Evidence";
     edit_placeholder = "Add a fact, statistic, study, or expert quote...";
     if editMode == "assumption" {
@@ -452,7 +439,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         edit_placeholder = "How would you respond to this counterargument? Provide evidence or reasoning...";
     }
 
-    # Node issues (limit to top 3)
     _allNodeIssues: list = [];
     if selectedNode and currentIssues {
         sel_id = selectedNode["id"];
@@ -474,18 +460,15 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     }
     has_node_issues = len(nodeIssues) > 0;
 
-    # Helper to create proper closure for fix button edit modes
     def makeFixHandler(mode: str) -> any {
         return lambda -> None { startEdit(mode); };
     }
 
-    # Build issue elements with inline Fix buttons
     nodeIssueElements: list = [];
     _ni = 0;
     while _ni < len(nodeIssues) {
         iss = nodeIssues[_ni];
         iss_type = iss["type"] if "type" in iss else "";
-        # Map issue type to edit mode
         fix_mode = "evidence";
         if iss_type == "assumption_heavy" {
             fix_mode = "assumption";
@@ -494,60 +477,43 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         }
         fix_click_fn = makeFixHandler(fix_mode);
         nodeIssueElements.append(
-            <div key={iss["id"]} style={{
-                "padding": "10px 12px",
-                "background": error_bg,
-                "border": error_border,
-                "borderRadius": "10px", "marginBottom": "6px"
-            }}>
-                <div style={{"display": "flex", "justifyContent": "space-between", "alignItems": "start", "gap": "8px"}}>
-                    <div style={{"flex": "1"}}>
-                        <div style={{"fontSize": "12px", "fontWeight": "500",
-                                      "marginBottom": "3px",
-                                      "color": error_text_color}}>
+            <div key={iss["id"]} className="rs-issue-card"
+                style={{"background": error_bg, "border": error_border}}>
+                <div className="rs-issue-inner">
+                    <div className="rs-issue-body">
+                        <div className="rs-issue-description" style={{"color": error_text_color}}>
                             {iss["description"]}
                         </div>
-                        <div style={{"fontSize": "11px", "color": mutedColor,
-                                      "lineHeight": "1.4"}}>
+                        <div className="rs-issue-suggestion" style={{"color": mutedColor}}>
                             {iss["suggestedAction"]}
                         </div>
                     </div>
-                    <button onClick={fix_click_fn} style={{
-                        "padding": "4px 10px", "background": action_bg,
-                        "border": action_border, "borderRadius": "6px",
-                        "fontSize": "10px", "fontWeight": "600",
-                        "color": action_text_color, "cursor": "pointer",
-                        "whiteSpace": "nowrap", "flexShrink": "0"
-                    }}>Fix →</button>
+                    <button onClick={fix_click_fn} className="rs-fix-btn"
+                        style={{"background": action_bg, "border": action_border, "color": action_text_color}}>
+                        Fix →
+                    </button>
                 </div>
             </div>
         );
         _ni = _ni + 1;
     }
 
-    # Build assumption elements
     assumptionElements: list = [];
     _ai = 0;
     while _ai < len(sel_assumptions) {
         assumption = sel_assumptions[_ai];
         assumptionElements.append(
-            <div key={str(_ai)} style={{
-                "padding": "8px 12px",
-                "background": "rgba(245,158,11,0.08)",
-                "border": "1px solid rgba(245,158,11,0.15)",
-                "borderRadius": "8px", "marginBottom": "4px",
-                "fontSize": "12px", "color": mutedColor
-            }}>⚠️ {assumption}</div>
+            <div key={str(_ai)} className="rs-assumption-item" style={{"color": mutedColor}}>
+                ⚠️ {assumption}
+            </div>
         );
         _ai = _ai + 1;
     }
 
-    # Helper to create proper closure for issue click handlers
     def makeIssueClickHandler(nodeId: str) -> any {
         return lambda -> None { handleIssueClick(nodeId); };
     }
 
-    # Build top issues for default panel
     topIssueElements: list = [];
     issues_safe: list = list(currentIssues) if currentIssues else [];
     top_count = len(issues_safe);
@@ -560,22 +526,16 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         iss_node_id = iss["nodeId"] if "nodeId" in iss else "";
         iss_click_fn = makeIssueClickHandler(iss_node_id);
         topIssueElements.append(
-            <div key={iss["id"]} style={{
-                "padding": "12px",
-                "background": error_bg,
-                "border": error_border,
-                "borderRadius": "10px", "marginBottom": "8px", "cursor": "pointer"
-            }} onClick={iss_click_fn}>
-                <div style={{"display": "flex", "alignItems": "center", "gap": "8px", "marginBottom": "4px"}}>
-                    <span style={{"padding": "2px 8px",
-                                   "background": sev_bg,
-                                   "color": sev_color,
-                                   "fontSize": "10px", "fontWeight": "600",
-                                   "borderRadius": "4px", "textTransform": "uppercase"}}>
+            <div key={iss["id"]} className="rs-issue-card-default"
+                style={{"background": error_bg, "border": error_border}}
+                onClick={iss_click_fn}>
+                <div className="rs-severity-row">
+                    <span className="rs-severity-badge"
+                        style={{"background": sev_bg, "color": sev_color}}>
                         {iss["severity"]}
                     </span>
                 </div>
-                <div style={{"fontSize": "13px", "color": textColor, "fontWeight": "500"}}>
+                <div className="rs-issue-title" style={{"color": textColor}}>
                     {iss["description"]}
                 </div>
             </div>
@@ -583,7 +543,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _ti = _ti + 1;
     }
 
-    # Filter out accepted counterargs to get visible suggestions
     visibleCounterargs: list = [];
     _vci = 0;
     while _vci < len(suggestedCounterargs) {
@@ -599,12 +558,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _vci = _vci + 1;
     }
 
-    # Helper to create proper closure for counterarg accept buttons
     def makeAcceptHandler(caItem: dict) -> any {
         return lambda -> None { handleAcceptCounterarg(caItem); };
     }
 
-    # Build suggested counterargument cards for default panel
     counterargElements: list = [];
     _cai = 0;
     while _cai < len(visibleCounterargs) {
@@ -613,7 +570,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         ca_target = ca["target_node"] if "target_node" in ca else "";
         ca_severity = ca["severity"] if "severity" in ca else "medium";
         ca_sev_color = "#ef4444" if ca_severity == "high" else "#f59e0b";
-        # Find target node content for display
         ca_target_content = "";
         _tni = 0;
         ca_nodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
@@ -627,35 +583,27 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         ca_target_short = ca_target_content[:30] if len(ca_target_content) > 30 else ca_target_content;
         ca_accept_fn = makeAcceptHandler(ca);
         counterargElements.append(
-            <div key={str(_cai)} style={{
-                "padding": "12px",
-                "background": "rgba(239,68,68,0.05)",
-                "border": "1px solid rgba(239,68,68,0.12)",
-                "borderRadius": "10px", "marginBottom": "8px"
-            }}>
-                <div style={{"display": "flex", "alignItems": "center", "gap": "6px", "marginBottom": "6px"}}>
-                    <span style={{"padding": "2px 6px", "background": "rgba(239,68,68,0.1)",
-                                   "color": ca_sev_color, "fontSize": "9px", "fontWeight": "600",
-                                   "borderRadius": "4px", "textTransform": "uppercase"}}>{ca_severity}</span>
-                    <span style={{"fontSize": "10px", "color": faintColor}}>targets: {ca_target_short}</span>
+            <div key={str(_cai)} className="rs-counter-card">
+                <div className="rs-counter-header">
+                    <span className="rs-counter-severity" style={{"color": ca_sev_color}}>
+                        {ca_severity}
+                    </span>
+                    <span className="rs-counter-target" style={{"color": faintColor}}>
+                        targets: {ca_target_short}
+                    </span>
                 </div>
-                <div style={{"fontSize": "12px", "color": textColor, "marginBottom": "8px", "lineHeight": "1.4"}}>
+                <div className="rs-counter-text" style={{"color": textColor}}>
                     {ca_text}
                 </div>
-                <button onClick={ca_accept_fn}
-                    style={{
-                        "padding": "6px 12px", "background": "rgba(239,68,68,0.1)",
-                        "border": "1px solid rgba(239,68,68,0.2)", "borderRadius": "6px",
-                        "fontSize": "11px", "fontWeight": "600", "color": "#ef4444",
-                        "cursor": "pointer", "width": "100%"
-                    }}>Add to Graph</button>
+                <button onClick={ca_accept_fn} className="rs-accept-btn">
+                    Add to Graph
+                </button>
             </div>
         );
         _cai = _cai + 1;
     }
     has_counterarg_suggestions = len(counterargElements) > 0;
 
-    # Build ghost nodes and edges from visible (non-accepted) counterargs
     ghostNodes: list = [];
     ghostEdges: list = [];
     _gi = 0;
@@ -694,127 +642,105 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     node_count_str = str(len(graph_nodes)) if graph_nodes else "0";
     edge_count_str = str(len(graph_edges)) if graph_edges else "0";
 
-    # Saving overlay opacity
     saving_overlay_display = "flex" if isSaving else "none";
 
-    # Show actions based on node type
     show_add_evidence = sel_type == "CLAIM" or sel_type == "THESIS";
     show_acknowledge_assumption = sel_is_evidence;
     show_add_counter = sel_type == "CLAIM" or sel_type == "THESIS";
     show_address = sel_type == "COUNTERARGUMENT";
     show_expand = sel_type == "CLAIM" or sel_type == "THESIS";
-
-    # Evidence mode shows source URL input
     show_source_input = editMode == "evidence";
 
     return (
-        <div style={{"height": "100vh", "fontFamily": "'DM Sans', system-ui, sans-serif",
-                      "color": textColor, "display": "flex", "flexDirection": "column",
-                      "overflow": "hidden", "background": bgColor}}>
+        <div className="rs-wrapper" style={{"color": textColor, "background": bgColor}}>
 
-            <div style={{"padding": "10px 20px", "borderBottom": f"1px solid {borderColor}",
-                          "display": "flex", "alignItems": "center", "justifyContent": "space-between",
-                          "background": panelBg}}>
-                <div style={{"display": "flex", "alignItems": "center", "gap": "10px"}}>
-                    <button onClick={handleBack} style={{
-                        "background": "none", "border": "none", "cursor": "pointer",
-                        "color": mutedColor, "fontSize": "14px", "padding": "4px 8px"
-                    }}>← Back</button>
-                    <span style={{"fontSize": "18px", "color": "#8b5cf6"}}>△</span>
-                    <span style={{"fontWeight": "600", "fontSize": "15px", "color": textColor}}>Juncture</span>
+            <div className="rs-topbar"
+                style={{"borderBottom": f"1px solid {borderColor}", "background": panelBg}}>
+                <div className="rs-topbar-left">
+                    <button className="rs-back-btn" onClick={handleBack}
+                        style={{"color": mutedColor}}>← Back</button>
+                    <span className="rs-logo-icon">△</span>
+                    <span className="rs-logo-name" style={{"color": textColor}}>Juncture</span>
                     <span style={{"color": faintColor}}>/</span>
-                    <span style={{"color": mutedColor, "fontSize": "13px"}}>Review</span>
+                    <span className="rs-topbar-page-label" style={{"color": mutedColor}}>Review</span>
                 </div>
-                <div style={{"display": "flex", "alignItems": "center", "gap": "10px"}}>
-                    <button onClick={toggleTheme} style={{
-                        "padding": "5px 10px", "background": cardBg,
-                        "border": f"1px solid {borderColor}", "borderRadius": "6px",
-                        "color": mutedColor, "fontSize": "11px", "cursor": "pointer"
-                    }}>{themeToggleText}</button>
-                    <div style={{"display": "flex", "alignItems": "center", "gap": "6px",
-                                  "padding": "5px 12px", "background": cardBg,
-                                  "borderRadius": "8px", "border": f"1px solid {borderColor}"}}>
-                        <span style={{"color": faintColor, "fontSize": "11px"}}>Score</span>
-                        <span style={{"fontSize": "16px", "fontWeight": "700", "color": scoreColor}}>{overall}</span>
+                <div className="rs-topbar-right">
+                    <button className="rs-theme-btn" onClick={toggleTheme}
+                        style={{"background": cardBg, "border": f"1px solid {borderColor}", "color": mutedColor}}>
+                        {themeToggleText}
+                    </button>
+                    <div className="rs-score-pill"
+                        style={{"background": cardBg, "border": f"1px solid {borderColor}"}}>
+                        <span className="rs-score-pill-label" style={{"color": faintColor}}>Score</span>
+                        <span className="rs-score-pill-value" style={{"color": scoreColor}}>{overall}</span>
                         {(
-                            <span style={{"fontSize": "12px", "fontWeight": "600", "color": delta_color,
-                                           "marginLeft": "2px"}}>{delta_text}</span>
+                            <span className="rs-score-delta" style={{"color": delta_color}}>{delta_text}</span>
                         ) if delta_text else None}
                     </div>
-                    <button onClick={handleExport} style={{
-                        "padding": "6px 12px",
-                        "background": exportBtnBg,
-                        "border": "1px solid rgba(139,92,246,0.25)",
-                        "borderRadius": "6px", "color": "#8b5cf6",
-                        "fontWeight": "500", "fontSize": "12px", "cursor": "pointer"
-                    }}>Export</button>
+                    <button className="rs-export-btn" onClick={handleExport}
+                        style={{"background": exportBtnBg}}>
+                        Export
+                    </button>
                 </div>
             </div>
 
-            <div style={{"padding": "7px 20px", "display": "flex", "alignItems": "center",
-                          "gap": "20px", "borderBottom": f"1px solid {borderColor}",
-                          "background": cardBg, "fontSize": "11px"}}>
-                <div style={{"display": "flex", "alignItems": "center", "gap": "8px"}}>
-                    <span style={{"color": faintColor, "fontSize": "10px", "textTransform": "uppercase",
-                                   "letterSpacing": "1px"}}>Type</span>
+            <div className="rs-legend-bar"
+                style={{"borderBottom": f"1px solid {borderColor}", "background": cardBg}}>
+                <div className="rs-legend-section">
+                    <span className="rs-legend-label" style={{"color": faintColor}}>Type</span>
                     {typeLegend.map(lambda item -> any {
-                        return <div key={item["key"]} style={{"display": "flex", "alignItems": "center", "gap": "4px"}}>
-                            <div style={{"width": "14px", "height": "14px", "borderRadius": "7px",
-                                          "background": item["bg"], "border": f"2px solid {item['color']}"}}></div>
-                            <span style={{"color": item["color"], "fontWeight": "500"}}>{item["label"]}</span>
-                        </div>;
+                        return (
+                            <div key={item["key"]} className="rs-legend-type-item">
+                                <div className="rs-legend-type-dot"
+                                    style={{"background": item["bg"], "border": f"2px solid {item['color']}"}}></div>
+                                <span className="rs-legend-type-label"
+                                    style={{"color": item["color"]}}>{item["label"]}</span>
+                            </div>
+                        );
                     })}
                 </div>
-                <div style={{"display": "flex", "alignItems": "center", "gap": "8px"}}>
-                    <span style={{"color": faintColor, "fontSize": "10px", "textTransform": "uppercase",
-                                   "letterSpacing": "1px"}}>Strength</span>
-                    <div style={{"display": "flex", "alignItems": "center", "gap": "4px"}}>
-                        <div style={{"width": "10px", "height": "10px", "borderRadius": "3px", "background": "#16a34a"}}></div>
+                <div className="rs-legend-section">
+                    <span className="rs-legend-label" style={{"color": faintColor}}>Strength</span>
+                    <div className="rs-legend-type-item">
+                        <div className="rs-strength-dot rs-strength-dot-good"></div>
                         <span style={{"color": mutedColor}}>70+</span>
                     </div>
-                    <div style={{"display": "flex", "alignItems": "center", "gap": "4px"}}>
-                        <div style={{"width": "10px", "height": "10px", "borderRadius": "3px", "background": "#ca8a04"}}></div>
+                    <div className="rs-legend-type-item">
+                        <div className="rs-strength-dot rs-strength-dot-warning"></div>
                         <span style={{"color": mutedColor}}>50-69</span>
                     </div>
-                    <div style={{"display": "flex", "alignItems": "center", "gap": "4px"}}>
-                        <div style={{"width": "10px", "height": "10px", "borderRadius": "3px", "background": "#dc2626"}}></div>
+                    <div className="rs-legend-type-item">
+                        <div className="rs-strength-dot rs-strength-dot-bad"></div>
                         <span style={{"color": mutedColor}}>{"<50"}</span>
                     </div>
                 </div>
-                <div style={{"display": "flex", "alignItems": "center", "gap": "8px"}}>
-                    <span style={{"color": faintColor, "fontSize": "10px", "textTransform": "uppercase",
-                                   "letterSpacing": "1px"}}>Links</span>
-                    <div style={{"display": "flex", "alignItems": "center", "gap": "3px"}}>
-                        <div style={{"width": "16px", "height": "2px", "background": "#10b981"}}></div>
-                        <span style={{"color": "#10b981", "fontSize": "10px"}}>supports</span>
+                <div className="rs-legend-section">
+                    <span className="rs-legend-label" style={{"color": faintColor}}>Links</span>
+                    <div className="rs-legend-type-item">
+                        <div className="rs-edge-line rs-edge-supports"></div>
+                        <span className="rs-edge-label rs-edge-label-supports">supports</span>
                     </div>
-                    <div style={{"display": "flex", "alignItems": "center", "gap": "3px"}}>
-                        <div style={{"width": "16px", "height": "2px", "background": "#ef4444",
-                                      "borderTop": "1px dashed #ef4444"}}></div>
-                        <span style={{"color": "#ef4444", "fontSize": "10px"}}>contradicts</span>
+                    <div className="rs-legend-type-item">
+                        <div className="rs-edge-line rs-edge-contradicts"></div>
+                        <span className="rs-edge-label rs-edge-label-contradicts">contradicts</span>
                     </div>
-                    <div style={{"display": "flex", "alignItems": "center", "gap": "3px"}}>
-                        <div style={{"width": "16px", "height": "2px", "background": "#8b5cf6"}}></div>
-                        <span style={{"color": "#8b5cf6", "fontSize": "10px"}}>addresses</span>
+                    <div className="rs-legend-type-item">
+                        <div className="rs-edge-line rs-edge-addresses"></div>
+                        <span className="rs-edge-label rs-edge-label-addresses">addresses</span>
                     </div>
                 </div>
             </div>
 
-            <div style={{"display": "flex", "flex": "1", "overflow": "hidden"}}>
+            <div className="rs-body">
 
-                <div style={{"flex": "1", "position": "relative", "display": "flex", "flexDirection": "column"}}>
+                <div className="rs-graph-area">
                     {(
-                        <button onClick={toggleBranch} style={{
-                            "position": "absolute", "top": "12px", "left": "12px", "zIndex": "10",
-                            "padding": "8px 16px", "borderRadius": "10px",
-                            "background": "#6366f1", "color": "#fff", "fontSize": "13px",
-                            "cursor": "pointer", "border": "none",
-                            "boxShadow": "0 2px 8px rgba(99,102,241,0.3)",
-                            "display": "flex", "alignItems": "center", "gap": "8px"
-                        }}>Editing branch - Click to exit</button>
+                        <button className="rs-branch-exit-btn" onClick={toggleBranch}>
+                            Editing branch - Click to exit
+                        </button>
                     ) if focusBranch else None}
 
-                    <div style={{"flex": "1"}}>
+                    <div className="rs-graph-wrapper">
                         <ArgumentGraphView
                             nodes={allNodes}
                             edges={allEdges}
@@ -826,230 +752,169 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                         />
                     </div>
 
-                    <div style={{"padding": "8px 20px", "borderTop": f"1px solid {borderColor}",
-                                  "background": panelBg, "display": "flex",
-                                  "alignItems": "center", "gap": "12px", "overflowX": "auto"}}>
-                        <span style={{"color": faintColor, "fontSize": "10px",
-                                       "textTransform": "uppercase", "letterSpacing": "1px",
-                                       "flexShrink": "0"}}>Sources</span>
-                        <span style={{"color": mutedColor, "fontSize": "11px"}}>
+                    <div className="rs-statusbar"
+                        style={{"borderTop": f"1px solid {borderColor}", "background": panelBg}}>
+                        <span className="rs-statusbar-label" style={{"color": faintColor}}>Sources</span>
+                        <span className="rs-statusbar-text" style={{"color": mutedColor}}>
                             {node_count_str} nodes - {edge_count_str} edges
                         </span>
                     </div>
                 </div>
 
                 {(
-                    <div style={{"width": "400px", "background": panelBg,
-                                  "borderLeft": f"1px solid {borderColor}",
-                                  "display": "flex", "flexDirection": "column", "overflow": "hidden",
-                                  "position": "relative"}}>
+                    <div className="rs-selected-panel"
+                        style={{"background": panelBg, "borderLeft": f"1px solid {borderColor}"}}>
 
-                        <div style={{"display": saving_overlay_display, "position": "absolute",
-                                      "top": "0", "left": "0", "right": "0", "bottom": "0",
-                                      "background": "rgba(0,0,0,0.3)", "zIndex": "20",
-                                      "alignItems": "center", "justifyContent": "center"}}>
-                            <div style={{"padding": "12px 20px", "background": panelBg,
-                                          "borderRadius": "10px", "fontSize": "13px",
-                                          "color": textColor, "fontWeight": "500"}}>Saving...</div>
+                        <div className="rs-saving-overlay"
+                            style={{"display": saving_overlay_display}}>
+                            <div className="rs-saving-indicator"
+                                style={{"background": panelBg, "color": textColor}}>
+                                Saving...
+                            </div>
                         </div>
 
-                        <div style={{"padding": "16px 20px", "borderBottom": f"1px solid {borderColor}"}}>
-                            <div style={{"display": "flex", "justifyContent": "space-between", "alignItems": "start"}}>
-                                <div style={{"display": "flex", "alignItems": "center", "gap": "10px"}}>
-                                    <span style={{"color": sel_type_color, "fontSize": "11px",
-                                                   "fontWeight": "700", "textTransform": "uppercase",
-                                                   "letterSpacing": "1px"}}>{sel_type}</span>
-                                    <span style={{"padding": "3px 10px", "background": sel_str_bg,
-                                                   "color": sel_str_color, "borderRadius": "8px",
-                                                   "fontSize": "11px", "fontWeight": "600",
-                                                   "border": f"1px solid {sel_str_color}"}}>
+                        <div className="rs-panel-header"
+                            style={{"borderBottom": f"1px solid {borderColor}"}}>
+                            <div className="rs-panel-header-row">
+                                <div className="rs-panel-header-left">
+                                    <span className="rs-panel-type-label"
+                                        style={{"color": sel_type_color}}>{sel_type}</span>
+                                    <span className="rs-strength-badge"
+                                        style={{"background": sel_str_bg, "color": sel_str_color,
+                                                "border": f"1px solid {sel_str_color}"}}>
                                         {str(int(sel_conf_val * 100))}%
                                     </span>
                                 </div>
-                                <button onClick={closePanel} style={{
-                                    "background": cardBg, "border": f"1px solid {borderColor}",
-                                    "color": mutedColor, "fontSize": "14px", "cursor": "pointer",
-                                    "padding": "4px 10px", "borderRadius": "6px"
-                                }}>✕</button>
+                                <button className="rs-panel-close-btn" onClick={closePanel}
+                                    style={{"background": cardBg, "border": f"1px solid {borderColor}",
+                                            "color": mutedColor}}>✕</button>
                             </div>
-                            <h3 style={{"fontSize": "16px", "fontWeight": "600", "marginTop": "10px",
-                                         "lineHeight": "1.5", "color": textColor}}>{sel_content}</h3>
+                            <h3 className="rs-panel-node-title"
+                                style={{"color": textColor}}>{sel_content}</h3>
                         </div>
 
-                        <div style={{"flex": "1", "overflowY": "auto", "padding": "16px 20px"}}>
+                        <div className="rs-panel-scroll">
 
-                            <div style={{"marginBottom": "16px"}}>
-                                <div style={{"color": "#dc2626", "fontSize": "10px", "fontWeight": "700",
-                                              "textTransform": "uppercase", "letterSpacing": "1.5px",
-                                              "marginBottom": "8px", "display": "flex",
-                                              "alignItems": "center", "gap": "6px"}}>
-                                    <span style={{"width": "5px", "height": "5px",
-                                                   "background": "#dc2626", "borderRadius": "3px"}}></span>
+                            <div className="rs-panel-section">
+                                <div className="rs-section-heading" style={{"color": "#dc2626"}}>
+                                    <span className="rs-section-dot"
+                                        style={{"background": "#dc2626"}}></span>
                                     Issues
                                 </div>
                                 {(
                                     <div>{nodeIssueElements}</div>
                                 ) if has_node_issues else (
-                                    <div style={{
-                                        "padding": "10px 12px", "borderRadius": "8px", "fontSize": "12px",
-                                        "background": success_bg,
-                                        "border": success_border,
-                                        "color": success_text_color
-                                    }}>Well-supported ✓</div>
+                                    <div className="rs-well-supported"
+                                        style={{"background": success_bg, "border": success_border,
+                                                "color": success_text_color}}>
+                                        Well-supported ✓
+                                    </div>
                                 )}
                             </div>
 
-                            <div style={{"marginBottom": "16px"}}>
-                                <div style={{"color": "#8b5cf6", "fontSize": "10px", "fontWeight": "700",
-                                              "textTransform": "uppercase", "letterSpacing": "1.5px",
-                                              "marginBottom": "8px", "display": "flex",
-                                              "alignItems": "center", "gap": "6px"}}>
-                                    <span style={{"width": "5px", "height": "5px",
-                                                   "background": "#8b5cf6", "borderRadius": "3px"}}></span>
+                            <div className="rs-panel-section">
+                                <div className="rs-section-heading" style={{"color": "#8b5cf6"}}>
+                                    <span className="rs-section-dot"
+                                        style={{"background": "#8b5cf6"}}></span>
                                     Quick Actions
                                 </div>
-                                <div style={{"display": "flex", "flexWrap": "wrap", "gap": "6px"}}>
+                                <div className="rs-actions-row">
                                     {(
-                                        <button onClick={lambda -> None { startEdit("evidence"); }} style={{
-                                            "padding": "7px 12px", "background": action_bg,
-                                            "border": action_border, "borderRadius": "8px",
-                                            "fontSize": "11px", "fontWeight": "600",
-                                            "color": action_text_color, "cursor": "pointer"
-                                        }}>📊 Add Evidence</button>
+                                        <button className="rs-action-btn" onClick={lambda -> None { startEdit("evidence"); }}
+                                            style={{"background": action_bg, "border": action_border, "color": action_text_color}}>
+                                            📊 Add Evidence
+                                        </button>
                                     ) if show_add_evidence else None}
                                     {(
-                                        <button onClick={lambda -> None { startEdit("assumption"); }} style={{
-                                            "padding": "7px 12px", "background": action_bg,
-                                            "border": action_border, "borderRadius": "8px",
-                                            "fontSize": "11px", "fontWeight": "600",
-                                            "color": action_text_color, "cursor": "pointer"
-                                        }}>🔗 Assumption</button>
+                                        <button className="rs-action-btn" onClick={lambda -> None { startEdit("assumption"); }}
+                                            style={{"background": action_bg, "border": action_border, "color": action_text_color}}>
+                                            🔗 Assumption
+                                        </button>
                                     ) if show_acknowledge_assumption else None}
                                     {(
-                                        <button onClick={lambda -> None { startEdit("counter"); }} style={{
-                                            "padding": "7px 12px", "background": action_bg,
-                                            "border": action_border, "borderRadius": "8px",
-                                            "fontSize": "11px", "fontWeight": "600",
-                                            "color": action_text_color, "cursor": "pointer"
-                                        }}>⚔️ Counter</button>
+                                        <button className="rs-action-btn" onClick={lambda -> None { startEdit("counter"); }}
+                                            style={{"background": action_bg, "border": action_border, "color": action_text_color}}>
+                                            ⚔️ Counter
+                                        </button>
                                     ) if show_add_counter else None}
                                     {(
-                                        <button onClick={lambda -> None { startEdit("address"); }} style={{
-                                            "padding": "7px 12px", "background": "rgba(16,185,129,0.08)",
-                                            "border": "1px solid rgba(16,185,129,0.2)", "borderRadius": "8px",
-                                            "fontSize": "11px", "fontWeight": "600",
-                                            "color": "#10b981", "cursor": "pointer"
-                                        }}>💬 Respond</button>
+                                        <button className="rs-action-btn rs-action-btn-respond"
+                                            onClick={lambda -> None { startEdit("address"); }}>
+                                            💬 Respond
+                                        </button>
                                     ) if show_address else None}
                                     {(
-                                        <button onClick={handleExpandBranch} style={{
-                                            "padding": "7px 12px", "background": "rgba(6,182,212,0.08)",
-                                            "border": "1px solid rgba(6,182,212,0.2)", "borderRadius": "8px",
-                                            "fontSize": "11px", "fontWeight": "600",
-                                            "color": "#06b6d4", "cursor": "pointer"
-                                        }}>🌿 Expand</button>
+                                        <button className="rs-action-btn rs-action-btn-expand"
+                                            onClick={handleExpandBranch}>
+                                            🌿 Expand
+                                        </button>
                                     ) if show_expand else None}
-                                    <button onClick={lambda -> None { startEdit("clarify"); }} style={{
-                                        "padding": "7px 12px", "background": action_bg,
-                                        "border": action_border, "borderRadius": "8px",
-                                        "fontSize": "11px", "fontWeight": "600",
-                                        "color": action_text_color, "cursor": "pointer"
-                                    }}>✏️ Clarify</button>
-                                    <button onClick={lambda -> None { startEdit("delete"); }} style={{
-                                        "padding": "7px 12px", "background": "rgba(239,68,68,0.06)",
-                                        "border": "1px solid rgba(239,68,68,0.15)", "borderRadius": "8px",
-                                        "fontSize": "11px", "fontWeight": "600",
-                                        "color": "#ef4444", "cursor": "pointer"
-                                    }}>🗑️ Delete</button>
+                                    <button className="rs-action-btn"
+                                        onClick={lambda -> None { startEdit("clarify"); }}
+                                        style={{"background": action_bg, "border": action_border, "color": action_text_color}}>
+                                        ✏️ Clarify
+                                    </button>
+                                    <button className="rs-action-btn rs-action-btn-delete"
+                                        onClick={lambda -> None { startEdit("delete"); }}>
+                                        🗑️ Delete
+                                    </button>
                                 </div>
                             </div>
 
                             {(
-                                <div style={{"marginBottom": "16px", "padding": "14px",
-                                              "background": "rgba(139,92,246,0.06)",
-                                              "border": "1px solid rgba(139,92,246,0.15)",
-                                              "borderRadius": "10px"}}>
-                                    <div style={{"fontSize": "12px", "fontWeight": "600",
-                                                  "color": action_text_color, "marginBottom": "8px"}}>{edit_label}</div>
+                                <div className="rs-edit-box">
+                                    <div className="rs-edit-label"
+                                        style={{"color": action_text_color}}>{edit_label}</div>
                                     <textarea
+                                        className="rs-edit-textarea"
                                         value={editInputValue}
                                         onChange={handleEditInput}
                                         placeholder={edit_placeholder}
-                                        style={{
-                                            "width": "100%", "minHeight": "80px", "padding": "10px",
-                                            "background": cardBg, "border": f"1px solid {borderColor}",
-                                            "borderRadius": "8px", "fontSize": "12px", "color": textColor,
-                                            "resize": "vertical", "fontFamily": "'DM Sans', system-ui, sans-serif",
-                                            "boxSizing": "border-box"
-                                        }}
+                                        style={{"background": cardBg, "border": f"1px solid {borderColor}",
+                                                "color": textColor}}
                                     />
                                     {(
                                         <input
                                             type="text"
+                                            className="rs-edit-source-input"
                                             value={sourceUrlValue}
                                             onChange={handleSourceUrlInput}
                                             placeholder="Source URL (optional) — e.g. https://example.com/study"
-                                            style={{
-                                                "width": "100%", "padding": "8px 10px", "marginTop": "6px",
-                                                "background": cardBg, "border": f"1px solid {borderColor}",
-                                                "borderRadius": "8px", "fontSize": "11px", "color": textColor,
-                                                "fontFamily": "'DM Sans', system-ui, sans-serif",
-                                                "boxSizing": "border-box"
-                                            }}
+                                            style={{"background": cardBg, "border": f"1px solid {borderColor}",
+                                                    "color": textColor}}
                                         />
                                     ) if show_source_input else None}
-                                    <div style={{"display": "flex", "gap": "8px", "marginTop": "8px"}}>
-                                        <button onClick={saveEdit} style={{
-                                            "flex": "1", "padding": "8px 14px",
-                                            "background": "linear-gradient(135deg, #8b5cf6, #7c3aed)",
-                                            "border": "none", "borderRadius": "8px",
-                                            "fontSize": "12px", "fontWeight": "600", "color": "#fff",
-                                            "cursor": "pointer"
-                                        }}>Save</button>
-                                        <button onClick={cancelEdit} style={{
-                                            "padding": "8px 14px", "background": cardBg,
-                                            "border": f"1px solid {borderColor}", "borderRadius": "8px",
-                                            "fontSize": "12px", "color": mutedColor, "cursor": "pointer"
-                                        }}>Cancel</button>
+                                    <div className="rs-edit-buttons">
+                                        <button className="rs-save-btn" onClick={saveEdit}>Save</button>
+                                        <button className="rs-cancel-btn" onClick={cancelEdit}
+                                            style={{"background": cardBg, "border": f"1px solid {borderColor}",
+                                                    "color": mutedColor}}>Cancel</button>
                                     </div>
                                 </div>
                             ) if editMode else None}
 
                             {(
-                                <div style={{"marginBottom": "16px", "padding": "14px",
-                                              "background": "rgba(239,68,68,0.06)",
-                                              "border": "1px solid rgba(239,68,68,0.15)",
-                                              "borderRadius": "10px"}}>
-                                    <div style={{"fontSize": "12px", "fontWeight": "600",
-                                                  "color": "#ef4444", "marginBottom": "8px"}}>Delete this node?</div>
-                                    <div style={{"fontSize": "11px", "color": mutedColor, "marginBottom": "10px"}}>
+                                <div className="rs-delete-box">
+                                    <div className="rs-delete-title">Delete this node?</div>
+                                    <div className="rs-delete-warning"
+                                        style={{"color": mutedColor}}>
                                         This will remove the node and all its connections. This cannot be undone.
                                     </div>
-                                    <div style={{"display": "flex", "gap": "8px"}}>
-                                        <button onClick={handleDelete} style={{
-                                            "flex": "1", "padding": "8px 14px",
-                                            "background": "#ef4444",
-                                            "border": "none", "borderRadius": "8px",
-                                            "fontSize": "12px", "fontWeight": "600", "color": "#fff",
-                                            "cursor": "pointer"
-                                        }}>Delete</button>
-                                        <button onClick={cancelEdit} style={{
-                                            "padding": "8px 14px", "background": cardBg,
-                                            "border": f"1px solid {borderColor}", "borderRadius": "8px",
-                                            "fontSize": "12px", "color": mutedColor, "cursor": "pointer"
-                                        }}>Cancel</button>
+                                    <div className="rs-edit-buttons">
+                                        <button className="rs-confirm-delete-btn"
+                                            onClick={handleDelete}>Delete</button>
+                                        <button className="rs-cancel-btn" onClick={cancelEdit}
+                                            style={{"background": cardBg, "border": f"1px solid {borderColor}",
+                                                    "color": mutedColor}}>Cancel</button>
                                     </div>
                                 </div>
                             ) if showConfirmDelete else None}
 
                             {(
-                                <div style={{"marginBottom": "16px"}}>
-                                    <div style={{"color": "#f59e0b", "fontSize": "10px", "fontWeight": "700",
-                                                  "textTransform": "uppercase", "letterSpacing": "1.5px",
-                                                  "marginBottom": "8px", "display": "flex",
-                                                  "alignItems": "center", "gap": "6px"}}>
-                                        <span style={{"width": "5px", "height": "5px",
-                                                       "background": "#f59e0b", "borderRadius": "3px"}}></span>
+                                <div className="rs-panel-section">
+                                    <div className="rs-section-heading" style={{"color": "#f59e0b"}}>
+                                        <span className="rs-section-dot"
+                                            style={{"background": "#f59e0b"}}></span>
                                         Assumptions
                                     </div>
                                     {assumptionElements}
@@ -1057,64 +922,46 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             ) if sel_has_assumptions else None}
 
                             {(
-                                <div style={{"marginBottom": "16px"}}>
-                                    <div style={{"color": "#6366f1", "fontSize": "10px", "fontWeight": "700",
-                                                  "textTransform": "uppercase", "letterSpacing": "1.5px",
-                                                  "marginBottom": "8px", "display": "flex",
-                                                  "alignItems": "center", "gap": "6px"}}>
-                                        <span style={{"width": "5px", "height": "5px",
-                                                       "background": "#6366f1", "borderRadius": "3px"}}></span>
+                                <div className="rs-panel-section">
+                                    <div className="rs-section-heading" style={{"color": "#6366f1"}}>
+                                        <span className="rs-section-dot"
+                                            style={{"background": "#6366f1"}}></span>
                                         More Information
                                     </div>
-                                    <div style={{
-                                        "padding": "10px 12px",
-                                        "background": "rgba(99,102,241,0.06)",
-                                        "border": "1px solid rgba(99,102,241,0.12)",
-                                        "borderRadius": "8px",
-                                        "fontSize": "12px", "color": textColor,
-                                        "lineHeight": "1.5"
-                                    }}>{sel_more_info}</div>
+                                    <div className="rs-more-info-box"
+                                        style={{"color": textColor}}>{sel_more_info}</div>
                                 </div>
                             ) if sel_has_more_info else None}
 
                             {(
-                                <div style={{"marginBottom": "16px"}}>
-                                    <div style={{"color": "#06b6d4", "fontSize": "10px", "fontWeight": "700",
-                                                  "textTransform": "uppercase", "letterSpacing": "1.5px",
-                                                  "marginBottom": "8px", "display": "flex",
-                                                  "alignItems": "center", "gap": "6px"}}>
-                                        <span style={{"width": "5px", "height": "5px",
-                                                       "background": "#06b6d4", "borderRadius": "3px"}}></span>
+                                <div className="rs-panel-section">
+                                    <div className="rs-section-heading" style={{"color": "#06b6d4"}}>
+                                        <span className="rs-section-dot"
+                                            style={{"background": "#06b6d4"}}></span>
                                         Evidence Details
                                     </div>
-                                    <div style={{
-                                        "padding": "8px 12px",
-                                        "background": "rgba(6,182,212,0.06)",
-                                        "border": "1px solid rgba(6,182,212,0.12)",
-                                        "borderRadius": "8px", "fontSize": "12px"
-                                    }}>
-                                        <div style={{"display": "flex", "justifyContent": "space-between", "marginBottom": "4px"}}>
+                                    <div className="rs-evidence-box">
+                                        <div className="rs-evidence-row">
                                             <span style={{"color": mutedColor}}>Category</span>
-                                            <span style={{"fontWeight": "600", "color": textColor, "textTransform": "capitalize"}}>
+                                            <span className="rs-evidence-value"
+                                                style={{"color": textColor}}>
                                                 {sel_ev_cat_display}
                                             </span>
                                         </div>
-                                        <div style={{"display": "flex", "justifyContent": "space-between"}}>
+                                        <div className="rs-evidence-row">
                                             <span style={{"color": mutedColor}}>Quality Score</span>
                                             <span style={{"fontWeight": "600", "color": sel_str_color}}>
                                                 {str(sel_node_score)}%
                                             </span>
                                         </div>
                                         {(
-                                            <div style={{"marginTop": "8px", "paddingTop": "8px",
-                                                          "borderTop": f"1px solid {borderColor}"}}>
-                                                <div style={{"display": "flex", "justifyContent": "space-between", "alignItems": "center"}}>
+                                            <div className="rs-source-divider"
+                                                style={{"borderTop": f"1px solid {borderColor}"}}>
+                                                <div className="rs-source-row">
                                                     <span style={{"color": mutedColor}}>Source</span>
-                                                    <a href={sel_source_url} target="_blank" rel="noopener noreferrer"
-                                                       style={{"fontSize": "11px", "color": "#3b82f6",
-                                                                "textDecoration": "underline", "maxWidth": "200px",
-                                                                "overflow": "hidden", "textOverflow": "ellipsis",
-                                                                "whiteSpace": "nowrap", "display": "inline-block"}}>
+                                                    <a href={sel_source_url} target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="rs-source-link">
                                                         {sel_source_url}
                                                     </a>
                                                 </div>
@@ -1125,118 +972,123 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             ) if sel_is_evidence else None}
 
                             {(
-                                <div style={{"marginBottom": "16px"}}>
-                                    <div style={{"color": "#3b82f6", "fontSize": "10px", "fontWeight": "700",
-                                                  "textTransform": "uppercase", "letterSpacing": "1.5px",
-                                                  "marginBottom": "8px", "display": "flex",
-                                                  "alignItems": "center", "gap": "6px"}}>
-                                        <span style={{"width": "5px", "height": "5px",
-                                                       "background": "#3b82f6", "borderRadius": "3px"}}></span>
+                                <div className="rs-panel-section">
+                                    <div className="rs-section-heading" style={{"color": "#3b82f6"}}>
+                                        <span className="rs-section-dot"
+                                            style={{"background": "#3b82f6"}}></span>
                                         Node Score
                                     </div>
-                                    <div style={{"textAlign": "center", "padding": "12px",
-                                                  "background": cardBg, "borderRadius": "10px"}}>
-                                        <div style={{"fontSize": "28px", "fontWeight": "700", "color": sel_str_color}}>
+                                    <div className="rs-node-score-box"
+                                        style={{"background": cardBg}}>
+                                        <div className="rs-node-score-number"
+                                            style={{"color": sel_str_color}}>
                                             {str(sel_node_score)}
                                         </div>
-                                        <div style={{"color": mutedColor, "fontSize": "11px"}}>Node Quality</div>
+                                        <div className="rs-node-score-label"
+                                            style={{"color": mutedColor}}>Node Quality</div>
                                     </div>
                                 </div>
                             ) if sel_has_node_score else None}
                         </div>
                     </div>
                 ) if selectedNode else (
-                    <div style={{"width": "380px", "background": panelBg,
-                                  "borderLeft": f"1px solid {borderColor}",
-                                  "display": "flex", "flexDirection": "column", "overflow": "hidden",
-                                  "position": "relative"}}>
+                    <div className="rs-default-panel"
+                        style={{"background": panelBg, "borderLeft": f"1px solid {borderColor}"}}>
 
-                        <div style={{"display": saving_overlay_display, "position": "absolute",
-                                      "top": "0", "left": "0", "right": "0", "bottom": "0",
-                                      "background": "rgba(0,0,0,0.3)", "zIndex": "20",
-                                      "alignItems": "center", "justifyContent": "center"}}>
-                            <div style={{"padding": "12px 20px", "background": panelBg,
-                                          "borderRadius": "10px", "fontSize": "13px",
-                                          "color": textColor, "fontWeight": "500"}}>Saving...</div>
+                        <div className="rs-saving-overlay"
+                            style={{"display": saving_overlay_display}}>
+                            <div className="rs-saving-indicator"
+                                style={{"background": panelBg, "color": textColor}}>
+                                Saving...
+                            </div>
                         </div>
 
-                        <div style={{"flex": "1", "overflowY": "auto", "padding": "20px"}}>
-                            <div style={{"display": "flex", "alignItems": "center", "gap": "8px", "marginBottom": "16px"}}>
-                                <span style={{"fontSize": "20px"}}>📈</span>
-                                <span style={{"fontWeight": "600", "fontSize": "16px", "color": textColor}}>Reasoning Score</span>
+                        <div className="rs-default-scroll">
+                            <div className="rs-default-section-header">
+                                <span>📈</span>
+                                <span className="rs-default-section-title"
+                                    style={{"color": textColor}}>Reasoning Score</span>
                             </div>
-                            <div style={{"textAlign": "center", "padding": "20px",
-                                          "background": cardBg, "borderRadius": "12px", "marginBottom": "20px"}}>
-                                <div style={{"fontSize": "48px", "fontWeight": "700", "color": scoreColor}}>{overall}</div>
-                                <div style={{"color": mutedColor, "fontSize": "14px"}}>out of 100</div>
-                                <div style={{"height": "8px", "background": bar_track_bg,
-                                              "borderRadius": "4px", "marginTop": "12px"}}>
-                                    <div style={{"height": "100%", "borderRadius": "4px", "transition": "width 0.5s",
-                                                  "width": f"{overall}%", "background": scoreColor}}></div>
+
+                            <div className="rs-score-block" style={{"background": cardBg}}>
+                                <div className="rs-score-big"
+                                    style={{"color": scoreColor}}>{overall}</div>
+                                <div className="rs-score-sub"
+                                    style={{"color": mutedColor}}>out of 100</div>
+                                <div className="rs-score-bar"
+                                    style={{"background": bar_track_bg}}>
+                                    <div className="rs-score-bar-fill"
+                                        style={{"width": f"{overall}%", "background": scoreColor}}></div>
                                 </div>
                                 {(
-                                    <div style={{"marginTop": "8px", "fontSize": "14px", "fontWeight": "600",
-                                                  "color": delta_color}}>{delta_text}</div>
+                                    <div className="rs-score-delta-big"
+                                        style={{"color": delta_color}}>{delta_text}</div>
                                 ) if delta_text else None}
                             </div>
 
-                            <div style={{"marginBottom": "6px"}}>
-                                <div style={{"display": "flex", "justifyContent": "space-between",
-                                              "fontSize": "12px", "marginBottom": "4px"}}>
+                            <div className="rs-breakdown-item">
+                                <div className="rs-breakdown-row">
                                     <span style={{"color": mutedColor}}>Support (40%)</span>
-                                    <span style={{"fontWeight": "600", "color": textColor}}>{support_val}%</span>
+                                    <span className="rs-breakdown-value"
+                                        style={{"color": textColor}}>{support_val}%</span>
                                 </div>
-                                <div style={{"height": "4px", "background": bar_track_bg, "borderRadius": "2px"}}>
-                                    <div style={{"height": "100%", "borderRadius": "2px", "transition": "width 0.5s",
-                                                  "width": f"{support_val}%", "background": support_bar_color}}></div>
+                                <div className="rs-breakdown-bar"
+                                    style={{"background": bar_track_bg}}>
+                                    <div className="rs-breakdown-bar-fill"
+                                        style={{"width": f"{support_val}%", "background": support_bar_color}}></div>
                                 </div>
                             </div>
-                            <div style={{"marginBottom": "6px"}}>
-                                <div style={{"display": "flex", "justifyContent": "space-between",
-                                              "fontSize": "12px", "marginBottom": "4px"}}>
+                            <div className="rs-breakdown-item">
+                                <div className="rs-breakdown-row">
                                     <span style={{"color": mutedColor}}>Premise (40%)</span>
-                                    <span style={{"fontWeight": "600", "color": textColor}}>{premise_val}%</span>
+                                    <span className="rs-breakdown-value"
+                                        style={{"color": textColor}}>{premise_val}%</span>
                                 </div>
-                                <div style={{"height": "4px", "background": bar_track_bg, "borderRadius": "2px"}}>
-                                    <div style={{"height": "100%", "borderRadius": "2px", "transition": "width 0.5s",
-                                                  "width": f"{premise_val}%", "background": premise_bar_color}}></div>
+                                <div className="rs-breakdown-bar"
+                                    style={{"background": bar_track_bg}}>
+                                    <div className="rs-breakdown-bar-fill"
+                                        style={{"width": f"{premise_val}%", "background": premise_bar_color}}></div>
                                 </div>
                             </div>
-                            <div style={{"marginBottom": "20px"}}>
-                                <div style={{"display": "flex", "justifyContent": "space-between",
-                                              "fontSize": "12px", "marginBottom": "4px"}}>
+                            <div className="rs-breakdown-item" style={{"marginBottom": "20px"}}>
+                                <div className="rs-breakdown-row">
                                     <span style={{"color": mutedColor}}>Consistency (20%)</span>
-                                    <span style={{"fontWeight": "600", "color": textColor}}>{consistency_val}%</span>
+                                    <span className="rs-breakdown-value"
+                                        style={{"color": textColor}}>{consistency_val}%</span>
                                 </div>
-                                <div style={{"height": "4px", "background": bar_track_bg, "borderRadius": "2px"}}>
-                                    <div style={{"height": "100%", "borderRadius": "2px", "transition": "width 0.5s",
-                                                  "width": f"{consistency_val}%", "background": consistency_bar_color}}></div>
+                                <div className="rs-breakdown-bar"
+                                    style={{"background": bar_track_bg}}>
+                                    <div className="rs-breakdown-bar-fill"
+                                        style={{"width": f"{consistency_val}%", "background": consistency_bar_color}}></div>
                                 </div>
                             </div>
 
-                            <div style={{"display": "flex", "alignItems": "center", "gap": "8px", "marginBottom": "12px"}}>
-                                <span style={{"fontSize": "16px"}}>⚠️</span>
-                                <span style={{"fontWeight": "600", "fontSize": "14px", "color": textColor}}>Top Issues</span>
+                            <div className="rs-default-section-header">
+                                <span>⚠️</span>
+                                <span className="rs-default-section-title"
+                                    style={{"color": textColor}}>Top Issues</span>
                             </div>
-                            <p style={{"fontSize": "12px", "color": mutedColor, "marginBottom": "12px"}}>Click on a node to fix it</p>
+                            <p className="rs-panel-hint"
+                                style={{"color": mutedColor}}>Click on a node to fix it</p>
                             {(
                                 <div>{topIssueElements}</div>
                             ) if len(currentIssues) > 0 else (
-                                <div style={{"padding": "14px", "background": "rgba(34,197,94,0.06)",
-                                              "border": "1px solid rgba(34,197,94,0.12)",
-                                              "borderRadius": "10px", "fontSize": "13px",
-                                              "color": "#16a34a"}}>
+                                <div className="rs-no-issues-card">
                                     No major issues found! Great work.
                                 </div>
                             )}
 
                             {(
-                                <div style={{"marginTop": "20px"}}>
-                                    <div style={{"display": "flex", "alignItems": "center", "gap": "8px", "marginBottom": "12px"}}>
-                                        <span style={{"fontSize": "16px"}}>⚔️</span>
-                                        <span style={{"fontWeight": "600", "fontSize": "14px", "color": textColor}}>Consider These Counterarguments</span>
+                                <div className="rs-counterargs-section">
+                                    <div className="rs-default-section-header">
+                                        <span>⚔️</span>
+                                        <span className="rs-default-section-title"
+                                            style={{"color": textColor}}>
+                                            Consider These Counterarguments
+                                        </span>
                                     </div>
-                                    <p style={{"fontSize": "12px", "color": mutedColor, "marginBottom": "12px"}}>
+                                    <p className="rs-panel-hint"
+                                        style={{"color": mutedColor}}>
                                         Strengthen your argument by addressing opposing views
                                     </p>
                                     {counterargElements}
