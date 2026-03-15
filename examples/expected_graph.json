@@ -1,0 +1,185 @@
+{
+  "graph": {
+    "id": "graph_sample_remote_work",
+    "nodes": [
+      {
+        "id": "node_thesis_remote_work",
+        "type": "THESIS",
+        "label": "Thesis",
+        "content": "Remote work increases overall productivity.",
+        "status": "unsupported",
+        "position": { "x": 280, "y": 40 },
+        "confidence": 0.88,
+        "flags": ["needs_evidence"]
+      },
+      {
+        "id": "node_claim_commute",
+        "type": "CLAIM",
+        "label": "Claim 1",
+        "content": "Remote work saves commute time and energy.",
+        "status": "ok",
+        "position": { "x": 40, "y": 220 },
+        "confidence": 0.8,
+        "flags": []
+      },
+      {
+        "id": "node_claim_focus",
+        "type": "CLAIM",
+        "label": "Claim 2",
+        "content": "Remote work improves focus by reducing office distractions.",
+        "status": "unsupported",
+        "position": { "x": 280, "y": 220 },
+        "confidence": 0.68,
+        "flags": ["needs_evidence"]
+      },
+      {
+        "id": "node_claim_costs",
+        "type": "CLAIM",
+        "label": "Claim 3",
+        "content": "Companies can save money on office space.",
+        "status": "unsupported",
+        "position": { "x": 520, "y": 220 },
+        "confidence": 0.72,
+        "flags": ["needs_evidence"]
+      },
+      {
+        "id": "node_evidence_commute",
+        "type": "EVIDENCE",
+        "label": "Evidence 1",
+        "content": "The average commute is about 54 minutes a day.",
+        "status": "ok",
+        "position": { "x": 40, "y": 400 },
+        "confidence": 0.83,
+        "flags": []
+      },
+      {
+        "id": "node_assumption_productivity",
+        "type": "ASSUMPTION",
+        "label": "Assumption 1",
+        "content": "Saved commute time is redirected into productive work.",
+        "status": "ok",
+        "position": { "x": 220, "y": 400 },
+        "confidence": 0.74,
+        "flags": []
+      },
+      {
+        "id": "node_counter_isolation",
+        "type": "COUNTERARGUMENT",
+        "label": "Counterargument 1",
+        "content": "Remote workers can feel isolated and collaboration may suffer.",
+        "status": "contradicted",
+        "position": { "x": 520, "y": 400 },
+        "confidence": 0.77,
+        "flags": ["needs_response"]
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge_claim_commute_thesis",
+        "source": "node_claim_commute",
+        "target": "node_thesis_remote_work",
+        "type": "SUPPORTS"
+      },
+      {
+        "id": "edge_claim_focus_thesis",
+        "source": "node_claim_focus",
+        "target": "node_thesis_remote_work",
+        "type": "SUPPORTS"
+      },
+      {
+        "id": "edge_claim_costs_thesis",
+        "source": "node_claim_costs",
+        "target": "node_thesis_remote_work",
+        "type": "SUPPORTS"
+      },
+      {
+        "id": "edge_evidence_commute_claim",
+        "source": "node_evidence_commute",
+        "target": "node_claim_commute",
+        "type": "SUPPORTS"
+      },
+      {
+        "id": "edge_assumption_commute_claim",
+        "source": "node_assumption_productivity",
+        "target": "node_claim_commute",
+        "type": "DEPENDS_ON"
+      },
+      {
+        "id": "edge_counter_thesis",
+        "source": "node_counter_isolation",
+        "target": "node_thesis_remote_work",
+        "type": "CONTRADICTS"
+      }
+    ]
+  },
+  "score": {
+    "overall": 45,
+    "support": 0.25,
+    "premise": 1.0,
+    "consistency": 0.0
+  },
+  "issues": [
+    {
+      "id": "issue_thesis_unsupported",
+      "nodeId": "node_thesis_remote_work",
+      "severity": "high",
+      "type": "unsupported_claim",
+      "title": "Thesis needs direct support",
+      "description": "The thesis does not yet have direct evidence attached to it.",
+      "why": "The MVP scoring penalizes unsupported thesis-level claims heavily.",
+      "action": "Add evidence to the thesis or support a thesis claim with evidence."
+    },
+    {
+      "id": "issue_claim_focus_unsupported",
+      "nodeId": "node_claim_focus",
+      "severity": "high",
+      "type": "unsupported_claim",
+      "title": "Focus claim needs evidence",
+      "description": "The distraction claim is asserted but not supported by evidence.",
+      "why": "Unsupported claims reduce support coverage and weaken the outline export.",
+      "action": "Add a study, example, or data point."
+    },
+    {
+      "id": "issue_counter_unresolved",
+      "nodeId": "node_counter_isolation",
+      "severity": "medium",
+      "type": "unresolved_contradiction",
+      "title": "Counterargument is not addressed",
+      "description": "The isolation concern is present, but nothing answers it yet.",
+      "why": "Unresolved contradictions lower consistency.",
+      "action": "Add a response node or evidence that addresses the counterargument."
+    }
+  ],
+  "actions": [
+    {
+      "id": "action_add_evidence_focus",
+      "nodeId": "node_claim_focus",
+      "label": "Add evidence to the focus claim",
+      "kind": "add_evidence",
+      "priority": 1,
+      "reason": "This is the fastest path to improving the support score."
+    },
+    {
+      "id": "action_address_counter",
+      "nodeId": "node_counter_isolation",
+      "label": "Add a response to the isolation concern",
+      "kind": "add_counterargument",
+      "priority": 2,
+      "reason": "Addressing this contradiction improves consistency."
+    },
+    {
+      "id": "action_add_evidence_costs",
+      "nodeId": "node_claim_costs",
+      "label": "Add evidence to the office cost claim",
+      "kind": "add_evidence",
+      "priority": 3,
+      "reason": "This reduces the number of unsupported claims before export."
+    }
+  ],
+  "summary": {
+    "top_issue": "Two claims and the thesis need evidence.",
+    "issue_count": 4,
+    "weak_node_count": 4,
+    "export_warning": "Export now, but 3 claims are unsupported. Want to fix the top 3 issues first?"
+  }
+}
