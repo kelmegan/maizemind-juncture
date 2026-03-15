@@ -6,7 +6,7 @@ walker:pub InitContext {
     can run with Root entry {
         ctx = None;
 
-        for c in [AppContext] {
+        for c in [-->](?:AppContext) {
             ctx = c;
             break;
         }
@@ -23,7 +23,7 @@ walker:pub GetContext {
     can run with Root entry {
         ctx = None;
 
-        for c in [AppContext] {
+        for c in [-->](?:AppContext) {
             ctx = c;
             break;
         }
@@ -46,7 +46,7 @@ walker:pub UpdateContext {
     can run with Root entry {
         ctx = None;
 
-        for c in [AppContext] {
+        for c in [-->](?:AppContext) {
             ctx = c;
             break;
         }

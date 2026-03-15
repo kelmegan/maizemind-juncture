@@ -89,6 +89,18 @@ def analyze_and_summarize_llm(
 ) -> str
 by llm(temperature=0.2);
 
+"""Evaluate a single piece of evidence in the context of an argument.
+Return JSON: {"evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["assumption1","assumption2"],"confidence":0.3,"reasoning":"brief explanation of quality assessment"}
+evidence_category: empirical_data (scientific studies, statistics), expert_testimony (expert opinions, authoritative sources), anecdotal (personal stories, individual observations), logical_reasoning (logical deductions, philosophical arguments), analogy (comparisons to similar situations).
+confidence: 0.0-1.0 reflecting how strong this evidence actually is. Be critical and honest. Religious texts as evidence = 0.1-0.2. Personal observation = 0.1-0.3. Published studies = 0.7-0.9.
+assumptions: list any implicit assumptions this evidence relies on."""
+def:pub evaluate_single_evidence(
+    evidence_text: str,
+    thesis_text: str,
+    context_description: str
+) -> str
+by llm(temperature=0.2);
+
 
 # ============================================================
 # 3. JSON PARSING HELPERS

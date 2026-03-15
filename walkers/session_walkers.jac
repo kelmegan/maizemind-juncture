@@ -11,7 +11,7 @@ walker:pub CreateSession {
 
     can run with Root entry {
         graph_node = None;
-        for graph in [ArgumentGraph] {
+        for graph in [-->](?:ArgumentGraph) {
             if graph.id == self.graphId {
                 graph_node = graph;
                 break;
@@ -54,7 +54,7 @@ walker:pub GetUserSessions {
     can run with Root entry {
         sessions = [];
 
-        for s in [Session] {
+        for s in [-->](?:Session) {
             if s.userId == self.userId {
                 sessions.append(s);
             }
@@ -71,7 +71,7 @@ walker:pub CalculateUserStats {
     can run with Root entry {
         sessions = [];
 
-        for s in [Session] {
+        for s in [-->](?:Session) {
             if s.userId == self.userId {
                 sessions.append(s);
             }

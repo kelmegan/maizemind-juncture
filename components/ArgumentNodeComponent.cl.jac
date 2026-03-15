@@ -5,6 +5,7 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
     isSelected = props.isSelected if props.isSelected else False;
     isDimmed = props.isDimmed if props.isDimmed else False;
     isDark = props.isDark if props.isDark else False;
+    isGhost = props.isGhost if props.isGhost else False;
 
     nodeTypeConfig = {
         "THESIS":           {"fill": "#ede9fe", "stroke": "#7c3aed", "header": "#7c3aed", "text": "#5b21b6", "ht": "#fff", "label": "THESIS",
@@ -42,7 +43,8 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
     has_assumptions = len(node_assumptions) > 0;
 
     # Pre-compute header label
-    header_label = ev_cat_label if ev_cat_label else config["label"];
+    base_label = ev_cat_label if ev_cat_label else config["label"];
+    header_label = "SUGGESTED" if isGhost else base_label;
 
     # Colors based on theme
     fill_color = config["dfill"] if isDark else config["fill"];
@@ -78,10 +80,12 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
 
     w = 200;
     h = max(70, 32 + len(lines) * 17 + 12);
-    opacity_val = "0.15" if isDimmed else "1";
+    base_opacity = "0.5" if isGhost else "1";
+    opacity_val = "0.15" if isDimmed else base_opacity;
 
     sel_stroke = stroke_color;
     sel_width = "3" if isSelected else "1.5";
+    stroke_dash = "6,3" if isGhost else "none";
 
     # Build text line elements in a loop (avoids two-param lambda)
     line_elements = [];
@@ -106,7 +110,8 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
             ) if isSelected else None}
 
             <rect x={str(-w/2)} y={str(-h/2)} width={str(w)} height={str(h)}
-                rx="14" fill={fill_color} stroke={sel_stroke} strokeWidth={sel_width} />
+                rx="14" fill={fill_color} stroke={sel_stroke} strokeWidth={sel_width}
+                strokeDasharray={stroke_dash} />
 
             <rect x={str(-w/2)} y={str(-h/2)} width={str(w)} height="26"
                 rx="14" fill={header_color} />
@@ -138,6 +143,14 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
             {(
                 <circle cx={str(w/2 - 30)} cy={str(h/2 - 14)} r="5" fill="#f59e0b" opacity="0.8" />
             ) if has_assumptions else None}
+
+            {(
+                <g>
+                    <circle cx="0" cy={str(h/2 + 10)} r="10" fill="#ef4444" opacity="0.8" />
+                    <text x="0" y={str(h/2 + 14)} fontSize="13" fill="#fff"
+                        textAnchor="middle" fontWeight="700">+</text>
+                </g>
+            ) if isGhost else None}
         </g>
     );
 }

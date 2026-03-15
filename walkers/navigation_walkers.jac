@@ -7,7 +7,7 @@ walker:pub NavigateTo {
 
     can run with Root entry {
         ctx = None;
-        for c in [AppContext] {
+        for c in [-->](?:AppContext) {
             ctx = c;
             break;
         }

@@ -139,17 +139,22 @@ walker:pub GenerateArgumentGraph {
             if not isinstance(node_assumptions, list) {
                 node_assumptions = [];
             }
+            # Capitalize each assumption
+            capped_assumptions: list = [];
+            for assumption in node_assumptions {
+                capped_assumptions.append(self.capitalize_text(str(assumption)));
+            }
 
             fe_nodes.append({
                 "id": nid,
                 "type": fe_type,
-                "content": n.get("text", ""),
+                "content": self.capitalize_text(n.get("text", "")),
                 "confidence": conf,
                 "isWeak": conf < 0.5,
                 "issues": issues_list,
                 "position": {"x": x_pos, "y": y_pos},
                 "evidence_category": ev_cat,
-                "assumptions": node_assumptions,
+                "assumptions": capped_assumptions,
                 "nodeScore": 50
             });
         }
@@ -280,18 +285,20 @@ walker:pub GenerateArgumentGraph {
         thin_support_ids: list[str] = [];
         for c in claim_nodes {
             supporters: list[str] = [];
-            sup_qualities: list[float] = [];
+            sup_strengths: list[float] = [];
             for e in fe_edges {
                 if e.get("target") == c["id"] and e.get("type") == "SUPPORTS" {
-                    supporters.append(e.get("source", ""));
-                    q = evidence_quality.get(e.get("source", ""), 0.5);
-                    sup_qualities.append(q);
+                    src_id = e.get("source", "");
+                    supporters.append(src_id);
+                    e_weight = float(e.get("weight", 0.5));
+                    q = evidence_quality.get(src_id, 0.5);
+                    sup_strengths.append(e_weight * q);
                 }
             }
-            # Per-node score for claims: weighted avg of supporter quality
-            if sup_qualities {
-                avg_q = sum(sup_qualities) / len(sup_qualities);
-                c["nodeScore"] = int(avg_q * 100);
+            # Per-node score for claims: weighted avg of (edge_weight * evidence_quality)
+            if sup_strengths {
+                avg_strength = sum(sup_strengths) / len(sup_strengths);
+                c["nodeScore"] = int(avg_strength * 100);
             } else {
                 c["nodeScore"] = 0;
             }
@@ -304,51 +311,51 @@ walker:pub GenerateArgumentGraph {
         }
 
         # --- Step 6: Calculate global score ---
+        # Uses edge weights and evidence quality for accurate scoring
         total_claims = len(claim_nodes);
         if total_claims > 0 {
-            supported_ids_list: list[str] = [];
-            for e in fe_edges {
-                if e.get("type") == "SUPPORTS" {
-                    supported_ids_list.append(e.get("target", ""));
-                }
-            }
-            supported_count = len([c for c in claim_nodes if c["id"] in supported_ids_list]);
-            support_val = int(supported_count / total_claims * 100);
-
-            # Penalty: low quality evidence
-            weak_evidence_penalty = 0;
+            # --- Support: weighted average of (edge_weight * evidence_quality) per claim ---
+            claim_support_scores: list[float] = [];
             for c in claim_nodes {
-                if c["id"] in supported_ids_list {
-                    all_sup: list[str] = [];
-                    for e in fe_edges {
-                        if e.get("target") == c["id"] and e.get("type") == "SUPPORTS" {
-                            all_sup.append(e.get("source", ""));
-                        }
-                    }
-                    all_sup_weak = True;
-                    for sid in all_sup {
-                        if sid not in weak_ids {
-                            all_sup_weak = False;
-                            break;
-                        }
-                    }
-                    if all_sup_weak and len(all_sup) > 0 {
-                        weak_evidence_penalty = weak_evidence_penalty + 20;
+                sup_strengths: list[float] = [];
+                for e in fe_edges {
+                    if e.get("target") == c["id"] and e.get("type") == "SUPPORTS" {
+                        src_id = e.get("source", "");
+                        e_weight = float(e.get("weight", 0.5));
+                        eq = evidence_quality.get(src_id, 0.5);
+                        sup_strengths.append(e_weight * eq);
                     }
                 }
+                if sup_strengths {
+                    avg_strength = sum(sup_strengths) / len(sup_strengths);
+                    # Penalty for thin support (only 1 evidence)
+                    if len(sup_strengths) == 1 {
+                        avg_strength = avg_strength * 0.7;
+                    }
+                    claim_support_scores.append(avg_strength);
+                } else {
+                    claim_support_scores.append(0.0);
+                }
             }
-            if weak_evidence_penalty > 40 { weak_evidence_penalty = 40; }
-
-            thin_penalty = len(thin_support_ids) * 10;
-            if thin_penalty > 20 { thin_penalty = 20; }
-
-            support_val = support_val - weak_evidence_penalty - thin_penalty;
+            support_val = int(sum(claim_support_scores) / len(claim_support_scores) * 100);
+            if support_val > 100 { support_val = 100; }
             if support_val < 0 { support_val = 0; }
 
+            # --- Premise: average node scores across claims ---
+            claim_scores: list[float] = [];
+            for c in claim_nodes {
+                ns = c.get("nodeScore", 50);
+                claim_scores.append(float(ns));
+            }
+            premise_val = int(sum(claim_scores) / len(claim_scores));
+            # Also penalize for weak nodes
             claims_weak = len([c for c in claim_nodes if c["id"] in weak_ids]);
-            premise_val = int((1 - claims_weak / total_claims) * 100);
+            weak_penalty = int(claims_weak / total_claims * 30);
+            premise_val = premise_val - weak_penalty;
+            if premise_val > 100 { premise_val = 100; }
             if premise_val < 0 { premise_val = 0; }
 
+            # --- Consistency: penalize missing counterarguments ---
             counterarg_nodes = [n for n in fe_nodes if n["type"] == "COUNTERARGUMENT"];
             addr_ids: list[str] = [];
             for e in fe_edges {
@@ -360,7 +367,8 @@ walker:pub GenerateArgumentGraph {
                 unresolved = len([ca for ca in counterarg_nodes if ca["id"] not in addr_ids]);
                 consistency_val = int((1 - unresolved / len(counterarg_nodes)) * 100);
             } else {
-                consistency_val = 100;
+                # No counterarguments = unexamined argument, cap at 50
+                consistency_val = 50;
             }
 
             overall_val = int(0.4 * support_val + 0.4 * premise_val + 0.2 * consistency_val);
@@ -588,6 +596,30 @@ walker:pub GenerateArgumentGraph {
             report {"error": str(e)};
         }
     }
+
+    def capitalize_text(text: str) -> str {
+        """Sentence-case: capitalize first letter of each sentence."""
+        result = text;
+        if len(text) > 0 {
+            sentences = text.split(". ");
+            result_parts: list = [];
+            for s in sentences {
+                trimmed = s.strip();
+                if len(trimmed) > 1 {
+                    capped = trimmed[0].upper() + trimmed[1:];
+                    result_parts.append(capped);
+                } elif len(trimmed) == 1 {
+                    result_parts.append(trimmed[0].upper());
+                } else {
+                    result_parts.append(trimmed);
+                }
+            }
+            result = ". ".join(result_parts);
+        } else {
+            result = text;
+        }
+        return result;
+    }
 }
 
 walker:pub GetGraphWithScoring {
@@ -595,7 +627,7 @@ walker:pub GetGraphWithScoring {
 
     can run with Root entry {
         graph_node = None;
-        for graph in [ArgumentGraph] {
+        for graph in [-->](?:ArgumentGraph) {
             if graph.id == self.graphId {
                 graph_node = graph;
                 break;
@@ -607,8 +639,17 @@ walker:pub GetGraphWithScoring {
             return;
         }
 
+        # Re-compute per-node scores before reporting
+        self.update_node_scores(graph_node.nodes, graph_node.edges);
+
         report {
-            "graph": graph_node,
+            "graph": {
+                "id": graph_node.id,
+                "nodes": graph_node.nodes,
+                "edges": graph_node.edges,
+                "createdAt": graph_node.createdAt,
+                "updatedAt": graph_node.updatedAt
+            },
             "score": self.calculate_score(graph_node.nodes, graph_node.edges),
             "issues": self.identify_issues(graph_node.nodes, graph_node.edges)
         };
@@ -682,6 +723,64 @@ walker:pub GetGraphWithScoring {
         return weak_ids;
     }
 
+    def update_node_scores(nodes: list, edges: list) -> None {
+        """Re-compute nodeScore for all nodes based on current metadata."""
+        category_weights: dict[str, float] = {
+            "empirical_data": 0.9, "expert_testimony": 0.8,
+            "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
+        };
+        weak_ids = self.find_weak_nodes(nodes, edges);
+
+        for n in nodes {
+            ntype = n.get("type", "");
+            if ntype == "EVIDENCE" {
+                ev_cat = n.get("evidence_category", "logical_reasoning");
+                if not ev_cat { ev_cat = "logical_reasoning"; }
+                base = category_weights.get(ev_cat, 0.6);
+                assumption_count = len(n.get("assumptions", []));
+                quality = base - assumption_count * 0.15;
+                if quality < 0.1 { quality = 0.1; }
+                # Factor in confidence
+                conf = n.get("confidence", 0.5);
+                if isinstance(conf, str) {
+                    try { conf = float(conf); } except Exception { conf = 0.5; }
+                }
+                combined = quality * 0.6 + conf * 0.4;
+                n["nodeScore"] = int(combined * 100);
+                n["isWeak"] = combined < 0.4;
+            } elif ntype in ["CLAIM", "THESIS"] {
+                # Claims/thesis scored by support quality
+                supporting_ev: list = [];
+                for e in edges {
+                    if e.get("target") == n["id"] and e.get("type") == "SUPPORTS" {
+                        supporting_ev.append(e.get("source", ""));
+                    }
+                }
+                if len(supporting_ev) > 0 {
+                    total_q = 0.0;
+                    for sid in supporting_ev {
+                        for sn in nodes {
+                            if sn["id"] == sid {
+                                total_q = total_q + sn.get("nodeScore", 50) / 100.0;
+                                break;
+                            }
+                        }
+                    }
+                    avg_q = total_q / len(supporting_ev);
+                    n["nodeScore"] = int(avg_q * 100);
+                } else {
+                    n["nodeScore"] = 0;
+                }
+                n["isWeak"] = n["id"] in weak_ids;
+            } elif ntype == "COUNTERARGUMENT" {
+                # Counterarguments keep their score or get 50 default
+                if "nodeScore" not in n {
+                    n["nodeScore"] = 50;
+                }
+            }
+        }
+    }
+
     def calculate_score(nodes: list, edges: list) -> dict {
         category_weights: dict[str, float] = {
             "empirical_data": 0.9, "expert_testimony": 0.8,
@@ -707,63 +806,70 @@ walker:pub GetGraphWithScoring {
             quality = base - assumption_count * 0.15;
             if quality < 0.1 { quality = 0.1; }
             evidence_quality[ev["id"]] = quality;
+            ev["nodeScore"] = int(quality * 100);
         }
 
-        # --- Support coverage ---
-        supported_ids: list[str] = [];
-        for e in edges {
-            if e.get("type") == "SUPPORTS" {
-                supported_ids.append(e.get("target", ""));
-            }
-        }
-        supported_count = len([c for c in claims if c["id"] in supported_ids]);
-        support_score = int(supported_count / total_claims * 100);
-
-        # Penalty: low quality evidence
-        weak_evidence_penalty = 0;
+        # Per-node scores for claims (weighted avg of supporter quality * edge weight)
         for c in claims {
-            if c["id"] in supported_ids {
-                all_sup: list[str] = [];
-                for e in edges {
-                    if e.get("target") == c["id"] and e.get("type") == "SUPPORTS" {
-                        all_sup.append(e.get("source", ""));
-                    }
-                }
-                all_sup_weak = True;
-                for sid in all_sup {
-                    if sid not in weak_ids {
-                        all_sup_weak = False;
-                        break;
-                    }
-                }
-                if all_sup_weak and len(all_sup) > 0 {
-                    weak_evidence_penalty = weak_evidence_penalty + 20;
-                }
-            }
-        }
-        if weak_evidence_penalty > 40 { weak_evidence_penalty = 40; }
-
-        thin_penalty = 0;
-        for c in claims {
-            sups: list[str] = [];
+            sup_qualities: list[float] = [];
             for e in edges {
                 if e.get("target") == c["id"] and e.get("type") == "SUPPORTS" {
-                    sups.append(e.get("source", ""));
+                    src_id = e.get("source", "");
+                    e_weight = float(e.get("weight", 0.5));
+                    eq = evidence_quality.get(src_id, 0.5);
+                    sup_qualities.append(e_weight * eq);
                 }
             }
-            if len(sups) == 1 { thin_penalty = thin_penalty + 10; }
+            if sup_qualities {
+                c["nodeScore"] = int(sum(sup_qualities) / len(sup_qualities) * 100);
+            } else {
+                c["nodeScore"] = 0;
+            }
         }
-        if thin_penalty > 20 { thin_penalty = 20; }
 
-        support_score = support_score - weak_evidence_penalty - thin_penalty;
+        # --- Support: weighted average of (edge_weight * evidence_quality) per claim ---
+        claim_support_scores: list[float] = [];
+        supported_count = 0;
+        for c in claims {
+            sup_strengths: list[float] = [];
+            for e in edges {
+                if e.get("target") == c["id"] and e.get("type") == "SUPPORTS" {
+                    src_id = e.get("source", "");
+                    e_weight = float(e.get("weight", 0.5));
+                    eq = evidence_quality.get(src_id, 0.5);
+                    sup_strengths.append(e_weight * eq);
+                }
+            }
+            if sup_strengths {
+                supported_count = supported_count + 1;
+                avg_strength = sum(sup_strengths) / len(sup_strengths);
+                # Penalty for thin support (only 1 evidence)
+                if len(sup_strengths) == 1 {
+                    avg_strength = avg_strength * 0.7;
+                }
+                claim_support_scores.append(avg_strength);
+            } else {
+                claim_support_scores.append(0.0);
+            }
+        }
+        support_score = int(sum(claim_support_scores) / len(claim_support_scores) * 100);
+        if support_score > 100 { support_score = 100; }
         if support_score < 0 { support_score = 0; }
 
-        # --- Premise ---
+        # --- Premise: average node scores across claims ---
+        claim_scores: list[float] = [];
+        for c in claims {
+            ns = c.get("nodeScore", 50);
+            claim_scores.append(float(ns));
+        }
+        premise_score = int(sum(claim_scores) / len(claim_scores));
         claims_weak = len([c for c in claims if c["id"] in weak_ids]);
-        premise_score = int((1 - claims_weak / total_claims) * 100);
+        weak_penalty = int(claims_weak / total_claims * 30);
+        premise_score = premise_score - weak_penalty;
+        if premise_score > 100 { premise_score = 100; }
         if premise_score < 0 { premise_score = 0; }
 
-        # --- Consistency ---
+        # --- Consistency: penalize missing counterarguments ---
         counterargs = [n for n in nodes if n["type"] == "COUNTERARGUMENT"];
         addressed_ids: list[str] = [];
         for e in edges {
@@ -775,7 +881,8 @@ walker:pub GetGraphWithScoring {
             unresolved = len([ca for ca in counterargs if ca["id"] not in addressed_ids]);
             consistency_score = int((1 - unresolved / len(counterargs)) * 100);
         } else {
-            consistency_score = 100;
+            # No counterarguments = unexamined argument, cap at 50
+            consistency_score = 50;
         }
 
         overall = int(0.4 * support_score + 0.4 * premise_score + 0.2 * consistency_score);

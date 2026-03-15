@@ -14,7 +14,8 @@ def:pub AppRouter -> JsxElement {
         screenData: dict = {},
         cachedGraphData: any = None,
         cachedScoreData: any = None,
-        cachedIssuesData: list = [];
+        cachedIssuesData: list = [],
+        cachedCounterargSuggestions: list = [];
 
     async def loadContext() -> None {
         try {
@@ -47,13 +48,17 @@ def:pub AppRouter -> JsxElement {
         if "issuesData" in data {
             cachedIssuesData = data["issuesData"];
         }
+        if "suggestedCounterarguments" in data {
+            cachedCounterargSuggestions = data["suggestedCounterarguments"];
+        }
 
         # When navigating to review without data, use cached
         if screen == "review" and "graphData" not in data and cachedGraphData {
             data = {
                 "graphData": cachedGraphData,
                 "scoreData": cachedScoreData,
-                "issuesData": cachedIssuesData
+                "issuesData": cachedIssuesData,
+                "suggestedCounterarguments": cachedCounterargSuggestions
             };
         }
 

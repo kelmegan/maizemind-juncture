@@ -71,6 +71,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
             graphData = data["graph"] if "graph" in data else {};
             scoreData = data["score"] if "score" in data else {};
             issuesData = data["issues"] if "issues" in data else [];
+            counterargSuggestions = data["suggested_counterarguments"] if "suggested_counterarguments" in data else [];
 
             # Check for empty graph (LLM returned nothing)
             nodes_list = graphData["nodes"] if "nodes" in graphData else [];
@@ -86,7 +87,8 @@ def:pub GenerateScreen(props: any) -> JsxElement {
             navigate("review", {
                 "graphData": graphData,
                 "scoreData": scoreData,
-                "issuesData": issuesData
+                "issuesData": issuesData,
+                "suggestedCounterarguments": counterargSuggestions
             });
 
             try {

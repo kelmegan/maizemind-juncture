@@ -29,7 +29,7 @@ walker:pub GetUserProfile {
     can run with Root entry {
         user_node = None;
 
-        for user in [User] {
+        for user in [-->](?:User) {
             if user.id == self.userId {
                 user_node = user;
                 break;
@@ -52,7 +52,7 @@ walker:pub UpdateUserProfile {
     can run with Root entry {
         user_node = None;
 
-        for user in [User] {
+        for user in [-->](?:User) {
             if user.id == self.userId {
                 user_node = user;
                 break;

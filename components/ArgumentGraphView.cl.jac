@@ -10,6 +10,7 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
     nodes       = list(props.nodes) if props.nodes else [];
     edges       = list(props.edges) if props.edges else [];
     onNodeClick = props.onNodeClick if props.onNodeClick else None;
+    onGhostAccept = props.onGhostAccept if props.onGhostAccept else None;
     selectedNodeId = props.selectedNodeId if props.selectedNodeId else None;
     isDark      = props.isDark if props.isDark else False;
     focusBranch = props.focusBranch if props.focusBranch else None;
@@ -25,11 +26,11 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         "SUPPORTS": "SUP", "CONTRADICTS": "CON",
         "ADDRESSES": "ADR"
     };
-    # Reasoning type short labels for edge display
+    # Reasoning type labels for edge display
     REASONING_LABELS = {
-        "deductive": "DED", "inductive": "IND",
-        "causal": "CAUSE", "correlational": "CORR",
-        "analogical": "ANAL"
+        "deductive": "logic", "inductive": "infer",
+        "causal": "cause", "correlational": "corr.",
+        "analogical": "analog"
     };
 
     has nodePositions: dict    = {},
@@ -430,7 +431,17 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
     }
 
     def handleNodeClickInternal(nodeItem: dict) -> None {
-        if onNodeClick and not dragDidMove { onNodeClick(nodeItem); }
+        if not dragDidMove {
+            is_ghost = nodeItem["isGhost"] if "isGhost" in nodeItem else False;
+            if is_ghost and onGhostAccept {
+                # Ghost nodes trigger accept flow instead of selection
+                ghost_target = nodeItem["ghostTarget"] if "ghostTarget" in nodeItem else "";
+                ghost_text = nodeItem["content"] if "content" in nodeItem else "";
+                onGhostAccept({"text": ghost_text, "target_node": ghost_target});
+            } elif onNodeClick {
+                onNodeClick(nodeItem);
+            }
+        }
     }
 
     # ── Build edge SVG elements ──
@@ -454,34 +465,63 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         if e_type == "CONTRADICTS" { mkr_id = "mk-con"; }
         elif e_type == "ADDRESSES" { mkr_id = "mk-adr"; }
 
+        is_ghost_edge = cur_e["isGhost"] if "isGhost" in cur_e else False;
         both_in = isInBranch(cur_e["source"]) and isInBranch(cur_e["target"]);
-        e_opacity = "0.7" if both_in else "0.1";
-        e_width = "2" if both_in else "1";
+        e_opacity = "0.25" if is_ghost_edge else ("0.7" if both_in else "0.1");
+        e_width = "1.5" if is_ghost_edge else ("2" if both_in else "1");
+        if is_ghost_edge { dash = "4,3"; }
+
+        e_weight = cur_e["weight"] if "weight" in cur_e else None;
+
+        # Show weight percentage on edge if available (never for ghost edges)
+        show_edge_label = False;
+        edge_label_text = "";
+        if e_weight is not None and not is_ghost_edge {
+            try {
+                w_val = int(float(e_weight) * 100);
+                edge_label_text = f"{w_val}%";
+                show_edge_label = True;
+            } except Exception {
+                show_edge_label = False;
+            }
+        }
 
         label_bg = "#13131f" if isDark else "#fff";
         label_border = "rgba(255,255,255,0.07)" if isDark else "rgba(0,0,0,0.08)";
-        label_text = EDGE_LABELS[e_type] if e_type in EDGE_LABELS else "REL";
+        lbl_half_w = 20 if show_edge_label else 0;
 
-        e_weight = cur_e["weight"] if "weight" in cur_e else None;
-        e_reasoning = cur_e["reasoning_type"] if "reasoning_type" in cur_e else "";
-        reasoning_label = REASONING_LABELS[e_reasoning] if e_reasoning in REASONING_LABELS else "";
-        # Show reasoning type label if available, otherwise edge type
-        display_label = reasoning_label if reasoning_label else label_text;
-
-        edge_elements.append(
-            <g key={cur_e["id"]} opacity={e_opacity}>
-                <path d={path_d} stroke={color} strokeWidth={e_width}
-                      strokeDasharray={dash} fill="none"
-                      markerEnd={f"url(#{mkr_id})"} />
-                <rect x={str(mx - 20)} y={str(mid_y - 10)} width="40" height="20" rx="10"
-                      fill={label_bg} stroke={label_border} strokeWidth="1" />
-                <text x={str(mx)} y={str(mid_y + 4)} textAnchor="middle" fontSize="9"
-                      fill={color} fontWeight="600" fontFamily="DM Sans, sans-serif">
-                    {display_label}
-                </text>
-            </g>
-        );
+        if show_edge_label {
+            edge_elements.append(
+                <g key={cur_e["id"]} opacity={e_opacity}>
+                    <path d={path_d} stroke={color} strokeWidth={e_width}
+                          strokeDasharray={dash} fill="none"
+                          markerEnd={f"url(#{mkr_id})"} />
+                    <rect x={str(mx - lbl_half_w)} y={str(mid_y - 10)} width={str(lbl_half_w * 2)} height="20" rx="10"
+                          fill={label_bg} stroke={label_border} strokeWidth="1" />
+                    <text x={str(mx)} y={str(mid_y + 4)} textAnchor="middle" fontSize="8.5"
+                          fill={color} fontWeight="600" fontFamily="DM Sans, sans-serif">
+                        {edge_label_text}
+                    </text>
+                </g>
+            );
+        } else {
+            edge_elements.append(
+                <g key={cur_e["id"]} opacity={e_opacity}>
+                    <path d={path_d} stroke={color} strokeWidth={e_width}
+                          strokeDasharray={dash} fill="none"
+                          markerEnd={f"url(#{mkr_id})"} />
+                </g>
+            );
+        }
         ei = ei + 1;
+    }
+
+    # ── Helper functions for proper closure binding in while loops ──
+    def makeNodeClickHandler(item: dict) -> any {
+        return lambda -> None { handleNodeClickInternal(item); };
+    }
+    def makeNodeMouseDownHandler(nodeId: str) -> any {
+        return lambda e -> None { handleNodeMouseDown(e, nodeId); };
     }
 
     # ── Build node SVG elements ──
@@ -496,18 +536,22 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         node_cursor = "grabbing" if is_dragging else "grab";
         nid = node_item["id"];
 
+        is_ghost_node = node_item["isGhost"] if "isGhost" in node_item else False;
+        node_click_fn = makeNodeClickHandler(node_item);
+        node_md_fn = makeNodeMouseDownHandler(nid);
         node_elements.append(
             <g key={nid}
                 transform={f"translate({pos['x']}, {pos['y']})"}
                 style={{"cursor": node_cursor, "transition": "transform 0.05s ease-out" if not is_dragging else "none"}}
-                onMouseDown={lambda e -> None { handleNodeMouseDown(e, nid); }}
-                onClick={lambda -> None { handleNodeClickInternal(node_item); }}
+                onMouseDown={node_md_fn}
+                onClick={node_click_fn}
             >
                 <ArgumentNodeComponent
                     node={node_item}
                     isSelected={is_sel}
                     isDimmed={is_dim}
                     isDark={isDark}
+                    isGhost={is_ghost_node}
                 />
             </g>
         );
