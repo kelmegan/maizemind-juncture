@@ -41,6 +41,24 @@ walker:pub GetUserProfile {
 }
 
 
+walker:pub GetUserByEmail {
+    has email: str;
+
+    can run with Root entry {
+        user_node = None;
+
+        for user in [-->](?:User) {
+            if user.email == self.email {
+                user_node = user;
+                break;
+            }
+        }
+
+        report user_node;
+    }
+}
+
+
 walker:pub UpdateUserProfile {
     has userId: str,
         name: str = None,

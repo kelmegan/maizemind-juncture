@@ -75,6 +75,7 @@ walker:pub AddEvidenceToNode {
             "confidence": ev_confidence,
             "isWeak": ev_confidence < 0.5,
             "issues": [],
+            "llmIssueTypes": [],
             "position": {"x": new_x, "y": new_y},
             "evidence_category": ev_category,
             "assumptions": ev_assumptions,
@@ -101,7 +102,8 @@ walker:pub AddEvidenceToNode {
             "success": True,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
             "score": scored_data.get("score", {}),
-            "issues": scored_data.get("issues", [])
+            "issues": scored_data.get("issues", []),
+            "nextActions": scored_data.get("nextActions", [])
         };
         } except Exception as e {
             print(f"AddEvidenceToNode ERROR: {e}");
@@ -111,7 +113,7 @@ walker:pub AddEvidenceToNode {
 }
 
 
-walker:pub AddAssumptionToEvidence {
+walker:pub AddAssumptionToNode {
     has graphId: str,
         nodeId: str,
         assumptionText: str;
@@ -131,32 +133,60 @@ walker:pub AddAssumptionToEvidence {
             return;
         }
 
-        for node in graph_node.nodes {
-            if node["id"] == self.nodeId {
-                existing_assumptions = node.get("assumptions", []);
-                if not isinstance(existing_assumptions, list) {
-                    existing_assumptions = [];
-                }
-                existing_assumptions.append(self.assumptionText);
-                updated_node = {
-                    "id": node["id"],
-                    "type": node["type"],
-                    "content": node["content"],
-                    "position": node["position"],
-                    "assumptions": existing_assumptions,
-                    "evidence_category": node.get("evidence_category", ""),
-                    "confidence": node.get("confidence", 0.5),
-                    "isWeak": node.get("isWeak", False),
-                    "issues": node.get("issues", []),
-                    "nodeScore": node.get("nodeScore", 50),
-                    "sourceUrl": node.get("sourceUrl", ""),
-                    "moreInfo": node.get("moreInfo", "")
-                };
-                idx = graph_node.nodes.index(node);
-                graph_node.nodes[idx] = updated_node;
-                break;
+        assumption_id = f"node_assumption_{int(time.time())}";
+
+        # Capitalize first letter of assumption content
+        assumption_content = self.assumptionText.strip();
+        if len(assumption_content) > 1 {
+            assumption_content = assumption_content[0].upper() + assumption_content[1:];
+        } elif len(assumption_content) == 1 {
+            assumption_content = assumption_content[0].upper();
+        }
+
+        # Position below target node, offset by existing assumptions
+        target_pos_x = 0.0;
+        target_pos_y = 0.0;
+        assumption_count = 0;
+        for tn in graph_node.nodes {
+            if tn["id"] == self.nodeId {
+                tp = tn.get("position", {"x": 0, "y": 0});
+                target_pos_x = float(tp.get("x", 0));
+                target_pos_y = float(tp.get("y", 0));
             }
         }
+        for te in graph_node.edges {
+            if te.get("target") == self.nodeId and te.get("type") == "DEPENDS_ON" {
+                assumption_count = assumption_count + 1;
+            }
+        }
+
+        new_assumption = {
+            "id": assumption_id,
+            "type": "ASSUMPTION",
+            "content": assumption_content,
+            "confidence": 0.5,
+            "isWeak": False,
+            "issues": [],
+            "llmIssueTypes": [],
+            "position": {
+                "x": target_pos_x - 180.0 + assumption_count * 200.0,
+                "y": target_pos_y + 140.0
+            },
+            "evidence_category": "",
+            "assumptions": [],
+            "nodeScore": 65,
+            "sourceUrl": "",
+            "moreInfo": ""
+        };
+        graph_node.nodes.append(new_assumption);
+
+        new_edge = {
+            "id": f"edge_dep_{assumption_id}",
+            "source": assumption_id,
+            "target": self.nodeId,
+            "type": "DEPENDS_ON"
+        };
+        graph_node.edges.append(new_edge);
 
         graph_node.updatedAt = str(int(time.time()));
 
@@ -167,10 +197,11 @@ walker:pub AddAssumptionToEvidence {
             "success": True,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
             "score": scored_data.get("score", {}),
-            "issues": scored_data.get("issues", [])
+            "issues": scored_data.get("issues", []),
+            "nextActions": scored_data.get("nextActions", [])
         };
         } except Exception as e {
-            print(f"AddAssumptionToEvidence ERROR: {e}");
+            print(f"AddAssumptionToNode ERROR: {e}");
             report {"error": str(e)};
         }
     }
@@ -216,11 +247,13 @@ walker:pub UpdateNodeContent {
                     "confidence": node.get("confidence", 0.5),
                     "isWeak": node.get("isWeak", False),
                     "issues": node.get("issues", []),
+                    "llmIssueTypes": node.get("llmIssueTypes", []),
                     "evidence_category": node.get("evidence_category", ""),
                     "assumptions": node.get("assumptions", []),
                     "nodeScore": node.get("nodeScore", 50),
                     "sourceUrl": node.get("sourceUrl", ""),
-                    "moreInfo": node.get("moreInfo", "")
+                    "moreInfo": node.get("moreInfo", ""),
+                    "acknowledged": node.get("acknowledged", False)
                 };
                 idx = graph_node.nodes.index(node);
                 graph_node.nodes[idx] = updated_node;
@@ -237,7 +270,8 @@ walker:pub UpdateNodeContent {
             "success": True,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
             "score": scored_data.get("score", {}),
-            "issues": scored_data.get("issues", [])
+            "issues": scored_data.get("issues", []),
+            "nextActions": scored_data.get("nextActions", [])
         };
         } except Exception as e {
             print(f"UpdateNodeContent ERROR: {e}");
@@ -280,7 +314,8 @@ walker:pub DeleteNode {
             "success": True,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
             "score": scored_data.get("score", {}),
-            "issues": scored_data.get("issues", [])
+            "issues": scored_data.get("issues", []),
+            "nextActions": scored_data.get("nextActions", [])
         };
         } except Exception as e {
             print(f"DeleteNode ERROR: {e}");
@@ -347,6 +382,7 @@ walker:pub AddCounterargumentNode {
             "confidence": 0.5,
             "isWeak": False,
             "issues": [],
+            "llmIssueTypes": [],
             "position": {"x": new_x, "y": new_y},
             "evidence_category": "",
             "assumptions": [],
@@ -372,7 +408,8 @@ walker:pub AddCounterargumentNode {
             "success": True,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
             "score": scored_data.get("score", {}),
-            "issues": scored_data.get("issues", [])
+            "issues": scored_data.get("issues", []),
+            "nextActions": scored_data.get("nextActions", [])
         };
         } except Exception as e {
             print(f"AddCounterargumentNode ERROR: {e}");
@@ -432,6 +469,7 @@ walker:pub AddAddressEdge {
             "confidence": 0.5,
             "isWeak": False,
             "issues": [],
+            "llmIssueTypes": [],
             "position": {"x": new_x, "y": new_y},
             "evidence_category": "logical_reasoning",
             "assumptions": [],
@@ -465,7 +503,8 @@ walker:pub AddAddressEdge {
             "success": True,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
             "score": scored_data.get("score", {}),
-            "issues": scored_data.get("issues", [])
+            "issues": scored_data.get("issues", []),
+            "nextActions": scored_data.get("nextActions", [])
         };
         } except Exception as e {
             print(f"AddAddressEdge ERROR: {e}");
@@ -593,9 +632,13 @@ walker:pub EvaluateNewNode {
                 "confidence": ev_confidence,
                 "isWeak": ev_confidence < 0.5,
                 "issues": target_node.get("issues", []),
+                "llmIssueTypes": target_node.get("llmIssueTypes", []),
                 "evidence_category": ev_category,
                 "assumptions": capped_assumptions,
-                "nodeScore": node_score
+                "nodeScore": node_score,
+                "sourceUrl": target_node.get("sourceUrl", ""),
+                "moreInfo": target_node.get("moreInfo", ""),
+                "acknowledged": target_node.get("acknowledged", False)
             };
 
             # Replace node in graph
@@ -726,6 +769,7 @@ walker:pub GenerateCounter {
             "confidence": 0.5,
             "isWeak": False,
             "issues": [],
+            "llmIssueTypes": [],
             "position": {"x": new_x, "y": new_y},
             "evidence_category": "",
             "assumptions": [],
@@ -749,7 +793,8 @@ walker:pub GenerateCounter {
             "generatedText": ca_text,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
             "score": scored_data.get("score", {}),
-            "issues": scored_data.get("issues", [])
+            "issues": scored_data.get("issues", []),
+            "nextActions": scored_data.get("nextActions", [])
         };
         } except Exception as e {
             print(f"GenerateCounter ERROR: {e}");
@@ -843,11 +888,13 @@ walker:pub ClarifyNode {
             "confidence": target_node.get("confidence", 0.5),
             "isWeak": target_node.get("isWeak", False),
             "issues": target_node.get("issues", []),
+            "llmIssueTypes": target_node.get("llmIssueTypes", []),
             "evidence_category": target_node.get("evidence_category", ""),
             "assumptions": target_node.get("assumptions", []),
             "nodeScore": target_node.get("nodeScore", 50),
             "moreInfo": more_info,
-            "sourceUrl": target_node.get("sourceUrl", "")
+            "sourceUrl": target_node.get("sourceUrl", ""),
+            "acknowledged": target_node.get("acknowledged", False)
         };
 
         new_nodes: list = [];
@@ -869,7 +916,8 @@ walker:pub ClarifyNode {
             "moreInfo": more_info,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
             "score": scored_data.get("score", {}),
-            "issues": scored_data.get("issues", [])
+            "issues": scored_data.get("issues", []),
+            "nextActions": scored_data.get("nextActions", [])
         };
         } except Exception as e {
             print(f"ClarifyNode ERROR: {e}");
@@ -1018,6 +1066,7 @@ walker:pub ExpandBranch {
                 "confidence": b_confidence,
                 "isWeak": b_confidence < 0.5,
                 "issues": [],
+                "llmIssueTypes": [],
                 "position": {"x": new_x, "y": new_y},
                 "evidence_category": b_category,
                 "assumptions": [],
@@ -1046,7 +1095,8 @@ walker:pub ExpandBranch {
             "branchCount": branch_idx,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
             "score": scored_data.get("score", {}),
-            "issues": scored_data.get("issues", [])
+            "issues": scored_data.get("issues", []),
+            "nextActions": scored_data.get("nextActions", [])
         };
         } except Exception as e {
             print(f"ExpandBranch ERROR: {e}");

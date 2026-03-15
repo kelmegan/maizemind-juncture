@@ -15,7 +15,6 @@ def:pub GenerateScreen(props: any) -> JsxElement {
     has notes: str = "",
         isGenerating: bool = False,
         generateStatus: str = "",
-        generateStep: int = 0,
         currentUserId: str = "",
         isGuest: bool = False,
         showConfirmRegenerate: bool = False,
@@ -51,8 +50,17 @@ def:pub GenerateScreen(props: any) -> JsxElement {
         showConfirmRegenerate = False;
 
         isGenerating = True;
-        generateStep = 1;
         generateStatus = "Step 1/3: Parsing notes into argument structure...";
+        setTimeout(lambda -> None {
+            if isGenerating {
+                generateStatus = "Step 2/3: Analyzing graph and generating critique...";
+            }
+        }, 1200);
+        setTimeout(lambda -> None {
+            if isGenerating {
+                generateStatus = "Step 3/3: Calculating reasoning score...";
+            }
+        }, 2600);
         try {
             result = await root spawn GenerateArgumentGraph(
                 notes=notes,
@@ -71,6 +79,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
             graphData = data["graph"] if "graph" in data else {};
             scoreData = data["score"] if "score" in data else {};
             issuesData = data["issues"] if "issues" in data else [];
+            nextActionsData = data["nextActions"] if "nextActions" in data else [];
             counterargSuggestions = data["suggested_counterarguments"] if "suggested_counterarguments" in data else [];
 
             # Check for empty graph (LLM returned nothing)
@@ -88,6 +97,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                 "graphData": graphData,
                 "scoreData": scoreData,
                 "issuesData": issuesData,
+                "nextActionsData": nextActionsData,
                 "suggestedCounterarguments": counterargSuggestions
             });
 
@@ -147,13 +157,6 @@ def:pub GenerateScreen(props: any) -> JsxElement {
     def handleNotesChange(e: any) -> None {
         notes = e.target.value;
     }
-
-    # Loading step messages
-    stepMessages = {
-        1: "Step 1/3: Parsing notes into argument structure...",
-        2: "Step 2/3: Analyzing graph and generating summary...",
-        3: "Step 3/3: Calculating reasoning score..."
-    };
 
     return (
         <div className="generate-page">

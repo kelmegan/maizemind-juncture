@@ -5,14 +5,19 @@ def:pub Button(
     onClick: any,
     variant: str = "primary",
     disabled: bool = False,
-    toggle: bool = False
+    toggle: bool = False,
+    className: str = ""
 ) -> JsxElement {
-    className = "button button-" + variant;
+    resolvedVariant = variant if variant else "primary";
+    resolvedClassName = "button button-" + resolvedVariant;
     if (toggle) {
-        className += " button-toggle";
+        resolvedClassName += " button-toggle";
+    }
+    if (className) {
+        resolvedClassName += " " + className;
     }
     return
-        <button className={className} onClick={onClick} disabled={disabled}>
+        <button className={resolvedClassName} onClick={onClick} disabled={disabled}>
             {label}
         </button>;
 }

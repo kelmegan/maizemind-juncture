@@ -1,6 +1,6 @@
 """Juncture - Revise Screen for editing and improving argument nodes."""
 
-sv import from ...main { AddEvidenceToNode, AddAssumptionToEvidence, UpdateNodeContent, DeleteNode, GetGraphWithScoring }
+sv import from ...main { AddEvidenceToNode, AddAssumptionToNode, UpdateNodeContent, DeleteNode, GetGraphWithScoring }
 import from "lucide-react" { Plus, Check, X, Info }
 
 import from ..components.Alert { Alert }
@@ -65,7 +65,7 @@ def:pub ReviseScreen(props: any) -> JsxElement {
                 evidenceContent=inputValue
             );
         } elif actionType == "assumption" {
-            await root spawn AddAssumptionToEvidence(
+            await root spawn AddAssumptionToNode(
                 graphId=graphId,
                 nodeId=nodeId,
                 assumptionText=inputValue
@@ -101,7 +101,8 @@ def:pub ReviseScreen(props: any) -> JsxElement {
                     navigate("review", {
                         "graphData": data["graph"] if "graph" in data else graphData,
                         "scoreData": data["score"] if "score" in data else scoreData,
-                        "issuesData": data["issues"] if "issues" in data else issuesData
+                        "issuesData": data["issues"] if "issues" in data else issuesData,
+                        "nextActionsData": data["nextActions"] if "nextActions" in data else []
                     });
                     return;
                 }
@@ -231,14 +232,12 @@ def:pub ReviseScreen(props: any) -> JsxElement {
                                 className="revise-action-btn"
                             />
 
-                            {(
-                                <Button
-                                    label={(<><span className="revise-action-label">🔗 Acknowledge Assumption</span><span className="revise-action-sub">What this evidence assumes</span></>)}
-                                    variant={"default" if actionType == "assumption" else "outline"}
-                                    onClick={selectAssumption}
-                                    className="revise-action-btn"
-                                />
-                            ) if currentNode["type"] == "EVIDENCE" else None}
+                            <Button
+                                label={(<><span className="revise-action-label">🔗 Add Assumption</span><span className="revise-action-sub">Make the logic link explicit</span></>)}
+                                variant={"default" if actionType == "assumption" else "outline"}
+                                onClick={selectAssumption}
+                                className="revise-action-btn"
+                            />
 
                             <Button
                                 label={(<><span className="revise-action-label">✏️ Clarify Wording</span><span className="revise-action-sub">Rewrite for clarity</span></>)}

@@ -1,6 +1,6 @@
 """Juncture - Review Screen with inline editing workshop, ghost nodes, and score delta."""
 
-sv import from ...main { GetContext, GetGraphWithScoring, AddEvidenceToNode, AddAssumptionToEvidence, UpdateNodeContent, DeleteNode, AddCounterargumentNode, AddAddressEdge, EvaluateNewNode, GenerateCounter, ClarifyNode, ExpandBranch }
+sv import from ...main { GetContext, GetGraphWithScoring, AddEvidenceToNode, AddAssumptionToNode, UpdateNodeContent, DeleteNode, AddCounterargumentNode, AddAddressEdge, EvaluateNewNode, GenerateCounter, ClarifyNode, ExpandBranch }
 
 import from ..components.ArgumentGraphView { ArgumentGraphView }
 import from ..components.Button { Button }
@@ -12,6 +12,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     has currentGraph: dict = None,
         currentScore: dict = None,
         currentIssues: list = [],
+        currentNextActions: list = [],
         selectedNode: dict = None,
         isDark: bool = False,
         focusBranch: str = None,
@@ -39,6 +40,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                         currentGraph = data["graph"] if "graph" in data else None;
                         currentScore = data["score"] if "score" in data else None;
                         currentIssues = data["issues"] if "issues" in data else [];
+                        currentNextActions = data["nextActions"] if "nextActions" in data else [];
                     }
                 }
             }
@@ -54,6 +56,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             currentGraph = screen_data["graphData"] if "graphData" in screen_data else None;
             currentScore = screen_data["scoreData"] if "scoreData" in screen_data else None;
             currentIssues = screen_data["issuesData"] if "issuesData" in screen_data else [];
+            currentNextActions = screen_data["nextActionsData"] if "nextActionsData" in screen_data else [];
             suggestedCounterargs = screen_data["suggestedCounterarguments"] if "suggestedCounterarguments" in screen_data else [];
             _didInit = True;
             if not currentGraph { loadContext(); }
@@ -95,7 +98,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         navigate("export", {
             "graphData": currentGraph,
             "scoreData": currentScore,
-            "issuesData": currentIssues
+            "issuesData": currentIssues,
+            "nextActionsData": currentNextActions
         });
     }
 
@@ -143,12 +147,18 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         isSaving = True;
         _gcGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _gcNodeId = selectedNode["id"];
+        _gcPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         try {
             mutResult = await root spawn GenerateCounter(graphId=_gcGraphId, targetNodeId=_gcNodeId);
             mutData = mutResult.reports[0] if mutResult.reports else {};
             if "graph" in mutData { currentGraph = mutData["graph"]; }
-            if "score" in mutData { currentScore = mutData["score"]; }
+            if "score" in mutData {
+                currentScore = mutData["score"];
+                _gcNewScore = currentScore["overall"] if "overall" in currentScore else _gcPrevScore;
+                applyScoreDelta(_gcPrevScore, _gcNewScore);
+            }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
+            if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
             _gcNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
             _gcFound = None;
             _gci = 0;
@@ -166,12 +176,18 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         isSaving = True;
         _clGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _clNodeId = selectedNode["id"];
+        _clPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         try {
             mutResult = await root spawn ClarifyNode(graphId=_clGraphId, nodeId=_clNodeId);
             mutData = mutResult.reports[0] if mutResult.reports else {};
             if "graph" in mutData { currentGraph = mutData["graph"]; }
-            if "score" in mutData { currentScore = mutData["score"]; }
+            if "score" in mutData {
+                currentScore = mutData["score"];
+                _clNewScore = currentScore["overall"] if "overall" in currentScore else _clPrevScore;
+                applyScoreDelta(_clPrevScore, _clNewScore);
+            }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
+            if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
             _clNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
             _clFound = None;
             _cli = 0;
@@ -197,6 +213,17 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
     def handleSourceUrlInput(e: any) -> None {
         sourceUrlValue = e.target.value;
+    }
+
+    def applyScoreDelta(prev_value: int, new_value: int) -> None {
+        scoreDelta = new_value - prev_value;
+        showScoreDelta = scoreDelta != 0;
+        if showScoreDelta {
+            setTimeout(lambda -> None {
+                showScoreDelta = False;
+                scoreDelta = 0;
+            }, 2200);
+        }
     }
 
     async def saveEdit() -> None {
@@ -233,7 +260,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                     graphId=_seGraphId, nodeId=_seNodeId, evidenceContent=_seContent, sourceUrl=_seSourceUrl
                 );
             } elif _seMode == "assumption" {
-                mutResult = await root spawn AddAssumptionToEvidence(
+                mutResult = await root spawn AddAssumptionToNode(
                     graphId=_seGraphId, nodeId=_seNodeId, assumptionText=_seContent
                 );
             } elif _seMode == "address" {
@@ -247,8 +274,13 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             if mutResult {
                 mutData = mutResult.reports[0] if mutResult.reports else {};
                 if "graph" in mutData { currentGraph = mutData["graph"]; }
-                if "score" in mutData { currentScore = mutData["score"]; }
+                if "score" in mutData {
+                    currentScore = mutData["score"];
+                    _seNewScore = currentScore["overall"] if "overall" in currentScore else _sePrevScore;
+                    applyScoreDelta(_sePrevScore, _seNewScore);
+                }
                 if "issues" in mutData { currentIssues = mutData["issues"]; }
+                if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
                 _seNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
                 _seFound = None;
                 _sefi = 0;
@@ -278,8 +310,13 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             mutResult = await root spawn DeleteNode(graphId=_delGraphId, nodeId=_delNodeId);
             mutData = mutResult.reports[0] if mutResult.reports else {};
             if "graph" in mutData { currentGraph = mutData["graph"]; }
-            if "score" in mutData { currentScore = mutData["score"]; }
+            if "score" in mutData {
+                currentScore = mutData["score"];
+                _delNewScore = currentScore["overall"] if "overall" in currentScore else _delPrevScore;
+                applyScoreDelta(_delPrevScore, _delNewScore);
+            }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
+            if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
         } except Exception { }
 
         selectedNode = None;
@@ -300,6 +337,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
         isSaving = True;
         _acGraphId = currentGraph["id"] if "id" in currentGraph else "";
+        _acPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
 
         try {
             addResult = await root spawn AddCounterargumentNode(
@@ -307,8 +345,13 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             );
             addData = addResult.reports[0] if addResult.reports else {};
             if "graph" in addData { currentGraph = addData["graph"]; }
-            if "score" in addData { currentScore = addData["score"]; }
+            if "score" in addData {
+                currentScore = addData["score"];
+                _acNewScore = currentScore["overall"] if "overall" in currentScore else _acPrevScore;
+                applyScoreDelta(_acPrevScore, _acNewScore);
+            }
             if "issues" in addData { currentIssues = addData["issues"]; }
+            if "nextActions" in addData { currentNextActions = addData["nextActions"]; }
         } except Exception { }
 
         isSaving = False;
@@ -319,12 +362,19 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         isSaving = True;
         _ebGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _ebNodeId = selectedNode["id"];
+        _ebPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         try {
             mutResult = await root spawn ExpandBranch(graphId=_ebGraphId, nodeId=_ebNodeId);
             mutData = mutResult.reports[0] if mutResult.reports else {};
             if "graph" in mutData { currentGraph = mutData["graph"]; }
-            if "score" in mutData { currentScore = mutData["score"]; }
+            if "score" in mutData {
+                currentScore = mutData["score"];
+                _ebNewScore = currentScore["overall"] if "overall" in currentScore else _ebPrevScore;
+                applyScoreDelta(_ebPrevScore, _ebNewScore);
+            }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
+            if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
+            # Re-select same node
             _ebNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
             _ebFound = None;
             _ebi = 0;
@@ -381,15 +431,20 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
     support_val = currentScore["support"] if "support" in currentScore else 0;
     premise_val = currentScore["premise"] if "premise" in currentScore else 0;
-    consistency_val = currentScore["consistency"] if "consistency" in currentScore else 0;
+    coherence_val = currentScore["coherence"] if "coherence" in currentScore else 0;
+    counter_val = currentScore["counterargument"] if "counterargument" in currentScore else (
+        currentScore["consistency"] if "consistency" in currentScore else 0
+    );
     support_bar_color = "#10b981" if support_val >= 70 else ("#f59e0b" if support_val >= 50 else "#ef4444");
     premise_bar_color = "#10b981" if premise_val >= 70 else ("#f59e0b" if premise_val >= 50 else "#ef4444");
-    consistency_bar_color = "#10b981" if consistency_val >= 70 else ("#f59e0b" if consistency_val >= 50 else "#ef4444");
+    coherence_bar_color = "#10b981" if coherence_val >= 70 else ("#f59e0b" if coherence_val >= 50 else "#ef4444");
+    counter_bar_color = "#10b981" if counter_val >= 70 else ("#f59e0b" if counter_val >= 50 else "#ef4444");
 
     typeLegend = [
         {"key": "THESIS", "color": "#7c3aed", "bg": "#ede9fe", "label": "Thesis"},
         {"key": "CLAIM", "color": "#9f7aea", "bg": "#e8e0fc", "label": "Claim"},
         {"key": "EVIDENCE", "color": "#10b981", "bg": "#d1fae5", "label": "Evidence"},
+        {"key": "ASSUMPTION", "color": "#f59e0b", "bg": "#fef3c7", "label": "Assumption"},
         {"key": "COUNTERARGUMENT", "color": "#ef4444", "bg": "#fee2e2", "label": "Counter"}
     ];
 
@@ -401,7 +456,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     sel_str_bg = "rgba(34,197,94,0.1)" if sel_conf_val >= 0.7 else ("rgba(250,204,21,0.15)" if sel_conf_val >= 0.5 else "rgba(239,68,68,0.1)");
 
     typeColorMap = {
-        "THESIS": "#7c3aed", "CLAIM": "#9f7aea", "EVIDENCE": "#10b981",
+        "THESIS": "#7c3aed", "CLAIM": "#9f7aea", "EVIDENCE": "#10b981", "ASSUMPTION": "#f59e0b",
         "COUNTERARGUMENT": "#ef4444"
     };
     sel_type_color = typeColorMap[sel_type] if sel_type in typeColorMap else "#9f7aea";
@@ -432,8 +487,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     edit_label = "Add Evidence";
     edit_placeholder = "Add a fact, statistic, study, or expert quote...";
     if editMode == "assumption" {
-        edit_label = "Acknowledge Assumption";
-        edit_placeholder = "What implicit assumption does this evidence rely on?";
+        edit_label = "Add Missing Assumption";
+        edit_placeholder = "State the hidden assumption that makes this claim valid...";
     } elif editMode == "address" {
         edit_label = "Address This Counterargument";
         edit_placeholder = "How would you respond to this counterargument? Provide evidence or reasoning...";
@@ -470,10 +525,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         iss = nodeIssues[_ni];
         iss_type = iss["type"] if "type" in iss else "";
         fix_mode = "evidence";
-        if iss_type == "assumption_heavy" {
+        if iss_type == "assumption_heavy" or iss_type == "missing_premise" {
             fix_mode = "assumption";
-        } elif iss_type == "contradiction" {
+        } elif iss_type == "contradiction" or iss_type == "unresolved_contradiction" {
             fix_mode = "address";
+        } elif iss_type == "vague_language" or iss_type == "weak_inference" {
+            fix_mode = "clarify";
+        } elif iss_type == "orphan_node" {
+            fix_mode = "delete";
         }
         fix_click_fn = makeFixHandler(fix_mode);
         nodeIssueElements.append(
@@ -543,6 +602,66 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _ti = _ti + 1;
     }
 
+    # Build next 3 actions in order (backend-ranked)
+    nextActionElements: list = [];
+    next_actions_safe: list = list(currentNextActions) if currentNextActions else [];
+    if len(next_actions_safe) == 0 {
+        _fallback_count = len(issues_safe);
+        if _fallback_count > 3 { _fallback_count = 3; }
+        _fai = 0;
+        while _fai < _fallback_count {
+            _fi = issues_safe[_fai];
+            next_actions_safe.append({
+                "nodeId": _fi["nodeId"] if "nodeId" in _fi else "",
+                "action": _fi["suggestedAction"] if "suggestedAction" in _fi else "Fix this issue",
+                "issueType": _fi["type"] if "type" in _fi else "",
+                "rank": _fai + 1,
+                "expectedLift": _fi["estimatedLift"] if "estimatedLift" in _fi else 0
+            });
+            _fai = _fai + 1;
+        }
+    }
+    next_count = len(next_actions_safe);
+    if next_count > 3 { next_count = 3; }
+    _na = 0;
+    while _na < next_count {
+        next_issue = next_actions_safe[_na];
+        next_node_id = next_issue["nodeId"] if "nodeId" in next_issue else "";
+        next_lift = next_issue["expectedLift"] if "expectedLift" in next_issue else 0;
+        next_click_fn = makeIssueClickHandler(next_node_id);
+        nextActionElements.append(
+            <div key={f"next_{str(_na)}"} style={{
+                "display": "flex", "gap": "10px", "marginBottom": "8px",
+                "padding": "10px 12px", "background": cardBg,
+                "border": f"1px solid {borderColor}", "borderRadius": "10px"
+            }}>
+                <div style={{
+                    "width": "20px", "height": "20px", "borderRadius": "10px",
+                    "background": action_bg, "color": action_text_color,
+                    "fontSize": "11px", "fontWeight": "700",
+                    "display": "flex", "alignItems": "center", "justifyContent": "center",
+                    "flexShrink": "0"
+                }}>{str(_na + 1)}</div>
+                <div style={{"flex": "1"}}>
+                    <div style={{"fontSize": "12px", "fontWeight": "500", "color": textColor, "lineHeight": "1.4", "display": "flex", "justifyContent": "space-between", "gap": "8px"}}>
+                        {next_issue["action"] if "action" in next_issue else "Fix this issue"}
+                        {(
+                            <span style={{"color": "#16a34a", "fontWeight": "700", "whiteSpace": "nowrap"}}>{"+" + str(next_lift) + " est"}</span>
+                        ) if next_lift > 0 else None}
+                    </div>
+                    <button onClick={next_click_fn} style={{
+                        "marginTop": "6px", "padding": "4px 8px", "fontSize": "10px",
+                        "fontWeight": "600", "color": action_text_color,
+                        "background": action_bg, "border": action_border, "borderRadius": "6px",
+                        "cursor": "pointer"
+                    }}>Go to node →</button>
+                </div>
+            </div>
+        );
+        _na = _na + 1;
+    }
+
+    # Filter out accepted counterargs to get visible suggestions
     visibleCounterargs: list = [];
     _vci = 0;
     while _vci < len(suggestedCounterargs) {
@@ -645,7 +764,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     saving_overlay_display = "flex" if isSaving else "none";
 
     show_add_evidence = sel_type == "CLAIM" or sel_type == "THESIS";
-    show_acknowledge_assumption = sel_is_evidence;
+    show_acknowledge_assumption = sel_type == "CLAIM" or sel_type == "THESIS";
     show_add_counter = sel_type == "CLAIM" or sel_type == "THESIS";
     show_address = sel_type == "COUNTERARGUMENT";
     show_expand = sel_type == "CLAIM" or sel_type == "THESIS";
@@ -724,9 +843,13 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                         <div className="rs-edge-line rs-edge-contradicts"></div>
                         <span className="rs-edge-label rs-edge-label-contradicts">contradicts</span>
                     </div>
-                    <div className="rs-legend-type-item">
-                        <div className="rs-edge-line rs-edge-addresses"></div>
-                        <span className="rs-edge-label rs-edge-label-addresses">addresses</span>
+                    <div style={{"display": "flex", "alignItems": "center", "gap": "3px"}}>
+                        <div style={{"width": "16px", "height": "2px", "background": "#f59e0b"}}></div>
+                        <span style={{"color": "#f59e0b", "fontSize": "10px"}}>depends_on</span>
+                    </div>
+                    <div style={{"display": "flex", "alignItems": "center", "gap": "3px"}}>
+                        <div style={{"width": "16px", "height": "2px", "background": "#8b5cf6"}}></div>
+                        <span style={{"color": "#8b5cf6", "fontSize": "10px"}}>addresses</span>
                     </div>
                 </div>
             </div>
@@ -826,10 +949,12 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                         </button>
                                     ) if show_add_evidence else None}
                                     {(
-                                        <button className="rs-action-btn" onClick={lambda -> None { startEdit("assumption"); }}
-                                            style={{"background": action_bg, "border": action_border, "color": action_text_color}}>
-                                            🔗 Assumption
-                                        </button>
+                                        <button onClick={lambda -> None { startEdit("assumption"); }} style={{
+                                            "padding": "7px 12px", "background": action_bg,
+                                            "border": action_border, "borderRadius": "8px",
+                                            "fontSize": "11px", "fontWeight": "600",
+                                            "color": action_text_color, "cursor": "pointer"
+                                        }}>🔗 Add Assumption</button>
                                     ) if show_acknowledge_assumption else None}
                                     {(
                                         <button className="rs-action-btn" onClick={lambda -> None { startEdit("counter"); }}
@@ -1026,11 +1151,11 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                 ) if delta_text else None}
                             </div>
 
-                            <div className="rs-breakdown-item">
-                                <div className="rs-breakdown-row">
-                                    <span style={{"color": mutedColor}}>Support (40%)</span>
-                                    <span className="rs-breakdown-value"
-                                        style={{"color": textColor}}>{support_val}%</span>
+                            <div style={{"marginBottom": "6px"}}>
+                                <div style={{"display": "flex", "justifyContent": "space-between",
+                                              "fontSize": "12px", "marginBottom": "4px"}}>
+                                    <span style={{"color": mutedColor}}>Support Quality (30%)</span>
+                                    <span style={{"fontWeight": "600", "color": textColor}}>{support_val}%</span>
                                 </div>
                                 <div className="rs-breakdown-bar"
                                     style={{"background": bar_track_bg}}>
@@ -1038,11 +1163,11 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                         style={{"width": f"{support_val}%", "background": support_bar_color}}></div>
                                 </div>
                             </div>
-                            <div className="rs-breakdown-item">
-                                <div className="rs-breakdown-row">
-                                    <span style={{"color": mutedColor}}>Premise (40%)</span>
-                                    <span className="rs-breakdown-value"
-                                        style={{"color": textColor}}>{premise_val}%</span>
+                            <div style={{"marginBottom": "6px"}}>
+                                <div style={{"display": "flex", "justifyContent": "space-between",
+                                              "fontSize": "12px", "marginBottom": "4px"}}>
+                                    <span style={{"color": mutedColor}}>Logical Soundness (25%)</span>
+                                    <span style={{"fontWeight": "600", "color": textColor}}>{premise_val}%</span>
                                 </div>
                                 <div className="rs-breakdown-bar"
                                     style={{"background": bar_track_bg}}>
@@ -1050,16 +1175,26 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                         style={{"width": f"{premise_val}%", "background": premise_bar_color}}></div>
                                 </div>
                             </div>
-                            <div className="rs-breakdown-item" style={{"marginBottom": "20px"}}>
-                                <div className="rs-breakdown-row">
-                                    <span style={{"color": mutedColor}}>Consistency (20%)</span>
-                                    <span className="rs-breakdown-value"
-                                        style={{"color": textColor}}>{consistency_val}%</span>
+                            <div style={{"marginBottom": "6px"}}>
+                                <div style={{"display": "flex", "justifyContent": "space-between",
+                                              "fontSize": "12px", "marginBottom": "4px"}}>
+                                    <span style={{"color": mutedColor}}>Coherence (20%)</span>
+                                    <span style={{"fontWeight": "600", "color": textColor}}>{coherence_val}%</span>
                                 </div>
-                                <div className="rs-breakdown-bar"
-                                    style={{"background": bar_track_bg}}>
-                                    <div className="rs-breakdown-bar-fill"
-                                        style={{"width": f"{consistency_val}%", "background": consistency_bar_color}}></div>
+                                <div style={{"height": "4px", "background": bar_track_bg, "borderRadius": "2px"}}>
+                                    <div style={{"height": "100%", "borderRadius": "2px", "transition": "width 0.5s",
+                                                  "width": f"{coherence_val}%", "background": coherence_bar_color}}></div>
+                                </div>
+                            </div>
+                            <div style={{"marginBottom": "20px"}}>
+                                <div style={{"display": "flex", "justifyContent": "space-between",
+                                              "fontSize": "12px", "marginBottom": "4px"}}>
+                                    <span style={{"color": mutedColor}}>Counterargument Handling (25%)</span>
+                                    <span style={{"fontWeight": "600", "color": textColor}}>{counter_val}%</span>
+                                </div>
+                                <div style={{"height": "4px", "background": bar_track_bg, "borderRadius": "2px"}}>
+                                    <div style={{"height": "100%", "borderRadius": "2px", "transition": "width 0.5s",
+                                                  "width": f"{counter_val}%", "background": counter_bar_color}}></div>
                                 </div>
                             </div>
 
@@ -1073,10 +1208,32 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             {(
                                 <div>{topIssueElements}</div>
                             ) if len(currentIssues) > 0 else (
-                                <div className="rs-no-issues-card">
+                                <div style={{"padding": "14px", "background": "rgba(34,197,94,0.06)",
+                                              "border": "1px solid rgba(34,197,94,0.12)",
+                                              "borderRadius": "10px", "fontSize": "13px",
+                                              "color": "#16a34a"}}>
                                     No major issues found! Great work.
                                 </div>
                             )}
+
+                            <div style={{"marginTop": "18px"}}>
+                                <div style={{"display": "flex", "alignItems": "center", "gap": "8px", "marginBottom": "12px"}}>
+                                    <span style={{"fontSize": "16px"}}>🧭</span>
+                                    <span style={{"fontWeight": "600", "fontSize": "14px", "color": textColor}}>Next 3 Actions</span>
+                                </div>
+                                {(
+                                    <div>{nextActionElements}</div>
+                                ) if len(nextActionElements) > 0 else (
+                                    <div style={{
+                                        "padding": "14px", "background": "rgba(34,197,94,0.06)",
+                                        "border": "1px solid rgba(34,197,94,0.12)",
+                                        "borderRadius": "10px", "fontSize": "13px",
+                                        "color": "#16a34a"
+                                    }}>
+                                        Ready to export. No urgent actions found.
+                                    </div>
+                                )}
+                            </div>
 
                             {(
                                 <div className="rs-counterargs-section">

@@ -66,8 +66,8 @@ obj GraphSummary {
 # ============================================================
 
 """You MUST extract a complete argument graph from the user's notes. Return ONLY valid JSON, no explanation.
-Format: {"nodes":[{"id":"n1","kind":"thesis|claim|evidence|counterarg","text":"...","evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["Does X hold in this context?"]},...],
-"edges":[{"from_id":"n2","to_id":"n1","kind":"supports|contradicts|addresses","reasoning_type":"deductive|inductive|causal|correlational|analogical","weight":0.8},...]}
+Format: {"nodes":[{"id":"n1","kind":"thesis|claim|evidence|assumption|counterarg","text":"...","evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["Does X hold in this context?"]},...],
+"edges":[{"from_id":"n2","to_id":"n1","kind":"supports|depends_on|contradicts|addresses","reasoning_type":"deductive|inductive|causal|correlational|analogical","weight":0.8},...]}
 STRICT RULES:
 1. EXACTLY 1 thesis node. Identify the user's main argument.
 2. Extract ALL claims and evidence from the notes — do NOT skip or summarize. Create a node for every distinct point.
@@ -414,7 +414,7 @@ def normalize_nodes(nodes: list[GraphNode]) -> list[GraphNode] {
         "sub_claim": "claim", "subclaim": "claim",
         "evidence": "evidence", "document": "evidence",
         "source": "evidence", "fact": "evidence", "statistic": "evidence",
-        "assumption": "evidence", "premise": "evidence",
+        "assumption": "assumption", "premise": "assumption",
         "counterarg": "counterarg", "counterargument": "counterarg",
         "counter_argument": "counterarg", "counter": "counterarg",
         "rebuttal": "counterarg"
@@ -452,11 +452,7 @@ def normalize_nodes(nodes: list[GraphNode]) -> list[GraphNode] {
     };
 
     for n in nodes {
-        # If LLM returned "assumption" type, convert to evidence and note the assumption
         old_label = n.label.lower().strip();
-        if old_label in ["assumption", "premise"] and not n.assumptions {
-            n.assumptions = [n.text];
-        }
         n.label = type_map.get(old_label, "claim");
         n.status = status_map.get(n.status.lower().strip(), "needs_work");
         if not n.parent_id {
@@ -483,7 +479,7 @@ def normalize_edges(edges: list[GraphEdge]) -> list[GraphEdge] {
         "supports": "supports", "support": "supports",
         "contradicts": "contradicts", "contradict": "contradicts",
         "counterarguments": "contradicts", "counterargument": "contradicts",
-        "depends_on": "supports", "depends": "supports",
+        "depends_on": "depends_on", "depends": "depends_on",
         "addresses": "addresses", "address": "addresses",
         "rebuts": "addresses", "rebuttal": "addresses"
     };

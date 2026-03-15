@@ -1,6 +1,6 @@
 """Export Screen"""
 
-sv import from ...main { GetContext, CreateSession }
+sv import from ...main { GetContext, GetGraphWithScoring, CreateSession }
 import from "lucide-react" { Download, FileText, AlertTriangle, CheckCircle2, Copy }
 import from "jspdf" { jsPDF }
 
@@ -17,12 +17,14 @@ def:pub ExportScreen(props: any) -> JsxElement {
     has currentGraph: dict = None,
         currentScore: dict = None,
         currentIssues: list = [],
+        currentNextActions: list = [],
         userId: str = "",
         exportFormat: str = "text",
         copyStatus: str = "", # "" | "success" | "failure" | "pdf-success" | "pdf-failure"
         saved: bool = False;
 
     async def loadContext() -> None {
+        ctx = None;
         try {
             ctx = await root spawn GetContext();
             if ctx and "currentUser" in ctx and ctx["currentUser"] {
@@ -32,9 +34,26 @@ def:pub ExportScreen(props: any) -> JsxElement {
             # Context not available
         }
 
-        currentGraph = screen_data["graphData"] if "graphData" in screen_data else None;
+        currentGraph = screen_data["graphData"] if "graphData" in screen_data else (ctx["currentGraph"] if ctx and "currentGraph" in ctx else None);
         currentScore = screen_data["scoreData"] if "scoreData" in screen_data else None;
         currentIssues = screen_data["issuesData"] if "issuesData" in screen_data else [];
+        currentNextActions = screen_data["nextActionsData"] if "nextActionsData" in screen_data else [];
+
+        # If we only have graph id from context, fetch latest scoring/issues.
+        if currentGraph and (not currentScore) and "id" in currentGraph {
+            try {
+                scored = await root spawn GetGraphWithScoring(graphId=currentGraph["id"]);
+                scored_data = scored.reports[0] if scored.reports else {};
+                if "error" not in scored_data {
+                    currentGraph = scored_data["graph"] if "graph" in scored_data else currentGraph;
+                    currentScore = scored_data["score"] if "score" in scored_data else currentScore;
+                    currentIssues = scored_data["issues"] if "issues" in scored_data else currentIssues;
+                    currentNextActions = scored_data["nextActions"] if "nextActions" in scored_data else currentNextActions;
+                }
+            } except Exception {
+                # Keep whatever context data we have
+            }
+        }
     }
 
     can with entry {
@@ -65,15 +84,22 @@ def:pub ExportScreen(props: any) -> JsxElement {
 
         if thesis_node {
             outline += "THESIS:" + NL;
-            outline += thesis_node["content"] + NL + NL;
+            thesis_supporting = [];
+            for edge in edges {
+                if edge["target"] == thesis_node["id"] and edge["type"] == "SUPPORTS" {
+                    if edge["source"] in evidence_nodes {
+                        thesis_supporting.append(evidence_nodes[edge["source"]]);
+                    }
+                }
+            }
+            thesis_suffix = " (Needs evidence)" if includeFlags and len(thesis_supporting) == 0 else "";
+            outline += thesis_node["content"] + thesis_suffix + NL + NL;
         }
 
         if len(claim_nodes) > 0 {
             outline += "MAIN CLAIMS:" + NL;
             i = 1;
             for claim in claim_nodes {
-                outline += str(i) + ". " + claim["content"] + NL;
-
                 supporting = [];
                 for edge in edges {
                     if edge["target"] == claim["id"] and edge["type"] == "SUPPORTS" {
@@ -82,6 +108,8 @@ def:pub ExportScreen(props: any) -> JsxElement {
                         }
                     }
                 }
+                claim_suffix = " (Needs evidence)" if includeFlags and len(supporting) == 0 else "";
+                outline += str(i) + ". " + claim["content"] + claim_suffix + NL;
 
                 if len(supporting) > 0 {
                     outline += "   Supporting Evidence:" + NL;
@@ -101,7 +129,7 @@ def:pub ExportScreen(props: any) -> JsxElement {
         return outline;
     }
 
-    def handleExportText() -> None {
+    def handleCopyOutline() -> None {
         show_flags = currentScore["overall"] < 75;
         outline_text = generateOutlineText(show_flags);
 
@@ -155,6 +183,15 @@ def:pub ExportScreen(props: any) -> JsxElement {
         setTimeout(lambda -> None { copyStatus = ""; }, 3000);
     }
 
+    def handleFixTopIssues() -> None {
+        navigate("review", {
+            "graphData": currentGraph,
+            "scoreData": currentScore,
+            "issuesData": currentIssues,
+            "nextActionsData": currentNextActions
+        });
+    }
+
     async def handleSaveSession() -> None {
         if not userId or saved {
             return;
@@ -174,6 +211,13 @@ def:pub ExportScreen(props: any) -> JsxElement {
     }
 
     show_warning = currentScore["overall"] < 75;
+    unsupported_claims = currentScore["unsupportedClaims"] if "unsupportedClaims" in currentScore else 0;
+    fix_count = unsupported_claims;
+    if fix_count > 3 { fix_count = 3; }
+    if fix_count < 1 {
+        fix_count = min(3, len(currentIssues));
+    }
+    if fix_count < 1 { fix_count = 1; }
 
     outline_lines = [];
     i = 0;
@@ -207,7 +251,6 @@ def:pub ExportScreen(props: any) -> JsxElement {
                     <p>Download failed. Please try again.</p>
                 </Alert>
             ) if copyStatus == "pdf-failure" else None}
-            <Header navigate={navigate} screen="export" title="Export Outline" backTo="review" />
 
             <div className="export-content">
                 <Card
@@ -235,7 +278,12 @@ def:pub ExportScreen(props: any) -> JsxElement {
                 ) if not show_warning else (
                     <Alert className="export-alert-warning">
                         <AlertTriangle className="export-alert-warning-icon" />
-                        <p>Some issues were detected before export.</p>
+                        <div>
+                            <p>Export now, but {str(unsupported_claims)} claims are unsupported. Want to fix the top {str(fix_count)} issues first?</p>
+                            <div style={{"marginTop": "10px"}}>
+                                <Button label="Fix Top Issues First" variant="outline" onClick={handleFixTopIssues} />
+                            </div>
+                        </div>
                     </Alert>
                 )}
 

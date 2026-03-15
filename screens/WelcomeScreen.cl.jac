@@ -1,6 +1,6 @@
 """Welcome Screen"""
 
-sv import from ...main { CreateUser, GetUserProfile, UpdateContext }
+sv import from ...main { CreateUser, GetUserByEmail, UpdateContext }
 import from "@jac/runtime" { jacSignup, jacLogin }
 import from "lucide-react" { Brain, Lightbulb, TrendingUp }
 
@@ -75,7 +75,7 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
 
         if success {
             try {
-                walker_result = await root spawn GetUserProfile(userId=email);
+                walker_result = await root spawn GetUserByEmail(email=email);
                 user_data = walker_result.reports[0] if walker_result.reports else None;
 
                 if user_data {
@@ -88,6 +88,19 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
                             "goals": user_data["goals"] if "goals" in user_data else [],
                             "theme": user_data["theme"] if "theme" in user_data else "system",
                             "accessibilityMode": user_data["accessibilityMode"] if "accessibilityMode" in user_data else False,
+                            "isGuest": False
+                        }
+                    );
+                } else {
+                    await root spawn UpdateContext(
+                        currentUser={
+                            "id": email,
+                            "name": email.split("@")[0],
+                            "email": email,
+                            "userType": "student",
+                            "goals": [],
+                            "theme": "system",
+                            "accessibilityMode": False,
                             "isGuest": False
                         }
                     );
@@ -108,17 +121,56 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
     }
 
     async def handleContinueAsGuest() -> None {
-        # Sign up — 400 if already exists, that's expected
+        error = "";
+        loading = True;
+        guest_email = "guest@juncture.local";
+        # Guest mode should not block on external auth service availability.
+        # We use local app context and navigate immediately.
+        navigate("generate");
+
+        # Build/use a guest profile in app context regardless of auth result,
+        # so the button always moves the user forward.
         try {
-            await jacSignup("__guest__", "__no_password__");
-        } except Exception as _e {
-            # Already registered
+            walker_result = await root spawn GetUserByEmail(email=guest_email);
+            user_data = walker_result.reports[0] if walker_result.reports else None;
+
+            if not user_data {
+                created = await root spawn CreateUser(
+                    name="Guest",
+                    email=guest_email,
+                    isGuest=True
+                );
+                user_data = created.reports[0] if created.reports else {};
+            }
+
+            await root spawn UpdateContext(
+                currentUser={
+                    "id": user_data["id"] if user_data and "id" in user_data else "guest_local",
+                    "name": user_data["name"] if user_data and "name" in user_data else "Guest",
+                    "email": guest_email,
+                    "userType": "student",
+                    "isGuest": True
+                },
+                currentScreen="generate"
+            );
+        } except Exception {
+            try {
+                await root spawn UpdateContext(
+                    currentUser={
+                        "id": "guest_local",
+                        "name": "Guest",
+                        "email": guest_email,
+                        "userType": "student",
+                        "isGuest": True
+                    },
+                    currentScreen="generate"
+                );
+            } except Exception {
+                    # Context update failed, still navigate
+            }
         }
-        # Login and go
-        success = await jacLogin("__guest__", "__no_password__");
-        if success {
-            navigate("generate");
-        }
+
+        loading = False;
     }
 
     def handleTabChange(v: str) -> None {
@@ -240,7 +292,7 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
                     </Tabs>
 
                     <div className="auth-divider">OR</div>
-                    <Button label="Continue as Guest" variant="outline" onClick={handleContinueAsGuest} className="auth-guest-btn" />
+                    <Button label={"Processing..." if loading else "Continue as Guest"} variant="outline" onClick={handleContinueAsGuest} disabled={loading} className="auth-guest-btn" />
                 </div>
             </div>
         </div>

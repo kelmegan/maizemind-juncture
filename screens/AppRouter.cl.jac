@@ -15,6 +15,7 @@ def:pub AppRouter -> JsxElement {
         cachedGraphData: any = None,
         cachedScoreData: any = None,
         cachedIssuesData: list = [],
+        cachedNextActionsData: list = [],
         cachedCounterargSuggestions: list = [];
 
     async def loadContext() -> None {
@@ -48,6 +49,9 @@ def:pub AppRouter -> JsxElement {
         if "issuesData" in data {
             cachedIssuesData = data["issuesData"];
         }
+        if "nextActionsData" in data {
+            cachedNextActionsData = data["nextActionsData"];
+        }
         if "suggestedCounterarguments" in data {
             cachedCounterargSuggestions = data["suggestedCounterarguments"];
         }
@@ -58,6 +62,7 @@ def:pub AppRouter -> JsxElement {
                 "graphData": cachedGraphData,
                 "scoreData": cachedScoreData,
                 "issuesData": cachedIssuesData,
+                "nextActionsData": cachedNextActionsData,
                 "suggestedCounterarguments": cachedCounterargSuggestions
             };
         }

@@ -20,11 +20,11 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
 
     EDGE_COLORS = {
         "SUPPORTS": "#10b981", "CONTRADICTS": "#ef4444",
-        "ADDRESSES": "#8b5cf6"
+        "DEPENDS_ON": "#f59e0b", "ADDRESSES": "#8b5cf6"
     };
     EDGE_LABELS = {
         "SUPPORTS": "SUP", "CONTRADICTS": "CON",
-        "ADDRESSES": "ADR"
+        "DEPENDS_ON": "DEP", "ADDRESSES": "ADR"
     };
     # Reasoning type labels for edge display
     REASONING_LABELS = {
