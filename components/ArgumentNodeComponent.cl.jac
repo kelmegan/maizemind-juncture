@@ -4,20 +4,14 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
     node_data = props.node if props.node else {};
     isSelected = props.isSelected if props.isSelected else False;
     isDimmed = props.isDimmed if props.isDimmed else False;
-    isDark = props.isDark if props.isDark else False;
     isGhost = props.isGhost if props.isGhost else False;
 
     nodeTypeConfig = {
-        "THESIS":           {"fill": "#ede9fe", "stroke": "#7c3aed", "header": "#7c3aed", "text": "#5b21b6", "ht": "#fff", "label": "THESIS",
-                             "dfill": "#1e1636", "dstroke": "#a78bfa", "dheader": "#7c3aed", "dtext": "#c4b5fd"},
-        "CLAIM":            {"fill": "#e8e0fc", "stroke": "#9f7aea", "header": "#9f7aea", "text": "#6d28d9", "ht": "#fff", "label": "CLAIM",
-                             "dfill": "#1c1430", "dstroke": "#b794f4", "dheader": "#9f7aea", "dtext": "#d6bcfa"},
-        "EVIDENCE":         {"fill": "#d1fae5", "stroke": "#10b981", "header": "#10b981", "text": "#065f46", "ht": "#fff", "label": "EVIDENCE",
-                             "dfill": "#0d2818", "dstroke": "#6ee7b7", "dheader": "#10b981", "dtext": "#a7f3d0"},
-        "ASSUMPTION":       {"fill": "#fef3c7", "stroke": "#f59e0b", "header": "#f59e0b", "text": "#92400e", "ht": "#fff", "label": "ASSUMPTION",
-                             "dfill": "#2a2008", "dstroke": "#fcd34d", "dheader": "#f59e0b", "dtext": "#fde68a"},
-        "COUNTERARGUMENT":  {"fill": "#fee2e2", "stroke": "#ef4444", "header": "#ef4444", "text": "#991b1b", "ht": "#fff", "label": "COUNTER",
-                             "dfill": "#2a1215", "dstroke": "#f87171", "dheader": "#ef4444", "dtext": "#fca5a5"}
+        "THESIS":           {"fill": "#ede9fe", "stroke": "#7c3aed", "header": "#7c3aed", "text": "#5b21b6", "ht": "#fff", "label": "THESIS"},
+        "CLAIM":            {"fill": "#e8e0fc", "stroke": "#9f7aea", "header": "#9f7aea", "text": "#6d28d9", "ht": "#fff", "label": "CLAIM"},
+        "EVIDENCE":         {"fill": "#d1fae5", "stroke": "#10b981", "header": "#10b981", "text": "#065f46", "ht": "#fff", "label": "EVIDENCE"},
+        "ASSUMPTION":       {"fill": "#fef3c7", "stroke": "#f59e0b", "header": "#f59e0b", "text": "#92400e", "ht": "#fff", "label": "ASSUMPTION"},
+        "COUNTERARGUMENT":  {"fill": "#fee2e2", "stroke": "#ef4444", "header": "#ef4444", "text": "#991b1b", "ht": "#fff", "label": "COUNTER"}
     };
 
     # Evidence category short labels
@@ -48,11 +42,11 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
     base_label = ev_cat_label if ev_cat_label else config["label"];
     header_label = "SUGGESTED" if isGhost else base_label;
 
-    # Colors based on theme
-    fill_color = config["dfill"] if isDark else config["fill"];
-    stroke_color = config["dstroke"] if isDark else config["stroke"];
-    header_color = config["dheader"] if isDark else config["header"];
-    text_color = config["dtext"] if isDark else config["text"];
+    # Colors from config
+    fill_color = config["fill"];
+    stroke_color = config["stroke"];
+    header_color = config["header"];
+    text_color = config["text"];
     ht_color = config["ht"];
 
     # Strength color

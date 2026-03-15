@@ -1,7 +1,5 @@
 """Juncture - Review Screen with inline editing workshop, ghost nodes, and score delta."""
 
-sv import from ...main { GetContext, GetGraphWithScoring, AddEvidenceToNode, AddAssumptionToNode, UpdateNodeContent, DeleteNode, AddCounterargumentNode, AddAddressEdge, EvaluateNewNode, GenerateCounter, ClarifyNode, ExpandBranch }
-
 import from ..components.ArgumentGraphView { ArgumentGraphView }
 import from ..components.Button { Button }
 
@@ -14,7 +12,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         currentIssues: list = [],
         currentNextActions: list = [],
         selectedNode: dict = None,
-        isDark: bool = False,
         focusBranch: str = None,
         editMode: str = "",
         editInputValue: str = "",
@@ -78,10 +75,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         editMode = "";
         editInputValue = "";
         showConfirmDelete = False;
-    }
-
-    def toggleTheme() -> None {
-        isDark = not isDark;
     }
 
     def toggleBranch() -> None {
@@ -389,7 +382,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
     if not currentGraph or not currentScore {
         return (
-            <div className="rs-loading" style={{"color": "#64748b"}}>
+            <div className="rs-loading">
                 <p>Loading argument map...</p>
             </div>
         );
@@ -407,27 +400,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         delta_text = f"({delta_sign}{scoreDelta})";
         delta_color = "#16a34a" if scoreDelta > 0 else "#dc2626";
     }
-
-    bgColor = "#0f0f17" if isDark else "#f4f1ee";
-    panelBg = "#13131f" if isDark else "#ffffff";
-    borderColor = "rgba(255,255,255,0.07)" if isDark else "rgba(0,0,0,0.08)";
-    textColor = "#f1f5f9" if isDark else "#1e293b";
-    mutedColor = "#94a3b8" if isDark else "#475569";
-    faintColor = "#64748b" if isDark else "#94a3b8";
-    cardBg = "rgba(255,255,255,0.04)" if isDark else "rgba(0,0,0,0.03)";
-    themeToggleText = "Light" if isDark else "Dark";
-    exportBtnBg = "rgba(139,92,246,0.15)" if isDark else "rgba(139,92,246,0.1)";
-
-    error_bg = "rgba(239,68,68,0.08)" if isDark else "rgba(239,68,68,0.06)";
-    error_border = "1px solid rgba(239,68,68,0.15)" if isDark else "1px solid rgba(239,68,68,0.12)";
-    error_text_color = "#fca5a5" if isDark else "#dc2626";
-    success_bg = "rgba(34,197,94,0.08)" if isDark else "rgba(34,197,94,0.06)";
-    success_border = "1px solid rgba(34,197,94,0.15)" if isDark else "1px solid rgba(34,197,94,0.12)";
-    success_text_color = "#86efac" if isDark else "#16a34a";
-    action_bg = "rgba(139,92,246,0.08)" if isDark else "rgba(139,92,246,0.06)";
-    action_border = "1px solid rgba(139,92,246,0.2)" if isDark else "1px solid rgba(139,92,246,0.15)";
-    action_text_color = "#c4b5fd" if isDark else "#7c3aed";
-    bar_track_bg = "rgba(255,255,255,0.1)" if isDark else "#e5e7eb";
 
     support_val = currentScore["support"] if "support" in currentScore else 0;
     premise_val = currentScore["premise"] if "premise" in currentScore else 0;
@@ -536,21 +508,13 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         }
         fix_click_fn = makeFixHandler(fix_mode);
         nodeIssueElements.append(
-            <div key={iss["id"]} className="rs-issue-card"
-                style={{"background": error_bg, "border": error_border}}>
+            <div key={iss["id"]} className="rs-issue-card">
                 <div className="rs-issue-inner">
                     <div className="rs-issue-body">
-                        <div className="rs-issue-description" style={{"color": error_text_color}}>
-                            {iss["description"]}
-                        </div>
-                        <div className="rs-issue-suggestion" style={{"color": mutedColor}}>
-                            {iss["suggestedAction"]}
-                        </div>
+                        <div className="rs-issue-description">{iss["description"]}</div>
+                        <div className="rs-issue-suggestion">{iss["suggestedAction"]}</div>
                     </div>
-                    <button onClick={fix_click_fn} className="rs-fix-btn"
-                        style={{"background": action_bg, "border": action_border, "color": action_text_color}}>
-                        Fix →
-                    </button>
+                    <button onClick={fix_click_fn} className="rs-fix-btn">Fix →</button>
                 </div>
             </div>
         );
@@ -562,9 +526,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     while _ai < len(sel_assumptions) {
         assumption = sel_assumptions[_ai];
         assumptionElements.append(
-            <div key={str(_ai)} className="rs-assumption-item" style={{"color": mutedColor}}>
-                ⚠️ {assumption}
-            </div>
+            <div key={str(_ai)} className="rs-assumption-item">⚠️ {assumption}</div>
         );
         _ai = _ai + 1;
     }
@@ -585,18 +547,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         iss_node_id = iss["nodeId"] if "nodeId" in iss else "";
         iss_click_fn = makeIssueClickHandler(iss_node_id);
         topIssueElements.append(
-            <div key={iss["id"]} className="rs-issue-card-default"
-                style={{"background": error_bg, "border": error_border}}
-                onClick={iss_click_fn}>
+            <div key={iss["id"]} className="rs-issue-card-default" onClick={iss_click_fn}>
                 <div className="rs-severity-row">
                     <span className="rs-severity-badge"
                         style={{"background": sev_bg, "color": sev_color}}>
                         {iss["severity"]}
                     </span>
                 </div>
-                <div className="rs-issue-title" style={{"color": textColor}}>
-                    {iss["description"]}
-                </div>
+                <div className="rs-issue-title">{iss["description"]}</div>
             </div>
         );
         _ti = _ti + 1;
@@ -630,31 +588,16 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         next_lift = next_issue["expectedLift"] if "expectedLift" in next_issue else 0;
         next_click_fn = makeIssueClickHandler(next_node_id);
         nextActionElements.append(
-            <div key={f"next_{str(_na)}"} style={{
-                "display": "flex", "gap": "10px", "marginBottom": "8px",
-                "padding": "10px 12px", "background": cardBg,
-                "border": f"1px solid {borderColor}", "borderRadius": "10px"
-            }}>
-                <div style={{
-                    "width": "20px", "height": "20px", "borderRadius": "10px",
-                    "background": action_bg, "color": action_text_color,
-                    "fontSize": "11px", "fontWeight": "700",
-                    "display": "flex", "alignItems": "center", "justifyContent": "center",
-                    "flexShrink": "0"
-                }}>{str(_na + 1)}</div>
-                <div style={{"flex": "1"}}>
-                    <div style={{"fontSize": "12px", "fontWeight": "500", "color": textColor, "lineHeight": "1.4", "display": "flex", "justifyContent": "space-between", "gap": "8px"}}>
+            <div key={f"next_{str(_na)}"} className="rs-next-action-item">
+                <div className="rs-next-action-rank">{str(_na + 1)}</div>
+                <div className="rs-next-action-body">
+                    <div className="rs-next-action-text">
                         {next_issue["action"] if "action" in next_issue else "Fix this issue"}
                         {(
-                            <span style={{"color": "#16a34a", "fontWeight": "700", "whiteSpace": "nowrap"}}>{"+" + str(next_lift) + " est"}</span>
+                            <span className="rs-next-action-lift">{"+" + str(next_lift) + " est"}</span>
                         ) if next_lift > 0 else None}
                     </div>
-                    <button onClick={next_click_fn} style={{
-                        "marginTop": "6px", "padding": "4px 8px", "fontSize": "10px",
-                        "fontWeight": "600", "color": action_text_color,
-                        "background": action_bg, "border": action_border, "borderRadius": "6px",
-                        "cursor": "pointer"
-                    }}>Go to node →</button>
+                    <button onClick={next_click_fn} className="rs-next-action-btn">Go to node →</button>
                 </div>
             </div>
         );
@@ -704,19 +647,12 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         counterargElements.append(
             <div key={str(_cai)} className="rs-counter-card">
                 <div className="rs-counter-header">
-                    <span className="rs-counter-severity" style={{"color": ca_sev_color}}>
-                        {ca_severity}
-                    </span>
-                    <span className="rs-counter-target" style={{"color": faintColor}}>
-                        targets: {ca_target_short}
-                    </span>
+                    <span className="rs-counter-severity"
+                        style={{"color": ca_sev_color}}>{ca_severity}</span>
+                    <span className="rs-counter-target">targets: {ca_target_short}</span>
                 </div>
-                <div className="rs-counter-text" style={{"color": textColor}}>
-                    {ca_text}
-                </div>
-                <button onClick={ca_accept_fn} className="rs-accept-btn">
-                    Add to Graph
-                </button>
+                <div className="rs-counter-text">{ca_text}</div>
+                <button onClick={ca_accept_fn} className="rs-accept-btn">Add to Graph</button>
             </div>
         );
         _cai = _cai + 1;
@@ -771,42 +707,13 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     show_source_input = editMode == "evidence";
 
     return (
-        <div className="rs-wrapper" style={{"color": textColor, "background": bgColor}}>
+        <div className="rs-wrapper">
 
-            <div className="rs-topbar"
-                style={{"borderBottom": f"1px solid {borderColor}", "background": panelBg}}>
-                <div className="rs-topbar-left">
-                    <button className="rs-back-btn" onClick={handleBack}
-                        style={{"color": mutedColor}}>← Back</button>
-                    <span className="rs-logo-icon">△</span>
-                    <span className="rs-logo-name" style={{"color": textColor}}>Juncture</span>
-                    <span style={{"color": faintColor}}>/</span>
-                    <span className="rs-topbar-page-label" style={{"color": mutedColor}}>Review</span>
-                </div>
-                <div className="rs-topbar-right">
-                    <button className="rs-theme-btn" onClick={toggleTheme}
-                        style={{"background": cardBg, "border": f"1px solid {borderColor}", "color": mutedColor}}>
-                        {themeToggleText}
-                    </button>
-                    <div className="rs-score-pill"
-                        style={{"background": cardBg, "border": f"1px solid {borderColor}"}}>
-                        <span className="rs-score-pill-label" style={{"color": faintColor}}>Score</span>
-                        <span className="rs-score-pill-value" style={{"color": scoreColor}}>{overall}</span>
-                        {(
-                            <span className="rs-score-delta" style={{"color": delta_color}}>{delta_text}</span>
-                        ) if delta_text else None}
-                    </div>
-                    <button className="rs-export-btn" onClick={handleExport}
-                        style={{"background": exportBtnBg}}>
-                        Export
-                    </button>
-                </div>
-            </div>
+            <Header navigate={navigate} screen="review" title="Review Map" />
 
-            <div className="rs-legend-bar"
-                style={{"borderBottom": f"1px solid {borderColor}", "background": cardBg}}>
+            <div className="rs-legend-bar">
                 <div className="rs-legend-section">
-                    <span className="rs-legend-label" style={{"color": faintColor}}>Type</span>
+                    <span className="rs-legend-label">Type</span>
                     {typeLegend.map(lambda item -> any {
                         return (
                             <div key={item["key"]} className="rs-legend-type-item">
@@ -819,22 +726,22 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                     })}
                 </div>
                 <div className="rs-legend-section">
-                    <span className="rs-legend-label" style={{"color": faintColor}}>Strength</span>
+                    <span className="rs-legend-label">Strength</span>
                     <div className="rs-legend-type-item">
                         <div className="rs-strength-dot rs-strength-dot-good"></div>
-                        <span style={{"color": mutedColor}}>70+</span>
+                        <span className="rs-legend-value">70+</span>
                     </div>
                     <div className="rs-legend-type-item">
                         <div className="rs-strength-dot rs-strength-dot-warning"></div>
-                        <span style={{"color": mutedColor}}>50-69</span>
+                        <span className="rs-legend-value">50-69</span>
                     </div>
                     <div className="rs-legend-type-item">
                         <div className="rs-strength-dot rs-strength-dot-bad"></div>
-                        <span style={{"color": mutedColor}}>{"<50"}</span>
+                        <span className="rs-legend-value">{"<50"}</span>
                     </div>
                 </div>
                 <div className="rs-legend-section">
-                    <span className="rs-legend-label" style={{"color": faintColor}}>Links</span>
+                    <span className="rs-legend-label">Links</span>
                     <div className="rs-legend-type-item">
                         <div className="rs-edge-line rs-edge-supports"></div>
                         <span className="rs-edge-label rs-edge-label-supports">supports</span>
@@ -843,13 +750,13 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                         <div className="rs-edge-line rs-edge-contradicts"></div>
                         <span className="rs-edge-label rs-edge-label-contradicts">contradicts</span>
                     </div>
-                    <div style={{"display": "flex", "alignItems": "center", "gap": "3px"}}>
-                        <div style={{"width": "16px", "height": "2px", "background": "#f59e0b"}}></div>
-                        <span style={{"color": "#f59e0b", "fontSize": "10px"}}>depends_on</span>
+                    <div className="rs-legend-type-item">
+                        <div className="rs-edge-line rs-edge-depends-on"></div>
+                        <span className="rs-edge-label rs-edge-label-depends-on">depends_on</span>
                     </div>
-                    <div style={{"display": "flex", "alignItems": "center", "gap": "3px"}}>
-                        <div style={{"width": "16px", "height": "2px", "background": "#8b5cf6"}}></div>
-                        <span style={{"color": "#8b5cf6", "fontSize": "10px"}}>addresses</span>
+                    <div className="rs-legend-type-item">
+                        <div className="rs-edge-line rs-edge-addresses"></div>
+                        <span className="rs-edge-label rs-edge-label-addresses">addresses</span>
                     </div>
                 </div>
             </div>
@@ -869,35 +776,28 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             edges={allEdges}
                             onNodeClick={handleNodeClick}
                             selectedNodeId={selectedNode["id"] if selectedNode else None}
-                            isDark={isDark}
                             focusBranch={focusBranch}
                             onGhostAccept={handleAcceptCounterarg}
                         />
                     </div>
 
-                    <div className="rs-statusbar"
-                        style={{"borderTop": f"1px solid {borderColor}", "background": panelBg}}>
-                        <span className="rs-statusbar-label" style={{"color": faintColor}}>Sources</span>
-                        <span className="rs-statusbar-text" style={{"color": mutedColor}}>
+                    <div className="rs-statusbar">
+                        <span className="rs-statusbar-label">Sources</span>
+                        <span className="rs-statusbar-text">
                             {node_count_str} nodes - {edge_count_str} edges
                         </span>
                     </div>
                 </div>
 
                 {(
-                    <div className="rs-selected-panel"
-                        style={{"background": panelBg, "borderLeft": f"1px solid {borderColor}"}}>
+                    <div className="rs-selected-panel">
 
                         <div className="rs-saving-overlay"
                             style={{"display": saving_overlay_display}}>
-                            <div className="rs-saving-indicator"
-                                style={{"background": panelBg, "color": textColor}}>
-                                Saving...
-                            </div>
+                            <div className="rs-saving-indicator">Saving...</div>
                         </div>
 
-                        <div className="rs-panel-header"
-                            style={{"borderBottom": f"1px solid {borderColor}"}}>
+                        <div className="rs-panel-header">
                             <div className="rs-panel-header-row">
                                 <div className="rs-panel-header-left">
                                     <span className="rs-panel-type-label"
@@ -908,57 +808,46 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                         {str(int(sel_conf_val * 100))}%
                                     </span>
                                 </div>
-                                <button className="rs-panel-close-btn" onClick={closePanel}
-                                    style={{"background": cardBg, "border": f"1px solid {borderColor}",
-                                            "color": mutedColor}}>✕</button>
+                                <button className="rs-panel-close-btn" onClick={closePanel}>✕</button>
                             </div>
-                            <h3 className="rs-panel-node-title"
-                                style={{"color": textColor}}>{sel_content}</h3>
+                            <h3 className="rs-panel-node-title">{sel_content}</h3>
                         </div>
 
                         <div className="rs-panel-scroll">
 
                             <div className="rs-panel-section">
-                                <div className="rs-section-heading" style={{"color": "#dc2626"}}>
-                                    <span className="rs-section-dot"
-                                        style={{"background": "#dc2626"}}></span>
+                                <div className="rs-section-heading rs-section-heading-issues">
+                                    <span className="rs-section-dot rs-section-dot-issues"></span>
                                     Issues
                                 </div>
                                 {(
                                     <div>{nodeIssueElements}</div>
                                 ) if has_node_issues else (
-                                    <div className="rs-well-supported"
-                                        style={{"background": success_bg, "border": success_border,
-                                                "color": success_text_color}}>
-                                        Well-supported ✓
-                                    </div>
+                                    <div className="rs-well-supported">Well-supported ✓</div>
                                 )}
                             </div>
 
                             <div className="rs-panel-section">
-                                <div className="rs-section-heading" style={{"color": "#8b5cf6"}}>
-                                    <span className="rs-section-dot"
-                                        style={{"background": "#8b5cf6"}}></span>
+                                <div className="rs-section-heading rs-section-heading-actions">
+                                    <span className="rs-section-dot rs-section-dot-actions"></span>
                                     Quick Actions
                                 </div>
                                 <div className="rs-actions-row">
                                     {(
-                                        <button className="rs-action-btn" onClick={lambda -> None { startEdit("evidence"); }}
-                                            style={{"background": action_bg, "border": action_border, "color": action_text_color}}>
+                                        <button className="rs-action-btn rs-action-btn-default"
+                                            onClick={lambda -> None { startEdit("evidence"); }}>
                                             📊 Add Evidence
                                         </button>
                                     ) if show_add_evidence else None}
                                     {(
-                                        <button onClick={lambda -> None { startEdit("assumption"); }} style={{
-                                            "padding": "7px 12px", "background": action_bg,
-                                            "border": action_border, "borderRadius": "8px",
-                                            "fontSize": "11px", "fontWeight": "600",
-                                            "color": action_text_color, "cursor": "pointer"
-                                        }}>🔗 Add Assumption</button>
+                                        <button className="rs-action-btn rs-action-btn-default"
+                                            onClick={lambda -> None { startEdit("assumption"); }}>
+                                            🔗 Add Assumption
+                                        </button>
                                     ) if show_acknowledge_assumption else None}
                                     {(
-                                        <button className="rs-action-btn" onClick={lambda -> None { startEdit("counter"); }}
-                                            style={{"background": action_bg, "border": action_border, "color": action_text_color}}>
+                                        <button className="rs-action-btn rs-action-btn-default"
+                                            onClick={lambda -> None { startEdit("counter"); }}>
                                             ⚔️ Counter
                                         </button>
                                     ) if show_add_counter else None}
@@ -974,9 +863,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                             🌿 Expand
                                         </button>
                                     ) if show_expand else None}
-                                    <button className="rs-action-btn"
-                                        onClick={lambda -> None { startEdit("clarify"); }}
-                                        style={{"background": action_bg, "border": action_border, "color": action_text_color}}>
+                                    <button className="rs-action-btn rs-action-btn-default"
+                                        onClick={lambda -> None { startEdit("clarify"); }}>
                                         ✏️ Clarify
                                     </button>
                                     <button className="rs-action-btn rs-action-btn-delete"
@@ -988,32 +876,21 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
                             {(
                                 <div className="rs-edit-box">
-                                    <div className="rs-edit-label"
-                                        style={{"color": action_text_color}}>{edit_label}</div>
-                                    <textarea
-                                        className="rs-edit-textarea"
+                                    <div className="rs-edit-label">{edit_label}</div>
+                                    <textarea className="rs-edit-textarea"
                                         value={editInputValue}
                                         onChange={handleEditInput}
-                                        placeholder={edit_placeholder}
-                                        style={{"background": cardBg, "border": f"1px solid {borderColor}",
-                                                "color": textColor}}
-                                    />
+                                        placeholder={edit_placeholder} />
                                     {(
-                                        <input
-                                            type="text"
+                                        <input type="text"
                                             className="rs-edit-source-input"
                                             value={sourceUrlValue}
                                             onChange={handleSourceUrlInput}
-                                            placeholder="Source URL (optional) — e.g. https://example.com/study"
-                                            style={{"background": cardBg, "border": f"1px solid {borderColor}",
-                                                    "color": textColor}}
-                                        />
+                                            placeholder="Source URL (optional) — e.g. https://example.com/study" />
                                     ) if show_source_input else None}
                                     <div className="rs-edit-buttons">
                                         <button className="rs-save-btn" onClick={saveEdit}>Save</button>
-                                        <button className="rs-cancel-btn" onClick={cancelEdit}
-                                            style={{"background": cardBg, "border": f"1px solid {borderColor}",
-                                                    "color": mutedColor}}>Cancel</button>
+                                        <Button label="Cancel" onClick={cancelEdit} variant="secondary" />
                                     </div>
                                 </div>
                             ) if editMode else None}
@@ -1021,25 +898,21 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             {(
                                 <div className="rs-delete-box">
                                     <div className="rs-delete-title">Delete this node?</div>
-                                    <div className="rs-delete-warning"
-                                        style={{"color": mutedColor}}>
+                                    <div className="rs-delete-warning">
                                         This will remove the node and all its connections. This cannot be undone.
                                     </div>
                                     <div className="rs-edit-buttons">
                                         <button className="rs-confirm-delete-btn"
                                             onClick={handleDelete}>Delete</button>
-                                        <button className="rs-cancel-btn" onClick={cancelEdit}
-                                            style={{"background": cardBg, "border": f"1px solid {borderColor}",
-                                                    "color": mutedColor}}>Cancel</button>
+                                        <Button label="Cancel" onClick={cancelEdit} variant="secondary" />
                                     </div>
                                 </div>
                             ) if showConfirmDelete else None}
 
                             {(
                                 <div className="rs-panel-section">
-                                    <div className="rs-section-heading" style={{"color": "#f59e0b"}}>
-                                        <span className="rs-section-dot"
-                                            style={{"background": "#f59e0b"}}></span>
+                                    <div className="rs-section-heading rs-section-heading-assumptions">
+                                        <span className="rs-section-dot rs-section-dot-assumptions"></span>
                                         Assumptions
                                     </div>
                                     {assumptionElements}
@@ -1048,42 +921,35 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
                             {(
                                 <div className="rs-panel-section">
-                                    <div className="rs-section-heading" style={{"color": "#6366f1"}}>
-                                        <span className="rs-section-dot"
-                                            style={{"background": "#6366f1"}}></span>
+                                    <div className="rs-section-heading rs-section-heading-info">
+                                        <span className="rs-section-dot rs-section-dot-info"></span>
                                         More Information
                                     </div>
-                                    <div className="rs-more-info-box"
-                                        style={{"color": textColor}}>{sel_more_info}</div>
+                                    <div className="rs-more-info-box">{sel_more_info}</div>
                                 </div>
                             ) if sel_has_more_info else None}
 
                             {(
                                 <div className="rs-panel-section">
-                                    <div className="rs-section-heading" style={{"color": "#06b6d4"}}>
-                                        <span className="rs-section-dot"
-                                            style={{"background": "#06b6d4"}}></span>
+                                    <div className="rs-section-heading rs-section-heading-evidence">
+                                        <span className="rs-section-dot rs-section-dot-evidence"></span>
                                         Evidence Details
                                     </div>
                                     <div className="rs-evidence-box">
                                         <div className="rs-evidence-row">
-                                            <span style={{"color": mutedColor}}>Category</span>
-                                            <span className="rs-evidence-value"
-                                                style={{"color": textColor}}>
-                                                {sel_ev_cat_display}
-                                            </span>
+                                            <span className="rs-evidence-key">Category</span>
+                                            <span className="rs-evidence-value">{sel_ev_cat_display}</span>
                                         </div>
                                         <div className="rs-evidence-row">
-                                            <span style={{"color": mutedColor}}>Quality Score</span>
+                                            <span className="rs-evidence-key">Quality Score</span>
                                             <span style={{"fontWeight": "600", "color": sel_str_color}}>
                                                 {str(sel_node_score)}%
                                             </span>
                                         </div>
                                         {(
-                                            <div className="rs-source-divider"
-                                                style={{"borderTop": f"1px solid {borderColor}"}}>
+                                            <div className="rs-source-divider">
                                                 <div className="rs-source-row">
-                                                    <span style={{"color": mutedColor}}>Source</span>
+                                                    <span className="rs-evidence-key">Source</span>
                                                     <a href={sel_source_url} target="_blank"
                                                         rel="noopener noreferrer"
                                                         className="rs-source-link">
@@ -1098,50 +964,41 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
                             {(
                                 <div className="rs-panel-section">
-                                    <div className="rs-section-heading" style={{"color": "#3b82f6"}}>
-                                        <span className="rs-section-dot"
-                                            style={{"background": "#3b82f6"}}></span>
+                                    <div className="rs-section-heading rs-section-heading-score">
+                                        <span className="rs-section-dot rs-section-dot-score"></span>
                                         Node Score
                                     </div>
-                                    <div className="rs-node-score-box"
-                                        style={{"background": cardBg}}>
+                                    <div className="rs-node-score-box">
                                         <div className="rs-node-score-number"
                                             style={{"color": sel_str_color}}>
                                             {str(sel_node_score)}
                                         </div>
-                                        <div className="rs-node-score-label"
-                                            style={{"color": mutedColor}}>Node Quality</div>
+                                        <div className="rs-node-score-label">Node Quality</div>
                                     </div>
                                 </div>
                             ) if sel_has_node_score else None}
+
                         </div>
                     </div>
                 ) if selectedNode else (
-                    <div className="rs-default-panel"
-                        style={{"background": panelBg, "borderLeft": f"1px solid {borderColor}"}}>
+                    <div className="rs-default-panel">
 
                         <div className="rs-saving-overlay"
                             style={{"display": saving_overlay_display}}>
-                            <div className="rs-saving-indicator"
-                                style={{"background": panelBg, "color": textColor}}>
-                                Saving...
-                            </div>
+                            <div className="rs-saving-indicator">Saving...</div>
                         </div>
 
                         <div className="rs-default-scroll">
                             <div className="rs-default-section-header">
                                 <span>📈</span>
-                                <span className="rs-default-section-title"
-                                    style={{"color": textColor}}>Reasoning Score</span>
+                                <span className="rs-default-section-title">Reasoning Score</span>
                             </div>
 
-                            <div className="rs-score-block" style={{"background": cardBg}}>
+                            <div className="rs-score-block">
                                 <div className="rs-score-big"
                                     style={{"color": scoreColor}}>{overall}</div>
-                                <div className="rs-score-sub"
-                                    style={{"color": mutedColor}}>out of 100</div>
-                                <div className="rs-score-bar"
-                                    style={{"background": bar_track_bg}}>
+                                <div className="rs-score-sub">out of 100</div>
+                                <div className="rs-score-bar">
                                     <div className="rs-score-bar-fill"
                                         style={{"width": f"{overall}%", "background": scoreColor}}></div>
                                 </div>
@@ -1151,85 +1008,69 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                 ) if delta_text else None}
                             </div>
 
-                            <div style={{"marginBottom": "6px"}}>
-                                <div style={{"display": "flex", "justifyContent": "space-between",
-                                              "fontSize": "12px", "marginBottom": "4px"}}>
-                                    <span style={{"color": mutedColor}}>Support Quality (30%)</span>
-                                    <span style={{"fontWeight": "600", "color": textColor}}>{support_val}%</span>
+                            <div className="rs-breakdown-item">
+                                <div className="rs-breakdown-row">
+                                    <span className="rs-breakdown-label">Support Quality (30%)</span>
+                                    <span className="rs-breakdown-value">{support_val}%</span>
                                 </div>
-                                <div className="rs-breakdown-bar"
-                                    style={{"background": bar_track_bg}}>
+                                <div className="rs-breakdown-bar">
                                     <div className="rs-breakdown-bar-fill"
                                         style={{"width": f"{support_val}%", "background": support_bar_color}}></div>
                                 </div>
                             </div>
-                            <div style={{"marginBottom": "6px"}}>
-                                <div style={{"display": "flex", "justifyContent": "space-between",
-                                              "fontSize": "12px", "marginBottom": "4px"}}>
-                                    <span style={{"color": mutedColor}}>Logical Soundness (25%)</span>
-                                    <span style={{"fontWeight": "600", "color": textColor}}>{premise_val}%</span>
+                            <div className="rs-breakdown-item">
+                                <div className="rs-breakdown-row">
+                                    <span className="rs-breakdown-label">Logical Soundness (25%)</span>
+                                    <span className="rs-breakdown-value">{premise_val}%</span>
                                 </div>
-                                <div className="rs-breakdown-bar"
-                                    style={{"background": bar_track_bg}}>
+                                <div className="rs-breakdown-bar">
                                     <div className="rs-breakdown-bar-fill"
                                         style={{"width": f"{premise_val}%", "background": premise_bar_color}}></div>
                                 </div>
                             </div>
-                            <div style={{"marginBottom": "6px"}}>
-                                <div style={{"display": "flex", "justifyContent": "space-between",
-                                              "fontSize": "12px", "marginBottom": "4px"}}>
-                                    <span style={{"color": mutedColor}}>Coherence (20%)</span>
-                                    <span style={{"fontWeight": "600", "color": textColor}}>{coherence_val}%</span>
+                            <div className="rs-breakdown-item">
+                                <div className="rs-breakdown-row">
+                                    <span className="rs-breakdown-label">Coherence (20%)</span>
+                                    <span className="rs-breakdown-value">{coherence_val}%</span>
                                 </div>
-                                <div style={{"height": "4px", "background": bar_track_bg, "borderRadius": "2px"}}>
-                                    <div style={{"height": "100%", "borderRadius": "2px", "transition": "width 0.5s",
-                                                  "width": f"{coherence_val}%", "background": coherence_bar_color}}></div>
+                                <div className="rs-breakdown-bar">
+                                    <div className="rs-breakdown-bar-fill"
+                                        style={{"width": f"{coherence_val}%", "background": coherence_bar_color}}></div>
                                 </div>
                             </div>
-                            <div style={{"marginBottom": "20px"}}>
-                                <div style={{"display": "flex", "justifyContent": "space-between",
-                                              "fontSize": "12px", "marginBottom": "4px"}}>
-                                    <span style={{"color": mutedColor}}>Counterargument Handling (25%)</span>
-                                    <span style={{"fontWeight": "600", "color": textColor}}>{counter_val}%</span>
+                            <div className="rs-breakdown-item rs-breakdown-item-last">
+                                <div className="rs-breakdown-row">
+                                    <span className="rs-breakdown-label">Counterargument Handling (25%)</span>
+                                    <span className="rs-breakdown-value">{counter_val}%</span>
                                 </div>
-                                <div style={{"height": "4px", "background": bar_track_bg, "borderRadius": "2px"}}>
-                                    <div style={{"height": "100%", "borderRadius": "2px", "transition": "width 0.5s",
-                                                  "width": f"{counter_val}%", "background": counter_bar_color}}></div>
+                                <div className="rs-breakdown-bar">
+                                    <div className="rs-breakdown-bar-fill"
+                                        style={{"width": f"{counter_val}%", "background": counter_bar_color}}></div>
                                 </div>
                             </div>
 
                             <div className="rs-default-section-header">
                                 <span>⚠️</span>
-                                <span className="rs-default-section-title"
-                                    style={{"color": textColor}}>Top Issues</span>
+                                <span className="rs-default-section-title">Top Issues</span>
                             </div>
-                            <p className="rs-panel-hint"
-                                style={{"color": mutedColor}}>Click on a node to fix it</p>
+                            <p className="rs-panel-hint">Click on a node to fix it</p>
                             {(
                                 <div>{topIssueElements}</div>
                             ) if len(currentIssues) > 0 else (
-                                <div style={{"padding": "14px", "background": "rgba(34,197,94,0.06)",
-                                              "border": "1px solid rgba(34,197,94,0.12)",
-                                              "borderRadius": "10px", "fontSize": "13px",
-                                              "color": "#16a34a"}}>
+                                <div className="rs-no-issues-card">
                                     No major issues found! Great work.
                                 </div>
                             )}
 
-                            <div style={{"marginTop": "18px"}}>
-                                <div style={{"display": "flex", "alignItems": "center", "gap": "8px", "marginBottom": "12px"}}>
-                                    <span style={{"fontSize": "16px"}}>🧭</span>
-                                    <span style={{"fontWeight": "600", "fontSize": "14px", "color": textColor}}>Next 3 Actions</span>
+                            <div className="rs-next-actions-section">
+                                <div className="rs-default-section-header">
+                                    <span>🧭</span>
+                                    <span className="rs-default-section-title">Next 3 Actions</span>
                                 </div>
                                 {(
                                     <div>{nextActionElements}</div>
                                 ) if len(nextActionElements) > 0 else (
-                                    <div style={{
-                                        "padding": "14px", "background": "rgba(34,197,94,0.06)",
-                                        "border": "1px solid rgba(34,197,94,0.12)",
-                                        "borderRadius": "10px", "fontSize": "13px",
-                                        "color": "#16a34a"
-                                    }}>
+                                    <div className="rs-no-issues-card">
                                         Ready to export. No urgent actions found.
                                     </div>
                                 )}
@@ -1239,13 +1080,11 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                 <div className="rs-counterargs-section">
                                     <div className="rs-default-section-header">
                                         <span>⚔️</span>
-                                        <span className="rs-default-section-title"
-                                            style={{"color": textColor}}>
+                                        <span className="rs-default-section-title">
                                             Consider These Counterarguments
                                         </span>
                                     </div>
-                                    <p className="rs-panel-hint"
-                                        style={{"color": mutedColor}}>
+                                    <p className="rs-panel-hint">
                                         Strengthen your argument by addressing opposing views
                                     </p>
                                     {counterargElements}

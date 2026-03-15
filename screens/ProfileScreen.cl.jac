@@ -1,6 +1,5 @@
 """Juncture - Profile Screen for user settings, history, and statistics."""
 
-sv import from ...main { GetContext, GetUserSessions, CalculateUserStats, UpdateUserProfile, UpdateContext }
 import from "lucide-react" { User, History, Target, TrendingUp, Award, Settings }
 
 import from ..components.Badge { Badge }

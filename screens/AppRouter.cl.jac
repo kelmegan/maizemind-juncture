@@ -1,5 +1,3 @@
-sv import from ...main { GetContext }
-
 import from ..screens.WelcomeScreen { WelcomeScreen }
 import from ..screens.ExportScreen { ExportScreen }
 import from ..screens.GenerateScreen { GenerateScreen }
@@ -80,7 +78,7 @@ def:pub AppRouter -> JsxElement {
     } elif currentScreen == "review" {
         return <ReviewScreen navigate={navigate} screenData={screenData} />;
     } elif currentScreen == "profile" {
-        return <ProfileScreen navigate={navigate} />;
+        return <ProfileScreen navigate={navigate} screenData={screenData}/>;
     } elif currentScreen == "revise" {
         return <ReviseScreen navigate={navigate} screenData={screenData} />;
     }
