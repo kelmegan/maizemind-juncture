@@ -1,6 +1,6 @@
 """Juncture - Review Screen with inline editing workshop, ghost nodes, and score delta."""
 
-sv import from ...main { GetContext, GetGraphWithScoring, AddEvidenceToNode, AddAssumptionToEvidence, UpdateNodeContent, DeleteNode, AddCounterargumentNode, EvaluateNewNode }
+sv import from ...main { GetContext, GetGraphWithScoring, AddEvidenceToNode, AddAssumptionToEvidence, UpdateNodeContent, DeleteNode, AddCounterargumentNode, AddAddressEdge, EvaluateNewNode, GenerateCounter, ClarifyNode }
 
 import from ..components.ArgumentGraphView { ArgumentGraphView }
 import from ..components.Button { Button }
@@ -22,7 +22,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         scoreDelta: int = 0,
         showScoreDelta: bool = False,
         showConfirmDelete: bool = False,
-        suggestedCounterargs: list = [];
+        suggestedCounterargs: list = [],
+        _acceptedTexts: list = [];
 
     async def loadContext() -> None {
         try {
@@ -125,12 +126,91 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             showConfirmDelete = True;
             return;
         }
-        editMode = mode;
-        if mode == "clarify" {
-            editInputValue = sel_content;
-        } else {
-            editInputValue = "";
+        # Counter and clarify are now LLM-powered, no textarea needed
+        if mode == "counter" {
+            handleGenerateCounter();
+            return;
         }
+        if mode == "clarify" {
+            handleClarifyNode();
+            return;
+        }
+        editMode = mode;
+        editInputValue = "";
+    }
+
+    async def handleGenerateCounter() -> None {
+        if not selectedNode or not currentGraph { return; }
+        isSaving = True;
+        _gcPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+        _gcGraphId = currentGraph["id"] if "id" in currentGraph else "";
+        _gcNodeId = selectedNode["id"];
+
+        try {
+            await root spawn GenerateCounter(graphId=_gcGraphId, targetNodeId=_gcNodeId);
+        } except Exception {
+            isSaving = False;
+            return;
+        }
+
+        try {
+            result = await root spawn GetGraphWithScoring(graphId=_gcGraphId);
+            data = result.reports[0] if result.reports else {};
+            if "error" not in data {
+                currentGraph = data["graph"] if "graph" in data else currentGraph;
+                currentScore = data["score"] if "score" in data else currentScore;
+                currentIssues = data["issues"] if "issues" in data else currentIssues;
+                newOverall = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+                scoreDelta = newOverall - _gcPrevScore;
+                showScoreDelta = True;
+                updatedNodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
+                foundNode = None;
+                _gci = 0;
+                while _gci < len(updatedNodes) {
+                    if updatedNodes[_gci]["id"] == _gcNodeId { foundNode = updatedNodes[_gci]; break; }
+                    _gci = _gci + 1;
+                }
+                selectedNode = foundNode;
+            }
+        } except Exception { }
+        isSaving = False;
+    }
+
+    async def handleClarifyNode() -> None {
+        if not selectedNode or not currentGraph { return; }
+        isSaving = True;
+        _clPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+        _clGraphId = currentGraph["id"] if "id" in currentGraph else "";
+        _clNodeId = selectedNode["id"];
+
+        try {
+            await root spawn ClarifyNode(graphId=_clGraphId, nodeId=_clNodeId);
+        } except Exception {
+            isSaving = False;
+            return;
+        }
+
+        try {
+            result = await root spawn GetGraphWithScoring(graphId=_clGraphId);
+            data = result.reports[0] if result.reports else {};
+            if "error" not in data {
+                currentGraph = data["graph"] if "graph" in data else currentGraph;
+                currentScore = data["score"] if "score" in data else currentScore;
+                currentIssues = data["issues"] if "issues" in data else currentIssues;
+                newOverall = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+                scoreDelta = newOverall - _clPrevScore;
+                showScoreDelta = True;
+                updatedNodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
+                foundNode = None;
+                _cli = 0;
+                while _cli < len(updatedNodes) {
+                    if updatedNodes[_cli]["id"] == _clNodeId { foundNode = updatedNodes[_cli]; break; }
+                    _cli = _cli + 1;
+                }
+                selectedNode = foundNode;
+            }
+        } except Exception { }
+        isSaving = False;
     }
 
     def cancelEdit() -> None {
@@ -144,7 +224,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     }
 
     async def saveEdit() -> None {
-        if not editInputValue.trim() or not selectedNode or not currentGraph { return; }
+        if not editInputValue.strip() or not selectedNode or not currentGraph { return; }
         isSaving = True;
         prevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         graphId = currentGraph["id"] if "id" in currentGraph else "";
@@ -154,22 +234,35 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         try {
             if editMode == "evidence" {
                 await root spawn AddEvidenceToNode(
-                    graphId=graphId, nodeId=nodeId, evidenceContent=editInputValue.trim()
-                );
-                saveSuccess = True;
-            } elif editMode == "clarify" {
-                await root spawn UpdateNodeContent(
-                    graphId=graphId, nodeId=nodeId, newContent=editInputValue.trim()
+                    graphId=graphId, nodeId=nodeId, evidenceContent=editInputValue.strip()
                 );
                 saveSuccess = True;
             } elif editMode == "assumption" {
                 await root spawn AddAssumptionToEvidence(
-                    graphId=graphId, nodeId=nodeId, assumptionText=editInputValue.trim()
+                    graphId=graphId, nodeId=nodeId, assumptionText=editInputValue.strip()
                 );
                 saveSuccess = True;
-            } elif editMode == "counter" {
-                await root spawn AddCounterargumentNode(
-                    graphId=graphId, targetNodeId=nodeId, counterargContent=editInputValue.trim()
+            } elif editMode == "address" {
+                # Find the claim this counterarg targets via CONTRADICTS edge
+                defendNodeId = "";
+                addr_edges = currentGraph["edges"] if "edges" in currentGraph else [];
+                _aei = 0;
+                while _aei < len(addr_edges) {
+                    _ae = addr_edges[_aei];
+                    _ae_source = _ae["source"] if "source" in _ae else "";
+                    _ae_type = _ae["type"] if "type" in _ae else "";
+                    if _ae_source == nodeId and _ae_type == "CONTRADICTS" {
+                        defendNodeId = _ae["target"] if "target" in _ae else "";
+                        break;
+                    }
+                    _aei = _aei + 1;
+                }
+                if not defendNodeId { defendNodeId = nodeId; }
+                await root spawn AddAddressEdge(
+                    graphId=graphId,
+                    defendNodeId=defendNodeId,
+                    counterargNodeId=nodeId,
+                    addressContent=editInputValue.strip()
                 );
                 saveSuccess = True;
             }
@@ -213,27 +306,38 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     }
 
     async def handleDelete() -> None {
-        if not selectedNode or not currentGraph { return; }
+        if not currentGraph { return; }
+        # Capture nodeId before clearing selection
+        nodeId = selectedNode["id"] if selectedNode and "id" in selectedNode else "";
+        if not nodeId { return; }
         isSaving = True;
         prevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         graphId = currentGraph["id"] if "id" in currentGraph else "";
 
+        deleteSuccess = False;
         try {
-            await root spawn DeleteNode(graphId=graphId, nodeId=selectedNode["id"]);
-
-            result = await root spawn GetGraphWithScoring(graphId=graphId);
-            data = result.reports[0] if result.reports else {};
-            if "error" not in data {
-                currentGraph = data["graph"] if "graph" in data else currentGraph;
-                currentScore = data["score"] if "score" in data else currentScore;
-                currentIssues = data["issues"] if "issues" in data else currentIssues;
-
-                newOverall = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
-                scoreDelta = newOverall - prevScore;
-                showScoreDelta = True;
-            }
+            await root spawn DeleteNode(graphId=graphId, nodeId=nodeId);
+            deleteSuccess = True;
         } except Exception {
-            # delete failed
+            deleteSuccess = False;
+        }
+
+        if deleteSuccess {
+            try {
+                result = await root spawn GetGraphWithScoring(graphId=graphId);
+                data = result.reports[0] if result.reports else {};
+                if "error" not in data {
+                    currentGraph = data["graph"] if "graph" in data else currentGraph;
+                    currentScore = data["score"] if "score" in data else currentScore;
+                    currentIssues = data["issues"] if "issues" in data else currentIssues;
+
+                    newOverall = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+                    scoreDelta = newOverall - prevScore;
+                    showScoreDelta = True;
+                }
+            } except Exception {
+                # refresh failed but delete succeeded, clear stale data
+            }
         }
 
         selectedNode = None;
@@ -248,43 +352,42 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         ca_target = ca["target_node"] if "target_node" in ca else "";
         if not ca_text or not ca_target { return; }
 
-        # Optimistic: remove from suggestions BEFORE async calls
-        # so the UI updates immediately and survives re-renders
-        newSuggestions: list = [];
-        _ci = 0;
-        while _ci < len(suggestedCounterargs) {
-            sc = suggestedCounterargs[_ci];
-            sc_text = sc["text"] if "text" in sc else "";
-            if sc_text != ca_text {
-                newSuggestions.append(sc);
-            }
-            _ci = _ci + 1;
-        }
-        suggestedCounterargs = newSuggestions;
+        # Track accepted text so ghost is filtered out immediately
+        newAccepted: list = list(_acceptedTexts);
+        newAccepted.append(ca_text);
+        _acceptedTexts = newAccepted;
 
         isSaving = True;
         prevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         graphId = currentGraph["id"] if "id" in currentGraph else "";
 
         try {
-            await root spawn AddCounterargumentNode(
+            # AddCounterargumentNode returns updated graph directly
+            addResult = await root spawn AddCounterargumentNode(
                 graphId=graphId, targetNodeId=ca_target, counterargContent=ca_text
             );
+            addData = addResult.reports[0] if addResult.reports else {};
+            if "error" not in addData and "graph" in addData {
+                # Use the graph from the add walker directly
+                currentGraph = addData["graph"];
+            }
+        } except Exception { }
 
-            result = await root spawn GetGraphWithScoring(graphId=graphId);
-            data = result.reports[0] if result.reports else {};
-            if "error" not in data {
-                currentGraph = data["graph"] if "graph" in data else currentGraph;
-                currentScore = data["score"] if "score" in data else currentScore;
-                currentIssues = data["issues"] if "issues" in data else currentIssues;
+        # Now refresh scores in a separate await
+        try {
+            scoreResult = await root spawn GetGraphWithScoring(graphId=graphId);
+            scoreData = scoreResult.reports[0] if scoreResult.reports else {};
+            if "error" not in scoreData {
+                currentGraph = scoreData["graph"] if "graph" in scoreData else currentGraph;
+                currentScore = scoreData["score"] if "score" in scoreData else currentScore;
+                currentIssues = scoreData["issues"] if "issues" in scoreData else currentIssues;
 
                 newOverall = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
                 scoreDelta = newOverall - prevScore;
                 showScoreDelta = True;
             }
-        } except Exception {
-            # accept failed
-        }
+        } except Exception { }
+
         isSaving = False;
     }
 
@@ -376,31 +479,43 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     }
     sel_ev_cat_display = sel_ev_category.replace("_", " ") if sel_ev_category else "logical reasoning";
 
+    # More Information (populated by Clarify button)
+    sel_more_info = "";
+    if selectedNode {
+        sel_more_info = selectedNode["moreInfo"] if "moreInfo" in selectedNode else "";
+    }
+    sel_has_more_info = len(sel_more_info) > 0 if sel_more_info else False;
+
     # Edit mode labels and placeholders
     edit_label = "Add Evidence";
     edit_placeholder = "Add a fact, statistic, study, or expert quote...";
-    if editMode == "clarify" {
-        edit_label = "Clarify Wording";
-        edit_placeholder = "Rewrite this node more clearly...";
-    } elif editMode == "assumption" {
+    if editMode == "assumption" {
         edit_label = "Acknowledge Assumption";
         edit_placeholder = "What implicit assumption does this evidence rely on?";
-    } elif editMode == "counter" {
-        edit_label = "Add Counterargument";
-        edit_placeholder = "What's a strong argument against this point?";
+    } elif editMode == "address" {
+        edit_label = "Address This Counterargument";
+        edit_placeholder = "How would you respond to this counterargument? Provide evidence or reasoning...";
     }
 
-    # Node issues
-    nodeIssues: list = [];
+    # Node issues (limit to top 3)
+    _allNodeIssues: list = [];
     if selectedNode and currentIssues {
         sel_id = selectedNode["id"];
         _ii = 0;
         while _ii < len(currentIssues) {
             _iss = currentIssues[_ii];
             _nid = _iss["nodeId"] if "nodeId" in _iss else "";
-            if _nid == sel_id { nodeIssues.append(_iss); }
+            if _nid == sel_id { _allNodeIssues.append(_iss); }
             _ii = _ii + 1;
         }
+    }
+    nodeIssues: list = [];
+    _maxIss = 3;
+    if len(_allNodeIssues) < _maxIss { _maxIss = len(_allNodeIssues); }
+    _li = 0;
+    while _li < _maxIss {
+        nodeIssues.append(_allNodeIssues[_li]);
+        _li = _li + 1;
     }
     has_node_issues = len(nodeIssues) > 0;
 
@@ -419,8 +534,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         fix_mode = "evidence";
         if iss_type == "assumption_heavy" {
             fix_mode = "assumption";
-        } elif iss_type == "counterargument_suggestion" {
-            fix_mode = "counter";
+        } elif iss_type == "contradiction" {
+            fix_mode = "address";
         }
         fix_click_fn = makeFixHandler(fix_mode);
         nodeIssueElements.append(
@@ -513,6 +628,22 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _ti = _ti + 1;
     }
 
+    # Filter out accepted counterargs to get visible suggestions
+    visibleCounterargs: list = [];
+    _vci = 0;
+    while _vci < len(suggestedCounterargs) {
+        _vc = suggestedCounterargs[_vci];
+        _vc_text = _vc["text"] if "text" in _vc else "";
+        _is_accepted = False;
+        _aci = 0;
+        while _aci < len(_acceptedTexts) {
+            if _acceptedTexts[_aci] == _vc_text { _is_accepted = True; break; }
+            _aci = _aci + 1;
+        }
+        if not _is_accepted { visibleCounterargs.append(_vc); }
+        _vci = _vci + 1;
+    }
+
     # Helper to create proper closure for counterarg accept buttons
     def makeAcceptHandler(caItem: dict) -> any {
         return lambda -> None { handleAcceptCounterarg(caItem); };
@@ -521,8 +652,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     # Build suggested counterargument cards for default panel
     counterargElements: list = [];
     _cai = 0;
-    while _cai < len(suggestedCounterargs) {
-        ca = suggestedCounterargs[_cai];
+    while _cai < len(visibleCounterargs) {
+        ca = visibleCounterargs[_cai];
         ca_text = ca["text"] if "text" in ca else "";
         ca_target = ca["target_node"] if "target_node" in ca else "";
         ca_severity = ca["severity"] if "severity" in ca else "medium";
@@ -569,12 +700,12 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     }
     has_counterarg_suggestions = len(counterargElements) > 0;
 
-    # Build ghost nodes and edges from suggested counterargs
+    # Build ghost nodes and edges from visible (non-accepted) counterargs
     ghostNodes: list = [];
     ghostEdges: list = [];
     _gi = 0;
-    while _gi < len(suggestedCounterargs) {
-        gca = suggestedCounterargs[_gi];
+    while _gi < len(visibleCounterargs) {
+        gca = visibleCounterargs[_gi];
         gca_text = gca["text"] if "text" in gca else "";
         gca_target = gca["target_node"] if "target_node" in gca else "";
         if gca_text and gca_target {
@@ -615,6 +746,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     show_add_evidence = sel_type == "CLAIM" or sel_type == "THESIS";
     show_acknowledge_assumption = sel_is_evidence;
     show_add_counter = sel_type == "CLAIM" or sel_type == "THESIS";
+    show_address = sel_type == "COUNTERARGUMENT";
 
     return (
         <div style={{"height": "100vh", "fontFamily": "'DM Sans', system-ui, sans-serif",
@@ -842,6 +974,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                             "color": action_text_color, "cursor": "pointer"
                                         }}>⚔️ Counter</button>
                                     ) if show_add_counter else None}
+                                    {(
+                                        <button onClick={lambda -> None { startEdit("address"); }} style={{
+                                            "padding": "7px 12px", "background": "rgba(16,185,129,0.08)",
+                                            "border": "1px solid rgba(16,185,129,0.2)", "borderRadius": "8px",
+                                            "fontSize": "11px", "fontWeight": "600",
+                                            "color": "#10b981", "cursor": "pointer"
+                                        }}>💬 Respond</button>
+                                    ) if show_address else None}
                                     <button onClick={lambda -> None { startEdit("clarify"); }} style={{
                                         "padding": "7px 12px", "background": action_bg,
                                         "border": action_border, "borderRadius": "8px",
@@ -933,6 +1073,27 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                     {assumptionElements}
                                 </div>
                             ) if sel_has_assumptions else None}
+
+                            {(
+                                <div style={{"marginBottom": "16px"}}>
+                                    <div style={{"color": "#6366f1", "fontSize": "10px", "fontWeight": "700",
+                                                  "textTransform": "uppercase", "letterSpacing": "1.5px",
+                                                  "marginBottom": "8px", "display": "flex",
+                                                  "alignItems": "center", "gap": "6px"}}>
+                                        <span style={{"width": "5px", "height": "5px",
+                                                       "background": "#6366f1", "borderRadius": "3px"}}></span>
+                                        More Information
+                                    </div>
+                                    <div style={{
+                                        "padding": "10px 12px",
+                                        "background": "rgba(99,102,241,0.06)",
+                                        "border": "1px solid rgba(99,102,241,0.12)",
+                                        "borderRadius": "8px",
+                                        "fontSize": "12px", "color": textColor,
+                                        "lineHeight": "1.5"
+                                    }}>{sel_more_info}</div>
+                                </div>
+                            ) if sel_has_more_info else None}
 
                             {(
                                 <div style={{"marginBottom": "16px"}}>

@@ -69,7 +69,7 @@ obj GraphSummary {
 """Extract an argument graph from notes. Return JSON:
 {"nodes":[{"id":"n1","kind":"thesis|claim|evidence|counterarg","text":"...","evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["implicit assumption 1"]},...],
 "edges":[{"from_id":"n2","to_id":"n1","kind":"supports|contradicts|addresses","reasoning_type":"deductive|inductive|causal|correlational|analogical","weight":0.8},...]}
-Rules: exactly 1 thesis. Max 8 nodes. For evidence nodes, set evidence_category and list any implicit assumptions the evidence relies on. Edge weight is 0.0-1.0 reflecting connection strength. reasoning_type describes HOW the source supports/contradicts the target."""
+Rules: exactly 1 thesis. Max 8 nodes. Discard meta-commentary or off-topic input (e.g. 'I won't change my mind') — only create nodes for actual claims/evidence. For evidence nodes, set evidence_category and list assumptions as questions (e.g. 'Does X hold in this context?'). Edge weight 0.0-1.0. empirical_data=published studies ONLY. Personal observations/religious texts=anecdotal."""
 def parse_notes_and_edges(
     notes: str,
     documents: list[Document]
@@ -89,11 +89,30 @@ def analyze_and_summarize_llm(
 ) -> str
 by llm(temperature=0.2);
 
+"""Generate a counterargument against this claim.
+Return JSON: {"counterargument":"<max 20 words>"}
+Rules: MUST be under 20 words. One short sentence only. Name a specific study or expert if relevant. Example length: 'Eratosthenes measured Earth's curvature in 240 BC using shadow angles.'"""
+def:pub generate_counterargument(
+    claim_text: str,
+    thesis_text: str
+) -> str
+by llm(temperature=0.4);
+
+"""Provide additional context, explanation, or detail about this node's content. Do NOT rewrite the original — instead expand on it.
+Return JSON: {"moreInfo":"1-3 sentences of additional context, background, or explanation that helps the reader understand this point better."}
+Be informative and specific. If it's evidence, explain methodology or context. If it's a claim, explain the reasoning behind it."""
+def:pub clarify_node_content(
+    node_text: str,
+    node_type: str,
+    thesis_text: str
+) -> str
+by llm(temperature=0.3);
+
 """Evaluate a single piece of evidence in the context of an argument.
 Return JSON: {"evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["assumption1","assumption2"],"confidence":0.3,"reasoning":"brief explanation of quality assessment"}
 evidence_category: empirical_data (scientific studies, statistics), expert_testimony (expert opinions, authoritative sources), anecdotal (personal stories, individual observations), logical_reasoning (logical deductions, philosophical arguments), analogy (comparisons to similar situations).
-confidence: 0.0-1.0 reflecting how strong this evidence actually is. Be critical and honest. Religious texts as evidence = 0.1-0.2. Personal observation = 0.1-0.3. Published studies = 0.7-0.9.
-assumptions: list any implicit assumptions this evidence relies on."""
+confidence: 0.0-1.0, be critical. Religious texts=0.1-0.2. Personal observation=0.1-0.3. Published studies=0.7-0.9. empirical_data=published studies ONLY, never personal observations.
+assumptions: list as questions highlighting what must be true (e.g. 'Does this source apply to this context?' or 'Is this sample size large enough?')."""
 def:pub evaluate_single_evidence(
     evidence_text: str,
     thesis_text: str,

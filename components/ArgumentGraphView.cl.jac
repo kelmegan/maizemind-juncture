@@ -471,16 +471,19 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         e_width = "1.5" if is_ghost_edge else ("2" if both_in else "1");
         if is_ghost_edge { dash = "4,3"; }
 
-        e_weight = cur_e["weight"] if "weight" in cur_e else None;
-
         # Show weight percentage on edge if available (never for ghost edges)
         show_edge_label = False;
         edge_label_text = "";
-        if e_weight is not None and not is_ghost_edge {
+        if not is_ghost_edge and "weight" in cur_e {
+            e_weight = cur_e["weight"];
             try {
-                w_val = int(float(e_weight) * 100);
-                edge_label_text = f"{w_val}%";
-                show_edge_label = True;
+                w_float = float(str(e_weight));
+                # Guard against NaN: NaN != NaN
+                if w_float == w_float and w_float >= 0.0 and w_float <= 1.0 {
+                    w_val = int(w_float * 100);
+                    edge_label_text = f"{w_val}%";
+                    show_edge_label = True;
+                }
             } except Exception {
                 show_edge_label = False;
             }

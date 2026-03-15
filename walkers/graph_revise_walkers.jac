@@ -1,7 +1,7 @@
 """Walkers for revising argument graph nodes."""
 
 import from graph.argument_graph_nodes { ArgumentGraph }
-import from src.graph_generator { evaluate_single_evidence }
+import from src.graph_generator { evaluate_single_evidence, generate_counterargument, clarify_node_content }
 import time;
 import json;
 
@@ -27,6 +27,14 @@ walker:pub AddEvidenceToNode {
 
         evidence_id = f"node_evidence_{int(time.time())}";
 
+        # Capitalize first letter of evidence content
+        ev_content = self.evidenceContent.strip();
+        if len(ev_content) > 1 {
+            ev_content = ev_content[0].upper() + ev_content[1:];
+        } elif len(ev_content) == 1 {
+            ev_content = ev_content[0].upper();
+        }
+
         # Find thesis text for evaluation context
         thesis_text = "";
         for tn in graph_node.nodes {
@@ -43,7 +51,7 @@ walker:pub AddEvidenceToNode {
         ev_node_score = 50;
         try {
             raw_result = evaluate_single_evidence(
-                evidence_text=self.evidenceContent,
+                evidence_text=ev_content,
                 thesis_text=thesis_text,
                 context_description=f"This evidence is used to support the thesis: '{thesis_text}'"
             );
@@ -89,14 +97,34 @@ walker:pub AddEvidenceToNode {
             print(f"=== Evidence evaluation failed (using defaults): {eval_err} ===");
         }
 
+        # Compute position below target node, offset to avoid overlap
+        target_pos_x = 0.0;
+        target_pos_y = 0.0;
+        sibling_count = 0;
+        for tn in graph_node.nodes {
+            if tn["id"] == self.nodeId {
+                tp = tn.get("position", {"x": 0, "y": 0});
+                target_pos_x = float(tp.get("x", 0));
+                target_pos_y = float(tp.get("y", 0));
+            }
+        }
+        # Count existing children of this node for horizontal offset
+        for te in graph_node.edges {
+            if te.get("target") == self.nodeId and te.get("type") == "SUPPORTS" {
+                sibling_count = sibling_count + 1;
+            }
+        }
+        new_x = target_pos_x + (sibling_count - 1) * 250.0;
+        new_y = target_pos_y + 130.0;
+
         new_evidence = {
             "id": evidence_id,
             "type": "EVIDENCE",
-            "content": self.evidenceContent,
+            "content": ev_content,
             "confidence": ev_confidence,
             "isWeak": ev_confidence < 0.5,
             "issues": [],
-            "position": {"x": 0, "y": 0},
+            "position": {"x": new_x, "y": new_y},
             "evidence_category": ev_category,
             "assumptions": ev_assumptions,
             "nodeScore": ev_node_score
@@ -213,13 +241,21 @@ walker:pub UpdateNodeContent {
             return;
         }
 
+        # Capitalize first letter of new content
+        new_text = self.newContent.strip();
+        if len(new_text) > 1 {
+            new_text = new_text[0].upper() + new_text[1:];
+        } elif len(new_text) == 1 {
+            new_text = new_text[0].upper();
+        }
+
         for node in graph_node.nodes {
             if node["id"] == self.nodeId {
                 # Preserve all existing fields, only update content
                 updated_node = {
                     "id": node["id"],
                     "type": node["type"],
-                    "content": self.newContent,
+                    "content": new_text,
                     "position": node.get("position", {"x": 0, "y": 0}),
                     "confidence": node.get("confidence", 0.5),
                     "isWeak": node.get("isWeak", False),
@@ -319,14 +355,43 @@ walker:pub AddCounterargumentNode {
         }
 
         counter_id = f"node_counter_{int(time.time())}";
+
+        # Capitalize first letter of counterargument content
+        ca_content = self.counterargContent.strip();
+        if len(ca_content) > 1 {
+            ca_content = ca_content[0].upper() + ca_content[1:];
+        } elif len(ca_content) == 1 {
+            ca_content = ca_content[0].upper();
+        }
+
+        # Compute position to the right of target node
+        target_pos_x = 0.0;
+        target_pos_y = 0.0;
+        contra_count = 0;
+        for tn in graph_node.nodes {
+            if tn["id"] == self.targetNodeId {
+                tp = tn.get("position", {"x": 0, "y": 0});
+                target_pos_x = float(tp.get("x", 0));
+                target_pos_y = float(tp.get("y", 0));
+            }
+        }
+        # Count existing contradicts edges to this node for offset
+        for te in graph_node.edges {
+            if te.get("target") == self.targetNodeId and te.get("type") == "CONTRADICTS" {
+                contra_count = contra_count + 1;
+            }
+        }
+        new_x = target_pos_x + 280.0 + (contra_count - 1) * 250.0;
+        new_y = target_pos_y + 60.0;
+
         new_counter = {
             "id": counter_id,
             "type": "COUNTERARGUMENT",
-            "content": self.counterargContent,
+            "content": ca_content,
             "confidence": 0.5,
             "isWeak": False,
             "issues": [],
-            "position": {"x": 0, "y": 0},
+            "position": {"x": new_x, "y": new_y},
             "evidence_category": "",
             "assumptions": [],
             "nodeScore": 50
@@ -384,6 +449,27 @@ walker:pub AddAddressEdge {
         }
 
         evidence_id = f"node_address_{int(time.time())}";
+
+        # Compute position between the defended node and counterarg
+        defend_x = 0.0;
+        defend_y = 0.0;
+        counter_x = 0.0;
+        counter_y = 0.0;
+        for tn in graph_node.nodes {
+            if tn["id"] == self.defendNodeId {
+                tp = tn.get("position", {"x": 0, "y": 0});
+                defend_x = float(tp.get("x", 0));
+                defend_y = float(tp.get("y", 0));
+            }
+            if tn["id"] == self.counterargNodeId {
+                tp = tn.get("position", {"x": 0, "y": 0});
+                counter_x = float(tp.get("x", 0));
+                counter_y = float(tp.get("y", 0));
+            }
+        }
+        new_x = (defend_x + counter_x) / 2.0;
+        new_y = max(defend_y, counter_y) + 130.0;
+
         new_evidence = {
             "id": evidence_id,
             "type": "EVIDENCE",
@@ -391,7 +477,7 @@ walker:pub AddAddressEdge {
             "confidence": 0.5,
             "isWeak": False,
             "issues": [],
-            "position": {"x": 0, "y": 0},
+            "position": {"x": new_x, "y": new_y},
             "evidence_category": "logical_reasoning",
             "assumptions": [],
             "nodeScore": 50
@@ -587,6 +673,247 @@ walker:pub EvaluateNewNode {
         }
         } except Exception as e {
             print(f"EvaluateNewNode ERROR: {e}");
+            report {"error": str(e)};
+        }
+    }
+}
+
+
+walker:pub GenerateCounter {
+    has graphId: str,
+        targetNodeId: str;
+
+    can run with Root entry {
+        try {
+        graph_node = None;
+        for graph in [-->](?:ArgumentGraph) {
+            if graph.id == self.graphId {
+                graph_node = graph;
+                break;
+            }
+        }
+
+        if not graph_node {
+            report {"error": "Graph not found"};
+            return;
+        }
+
+        # Find target node and thesis
+        target_content = "";
+        thesis_text = "";
+        for n in graph_node.nodes {
+            if n["id"] == self.targetNodeId {
+                target_content = n.get("content", "");
+            }
+            if n["type"] == "THESIS" {
+                thesis_text = n.get("content", "");
+            }
+        }
+
+        if not target_content {
+            report {"error": "Target node not found"};
+            return;
+        }
+
+        # Call LLM to generate counterargument
+        raw_result = generate_counterargument(
+            claim_text=target_content,
+            thesis_text=thesis_text
+        );
+        raw_str = str(raw_result).strip();
+        if raw_str.startswith("```") {
+            fence_lines = raw_str.split("\n");
+            fence_lines = fence_lines[1:];
+            if fence_lines and fence_lines[-1].strip().startswith("```") {
+                fence_lines = fence_lines[:-1];
+            }
+            raw_str = "\n".join(fence_lines).strip();
+        }
+        parsed = json.loads(raw_str);
+        ca_text = parsed.get("counterargument", "");
+
+        if not ca_text {
+            report {"error": "LLM returned empty counterargument"};
+            return;
+        }
+
+        # Capitalize
+        if len(ca_text) > 1 {
+            ca_text = ca_text[0].upper() + ca_text[1:];
+        } elif len(ca_text) == 1 {
+            ca_text = ca_text[0].upper();
+        }
+
+        counter_id = f"node_counter_{int(time.time())}";
+
+        # Position to the right of target
+        target_pos_x = 0.0;
+        target_pos_y = 0.0;
+        contra_count = 0;
+        for tn in graph_node.nodes {
+            if tn["id"] == self.targetNodeId {
+                tp = tn.get("position", {"x": 0, "y": 0});
+                target_pos_x = float(tp.get("x", 0));
+                target_pos_y = float(tp.get("y", 0));
+            }
+        }
+        for te in graph_node.edges {
+            if te.get("target") == self.targetNodeId and te.get("type") == "CONTRADICTS" {
+                contra_count = contra_count + 1;
+            }
+        }
+        new_x = target_pos_x + 280.0 + contra_count * 250.0;
+        new_y = target_pos_y + 60.0;
+
+        new_counter = {
+            "id": counter_id,
+            "type": "COUNTERARGUMENT",
+            "content": ca_text,
+            "confidence": 0.5,
+            "isWeak": False,
+            "issues": [],
+            "position": {"x": new_x, "y": new_y},
+            "evidence_category": "",
+            "assumptions": [],
+            "nodeScore": 50
+        };
+
+        graph_node.nodes.append(new_counter);
+        graph_node.edges.append({
+            "id": f"edge_{counter_id}",
+            "source": counter_id,
+            "target": self.targetNodeId,
+            "type": "CONTRADICTS"
+        });
+        graph_node.updatedAt = str(int(time.time()));
+
+        report {
+            "success": True,
+            "generatedText": ca_text,
+            "graph": {
+                "id": graph_node.id,
+                "nodes": graph_node.nodes,
+                "edges": graph_node.edges,
+                "createdAt": graph_node.createdAt,
+                "updatedAt": graph_node.updatedAt
+            }
+        };
+        } except Exception as e {
+            print(f"GenerateCounter ERROR: {e}");
+            report {"error": str(e)};
+        }
+    }
+}
+
+
+walker:pub ClarifyNode {
+    has graphId: str,
+        nodeId: str;
+
+    can run with Root entry {
+        try {
+        graph_node = None;
+        for graph in [-->](?:ArgumentGraph) {
+            if graph.id == self.graphId {
+                graph_node = graph;
+                break;
+            }
+        }
+
+        if not graph_node {
+            report {"error": "Graph not found"};
+            return;
+        }
+
+        # Find target node and thesis
+        target_node = None;
+        thesis_text = "";
+        for n in graph_node.nodes {
+            if n["id"] == self.nodeId {
+                target_node = n;
+            }
+            if n["type"] == "THESIS" {
+                thesis_text = n.get("content", "");
+            }
+        }
+
+        if not target_node {
+            report {"error": "Node not found"};
+            return;
+        }
+
+        node_content = target_node.get("content", "");
+        node_type = target_node.get("type", "CLAIM");
+
+        # Call LLM to generate more info
+        raw_result = clarify_node_content(
+            node_text=node_content,
+            node_type=node_type,
+            thesis_text=thesis_text
+        );
+        raw_str = str(raw_result).strip();
+        if raw_str.startswith("```") {
+            fence_lines = raw_str.split("\n");
+            fence_lines = fence_lines[1:];
+            if fence_lines and fence_lines[-1].strip().startswith("```") {
+                fence_lines = fence_lines[:-1];
+            }
+            raw_str = "\n".join(fence_lines).strip();
+        }
+        parsed = json.loads(raw_str);
+        more_info = parsed.get("moreInfo", "");
+
+        if not more_info {
+            report {"error": "LLM returned empty info"};
+            return;
+        }
+
+        # Capitalize
+        if len(more_info) > 1 {
+            more_info = more_info[0].upper() + more_info[1:];
+        } elif len(more_info) == 1 {
+            more_info = more_info[0].upper();
+        }
+
+        # Store moreInfo on the node without replacing content
+        updated_node = {
+            "id": target_node["id"],
+            "type": target_node["type"],
+            "content": target_node.get("content", ""),
+            "position": target_node.get("position", {"x": 0, "y": 0}),
+            "confidence": target_node.get("confidence", 0.5),
+            "isWeak": target_node.get("isWeak", False),
+            "issues": target_node.get("issues", []),
+            "evidence_category": target_node.get("evidence_category", ""),
+            "assumptions": target_node.get("assumptions", []),
+            "nodeScore": target_node.get("nodeScore", 50),
+            "moreInfo": more_info
+        };
+
+        new_nodes: list = [];
+        for n in graph_node.nodes {
+            if n["id"] == self.nodeId {
+                new_nodes.append(updated_node);
+            } else {
+                new_nodes.append(n);
+            }
+        }
+        graph_node.nodes = new_nodes;
+        graph_node.updatedAt = str(int(time.time()));
+
+        report {
+            "success": True,
+            "moreInfo": more_info,
+            "graph": {
+                "id": graph_node.id,
+                "nodes": graph_node.nodes,
+                "edges": graph_node.edges,
+                "createdAt": graph_node.createdAt,
+                "updatedAt": graph_node.updatedAt
+            }
+        };
+        } except Exception as e {
+            print(f"ClarifyNode ERROR: {e}");
             report {"error": str(e)};
         }
     }
