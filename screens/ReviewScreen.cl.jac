@@ -726,18 +726,18 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                     })}
                 </div>
                 <div className="rs-legend-section">
-                    <span className="rs-legend-label">Strength</span>
+                    <span className="rs-legend-label">Quality Score</span>
                     <div className="rs-legend-type-item">
                         <div className="rs-strength-dot rs-strength-dot-good"></div>
-                        <span className="rs-legend-value">70+</span>
+                        <span className="rs-legend-value">Good</span>
                     </div>
                     <div className="rs-legend-type-item">
                         <div className="rs-strength-dot rs-strength-dot-warning"></div>
-                        <span className="rs-legend-value">50-69</span>
+                        <span className="rs-legend-value">Moderate</span>
                     </div>
                     <div className="rs-legend-type-item">
                         <div className="rs-strength-dot rs-strength-dot-bad"></div>
-                        <span className="rs-legend-value">{"<50"}</span>
+                        <span className="rs-legend-value">Poor</span>
                     </div>
                 </div>
                 <div className="rs-legend-section">
@@ -790,18 +790,15 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
                         <div className="rs-saving-overlay"
                             style={{"display": saving_overlay_display}}>
-                            <div className="rs-saving-indicator">Saving...</div>
+                            <div className="rs-saving-indicator">Updating...</div>
                         </div>
 
                         <div className="rs-panel-header">
                             <div className="rs-panel-header-row">
                                 <div className="rs-panel-header-left">
                                     <span className="rs-panel-type-label"
-                                        style={{"color": sel_type_color}}>{sel_type}</span>
-                                    <span className="rs-strength-badge"
-                                        style={{"background": sel_str_bg, "color": sel_str_color,
-                                                "border": f"1px solid {sel_str_color}"}}>
-                                        {str(int(sel_conf_val * 100))}%
+                                        style={{"color": sel_type_color}}>
+                                        {sel_type}
                                     </span>
                                 </div>
                                 <button className="rs-panel-close-btn" onClick={closePanel}>✕</button>
@@ -967,7 +964,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                     <div className="rs-node-score-box">
                                         <div className="rs-node-score-number"
                                             style={{"color": sel_str_color}}>
-                                            {str(sel_node_score)}
+                                            {str(sel_node_score) + '/100'}
                                         </div>
                                         <div className="rs-node-score-label">Node Quality</div>
                                     </div>
@@ -981,7 +978,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
                         <div className="rs-saving-overlay"
                             style={{"display": saving_overlay_display}}>
-                            <div className="rs-saving-indicator">Saving...</div>
+                            <div className="rs-saving-indicator">Updating...</div>
                         </div>
 
                         <div className="rs-default-scroll">
@@ -1049,12 +1046,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                 <span>⚠️</span>
                                 <span className="rs-default-section-title">Top Issues</span>
                             </div>
-                            <p className="rs-panel-hint">Click on a node to fix it</p>
                             {(
-                                <div>{topIssueElements}</div>
+                                <div>
+                                    <p className="rs-panel-hint">Click on a node to fix it</p>
+                                    <div>{topIssueElements}</div>
+                                </div>
                             ) if len(currentIssues) > 0 else (
                                 <div className="rs-no-issues-card">
-                                    No major issues found! Great work.
+                                    No major issues found!
                                 </div>
                             )}
 
@@ -1067,7 +1066,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                     <div>{nextActionElements}</div>
                                 ) if len(nextActionElements) > 0 else (
                                     <div className="rs-no-issues-card">
-                                        Ready to export. No urgent actions found.
+                                        No urgent actions found. Your argument is ready to export!
                                     </div>
                                 )}
                             </div>

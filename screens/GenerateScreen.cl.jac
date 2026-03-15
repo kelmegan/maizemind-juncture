@@ -202,15 +202,11 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                         </div>
 
                         {(
-                            <div style={{
-                                "padding": "14px", "background": "#fffbeb",
-                                "border": "1px solid #fde68a", "borderRadius": "10px",
-                                "marginBottom": "12px"
-                            }}>
-                                <p style={{"fontSize": "13px", "color": "#92400e", "marginBottom": "10px"}}>
+                            <div className="generate-confirm-box">
+                                <p className="generate-confirm-text">
                                     You already have a graph. Generating a new one will replace it. Continue?
                                 </p>
-                                <div style={{"display": "flex", "gap": "8px"}}>
+                                <div className="generate-confirm-actions">
                                     <Button label="Yes, regenerate" onClick={handleGenerate} className="generate-btn" />
                                     <Button label="Cancel" variant="outline" onClick={cancelRegenerate} />
                                 </div>
@@ -218,26 +214,13 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                         ) if showConfirmRegenerate else None}
 
                         {(
-                            <div style={{
-                                "padding": "20px", "background": "rgba(99,102,241,0.06)",
-                                "border": "1px solid rgba(99,102,241,0.15)", "borderRadius": "12px",
-                                "textAlign": "center"
-                            }}>
-                                <div style={{"display": "flex", "alignItems": "center",
-                                              "justifyContent": "center", "gap": "10px", "marginBottom": "8px"}}>
-                                    <div style={{
-                                        "width": "20px", "height": "20px", "border": "2px solid #6366f1",
-                                        "borderTopColor": "transparent", "borderRadius": "50%",
-                                        "animation": "spin 1s linear infinite"
-                                    }}></div>
-                                    <span style={{"fontSize": "14px", "fontWeight": "600", "color": "#6366f1"}}>
-                                        Generating...
-                                    </span>
+                            <div className="generate-spinner-box">
+                                <div className="generate-spinner-row">
+                                    <div className="generate-spinner-wheel"></div>
+                                    <span className="generate-spinner-label">Generating...</span>
                                 </div>
-                                <p style={{"fontSize": "13px", "color": "#64748b"}}>{generateStatus}</p>
-                                <p style={{"fontSize": "11px", "color": "#94a3b8", "marginTop": "8px"}}>
-                                    This usually takes 20-40 seconds
-                                </p>
+                                <p className="generate-spinner-status">{generateStatus}</p>
+                                <p className="generate-spinner-note">This can take a moment</p>
                             </div>
                         ) if isGenerating else (
                             <Button
@@ -249,14 +232,8 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                         )}
 
                         { generateStatus and not isGenerating and
-                            <div style={{
-                                "padding": "14px", "background": "rgba(239,68,68,0.06)",
-                                "border": "1px solid rgba(239,68,68,0.12)", "borderRadius": "10px",
-                                "textAlign": "center", "marginTop": "12px"
-                            }}>
-                                <p style={{"fontSize": "13px", "color": "#dc2626", "marginBottom": "8px"}}>
-                                    {generateStatus}
-                                </p>
+                            <div className="generate-error-box">
+                                <p className="generate-error-text">{generateStatus}</p>
                                 <Button label="Try Again" onClick={handleGenerate} className="generate-btn" />
                             </div>
                         }

@@ -25,6 +25,19 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
             return;
         }
         loading = True;
+
+        try {
+            check_result = await root spawn GetUserByEmail(email=email);
+            existing_user = check_result.reports[0] if check_result.reports else None;
+            if existing_user {
+                error = "An account with this email already exists. Please log in instead.";
+                loading = False;
+                return;
+            }
+        } except Exception {
+            # Check failed, proceed with signup anyway
+        }
+
         result = await jacSignup(email, password);
         loading = False;
 

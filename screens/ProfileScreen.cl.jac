@@ -49,7 +49,7 @@ def:pub ProfileScreen(props: any) -> JsxElement {
             if userId and not isGuest {
                 try {
                     sess_result = await root spawn GetUserSessions(userId=userId);
-                    raw_sessions = sess_result.reports[0] if sess_result.reports else [];
+                    raw_sessions = sess_result["reports"][0] if sess_result["reports"] else [];
                     sessions = raw_sessions if raw_sessions else [];
                 } except Exception as e {
                     print(f"Error loading sessions: {e}");
@@ -57,7 +57,7 @@ def:pub ProfileScreen(props: any) -> JsxElement {
 
                 try {
                     stats_result = await root spawn CalculateUserStats(userId=userId);
-                    raw_stats = stats_result.reports[0] if stats_result.reports else None;
+                    raw_stats = stats_result["reports"][0] if stats_result["reports"] else None;
                     stats = raw_stats if raw_stats else None;
                 } except Exception as e {
                     print(f"Error loading stats: {e}");

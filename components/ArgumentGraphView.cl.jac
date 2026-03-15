@@ -621,7 +621,7 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                 <div className="graph-hint">
                     Click a node for details · Drag to rearrange · Scroll to zoom
                 </div>
-            ) if not selectedNodeId else None}
+            )}
         </div>
     );
 }
