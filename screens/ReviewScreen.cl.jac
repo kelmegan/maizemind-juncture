@@ -132,6 +132,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             handleClarifyNode();
             return;
         }
+        if mode == "investigate" {
+            handleInvestigateNode();
+            return;
+        }
+        if mode == "auto_fix" {
+            handleAutoFix();
+            return;
+        }
         editMode = mode;
         editInputValue = "";
     }
@@ -160,7 +168,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 if _gcNodes[_gci]["id"] == _gcNodeId { _gcFound = _gcNodes[_gci]; break; }
                 _gci = _gci + 1;
             }
-            selectedNode = {_gcFound};
+            selectedNode = None;
+            selectedNode = _gcFound;
         } except Exception { }
         isSaving = False;
     }
@@ -189,7 +198,108 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 if _clNodes[_cli]["id"] == _clNodeId { _clFound = _clNodes[_cli]; break; }
                 _cli = _cli + 1;
             }
-            selectedNode = {_clFound};
+            selectedNode = None;
+            selectedNode = _clFound;
+        } except Exception { }
+        isSaving = False;
+    }
+
+    async def handleInvestigateNode() -> None {
+        if not selectedNode or not currentGraph { return; }
+        isSaving = True;
+        _invGraphId = currentGraph["id"] if "id" in currentGraph else "";
+        _invNodeId = selectedNode["id"];
+        _invPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+        try {
+            mutResult = await root spawn InvestigateNode(graphId=_invGraphId, nodeId=_invNodeId);
+            mutData = mutResult.reports[0] if mutResult.reports else {};
+            if "error" in mutData {
+                print(f"Investigate error: {mutData['error']}");
+            }
+            if "graph" in mutData { currentGraph = mutData["graph"]; }
+            if "score" in mutData {
+                currentScore = mutData["score"];
+                _invNewScore = currentScore["overall"] if "overall" in currentScore else _invPrevScore;
+                applyScoreDelta(_invPrevScore, _invNewScore);
+            }
+            if "issues" in mutData { currentIssues = mutData["issues"]; }
+            if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
+            _invNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
+            _invFound = None;
+            _invi = 0;
+            while _invi < len(_invNodes) {
+                if _invNodes[_invi]["id"] == _invNodeId { _invFound = _invNodes[_invi]; break; }
+                _invi = _invi + 1;
+            }
+            selectedNode = None;
+            selectedNode = _invFound;
+        } except Exception { }
+        isSaving = False;
+    }
+
+    async def handleAutoFix() -> None {
+        if not selectedNode or not currentGraph { return; }
+        isSaving = True;
+        _afGraphId = currentGraph["id"] if "id" in currentGraph else "";
+        _afNodeId = selectedNode["id"];
+        _afPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+        try {
+            # Single call: investigate + add evidence in one walker call
+            mutResult = await root spawn InvestigateNode(graphId=_afGraphId, nodeId=_afNodeId, addAsEvidence=True);
+            mutData = mutResult.reports[0] if mutResult.reports else {};
+            if "graph" in mutData { currentGraph = mutData["graph"]; }
+            if "score" in mutData {
+                currentScore = mutData["score"];
+                _afNewScore = currentScore["overall"] if "overall" in currentScore else _afPrevScore;
+                applyScoreDelta(_afPrevScore, _afNewScore);
+            }
+            if "issues" in mutData { currentIssues = mutData["issues"]; }
+            if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
+            _afNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
+            _afFound = None;
+            _afi = 0;
+            while _afi < len(_afNodes) {
+                if _afNodes[_afi]["id"] == _afNodeId { _afFound = _afNodes[_afi]; break; }
+                _afi = _afi + 1;
+            }
+            selectedNode = None;
+            selectedNode = _afFound;
+        } except Exception { }
+        isSaving = False;
+    }
+
+    async def handleAddAsEvidence() -> None {
+        if not selectedNode or not currentGraph { return; }
+        _aeMoreInfo = selectedNode["moreInfo"] if "moreInfo" in selectedNode else "";
+        _aeSourceUrl = selectedNode["sourceUrl"] if "sourceUrl" in selectedNode else "";
+        if not _aeMoreInfo { return; }
+        isSaving = True;
+        _aeGraphId = currentGraph["id"] if "id" in currentGraph else "";
+        _aeNodeId = selectedNode["id"];
+        _aePrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+        try {
+            mutResult = await root spawn AddEvidenceToNode(
+                graphId=_aeGraphId, nodeId=_aeNodeId,
+                evidenceContent=_aeMoreInfo, sourceUrl=_aeSourceUrl
+            );
+            mutData = mutResult.reports[0] if mutResult.reports else {};
+            if "graph" in mutData { currentGraph = mutData["graph"]; }
+            if "score" in mutData {
+                currentScore = mutData["score"];
+                _aeNewScore = currentScore["overall"] if "overall" in currentScore else _aePrevScore;
+                applyScoreDelta(_aePrevScore, _aeNewScore);
+            }
+            if "issues" in mutData { currentIssues = mutData["issues"]; }
+            if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
+            _aeNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
+            _aeFound = None;
+            _aei = 0;
+            while _aei < len(_aeNodes) {
+                if _aeNodes[_aei]["id"] == _aeNodeId { _aeFound = _aeNodes[_aei]; break; }
+                _aei = _aei + 1;
+            }
+            selectedNode = None;
+            selectedNode = _aeFound;
         } except Exception { }
         isSaving = False;
     }
@@ -253,10 +363,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 mutResult = await root spawn AddEvidenceToNode(
                     graphId=_seGraphId, nodeId=_seNodeId, evidenceContent=_seContent, sourceUrl=_seSourceUrl
                 );
-            } elif _seMode == "assumption" {
-                mutResult = await root spawn AddAssumptionToEvidence(
-                    graphId=_seGraphId, nodeId=_seNodeId, assumptionText=_seContent
-                );
             } elif _seMode == "address" {
                 mutResult = await root spawn AddAddressEdge(
                     graphId=_seGraphId,
@@ -282,7 +388,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                     if _seNodes[_sefi]["id"] == _seNodeId { _seFound = _seNodes[_sefi]; break; }
                     _sefi = _sefi + 1;
                 }
-                selectedNode = {_seFound};
+                selectedNode = None;
+                selectedNode = _seFound;
             }
         } except Exception { }
 
@@ -376,7 +483,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 if _ebNodes[_ebi]["id"] == _ebNodeId { _ebFound = _ebNodes[_ebi]; break; }
                 _ebi = _ebi + 1;
             }
-            selectedNode = {_ebFound};
+            selectedNode = None;
+            selectedNode = _ebFound;
         } except Exception { }
         isSaving = False;
     }
@@ -448,6 +556,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         sel_source_url = selectedNode["sourceUrl"] if "sourceUrl" in selectedNode else "";
     }
     sel_has_source = len(sel_source_url) > 0 if sel_source_url else False;
+    # Only "well sourced" if backed by empirical data, expert testimony, or high score
+    sel_is_well_sourced = sel_has_source and (sel_ev_category == "empirical_data" or sel_ev_category == "expert_testimony" or sel_node_score >= 70);
     sel_ev_cat_display = sel_ev_category.replace("_", " ") if sel_ev_category else "logical reasoning";
 
     sel_more_info = "";
@@ -458,10 +568,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
     edit_label = "Add Evidence";
     edit_placeholder = "Add a fact, statistic, study, or expert quote...";
-    if editMode == "assumption" {
-        edit_label = "Add Missing Assumption";
-        edit_placeholder = "State the hidden assumption that makes this claim valid...";
-    } elif editMode == "address" {
+    if editMode == "address" {
         edit_label = "Address This Counterargument";
         edit_placeholder = "How would you respond to this counterargument? Provide evidence or reasoning...";
     }
@@ -497,8 +604,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         iss = nodeIssues[_ni];
         iss_type = iss["type"] if "type" in iss else "";
         fix_mode = "evidence";
-        if iss_type == "assumption_heavy" or iss_type == "missing_premise" {
-            fix_mode = "assumption";
+        if iss_type == "weak_evidence" or iss_type == "unsupported_claim" {
+            fix_mode = "auto_fix";
+        } elif iss_type == "missing_premise" {
+            fix_mode = "evidence";
         } elif iss_type == "contradiction" or iss_type == "unresolved_contradiction" {
             fix_mode = "address";
         } elif iss_type == "vague_language" or iss_type == "weak_inference" {
@@ -512,7 +621,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 <div className="rs-issue-inner">
                     <div className="rs-issue-body">
                         <div className="rs-issue-description">{iss["description"]}</div>
-                        <div className="rs-issue-suggestion">{iss["suggestedAction"]}</div>
+                        <div className="rs-issue-next-step">
+                            <span className="rs-next-step-arrow">→</span>
+                            {iss["suggestedAction"]}
+                        </div>
                     </div>
                     <button onClick={fix_click_fn} className="rs-fix-btn">Fix →</button>
                 </div>
@@ -526,7 +638,20 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     while _ai < len(sel_assumptions) {
         assumption = sel_assumptions[_ai];
         assumptionElements.append(
-            <div key={str(_ai)} className="rs-assumption-item">⚠️ {assumption}</div>
+            <div key={f"assumption_{str(_ai)}"} className="rs-assumption-step-card">
+                <div className="rs-assumption-step-label">⚠️ Assumed</div>
+                <div className="rs-assumption-step-text">{assumption}</div>
+                <div className="rs-issue-next-step">
+                    <span className="rs-next-step-arrow">→</span>
+                    Provide evidence to support or address this assumption
+                </div>
+                {(
+                    <button className="rs-assumption-action-btn"
+                        onClick={lambda -> None { handleInvestigateNode(); }}>
+                        🔍 Find Evidence →
+                    </button>
+                ) if not sel_is_well_sourced else None}
+            </div>
         );
         _ai = _ai + 1;
     }
@@ -699,8 +824,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
     saving_overlay_display = "flex" if isSaving else "none";
 
-    show_add_evidence = sel_type == "CLAIM" or sel_type == "THESIS";
-    show_acknowledge_assumption = sel_type == "CLAIM" or sel_type == "THESIS";
+    show_add_evidence = sel_type == "CLAIM" or sel_type == "THESIS" or sel_type == "EVIDENCE";
     show_add_counter = sel_type == "CLAIM" or sel_type == "THESIS";
     show_address = sel_type == "COUNTERARGUMENT";
     show_expand = sel_type == "CLAIM" or sel_type == "THESIS";
@@ -811,12 +935,19 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             <div className="rs-panel-section">
                                 <div className="rs-section-heading rs-section-heading-issues">
                                     <span className="rs-section-dot rs-section-dot-issues"></span>
-                                    Issues
+                                    Issues & Next Steps
                                 </div>
                                 {(
-                                    <div>{nodeIssueElements}</div>
-                                ) if has_node_issues else (
-                                    <div className="rs-well-supported">Well-supported ✓</div>
+                                    <div>
+                                        {nodeIssueElements}
+                                        {(
+                                            <div className="rs-assumptions-in-issues">
+                                                {assumptionElements}
+                                            </div>
+                                        ) if sel_has_assumptions else None}
+                                    </div>
+                                ) if has_node_issues or sel_has_assumptions else (
+                                    <div className="rs-well-supported">No issues found ✓</div>
                                 )}
                             </div>
 
@@ -829,15 +960,9 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                     {(
                                         <button className="rs-action-btn rs-action-btn-default"
                                             onClick={lambda -> None { startEdit("evidence"); }}>
-                                            📊 Add Evidence
+                                            📊 Evidence
                                         </button>
                                     ) if show_add_evidence else None}
-                                    {(
-                                        <button className="rs-action-btn rs-action-btn-default"
-                                            onClick={lambda -> None { startEdit("assumption"); }}>
-                                            🔗 Add Assumption
-                                        </button>
-                                    ) if show_acknowledge_assumption else None}
                                     {(
                                         <button className="rs-action-btn rs-action-btn-default"
                                             onClick={lambda -> None { startEdit("counter"); }}>
@@ -856,10 +981,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                             🌿 Expand
                                         </button>
                                     ) if show_expand else None}
-                                    <button className="rs-action-btn rs-action-btn-default"
-                                        onClick={lambda -> None { startEdit("clarify"); }}>
-                                        ✏️ Clarify
-                                    </button>
+                                    {(
+                                        <button className="rs-action-btn rs-action-btn-default"
+                                            onClick={lambda -> None { startEdit("investigate"); }}>
+                                            🔍 Investigate
+                                        </button>
+                                    ) if not sel_is_well_sourced else (
+                                        <span className="rs-sourced-badge">✓ Sourced</span>
+                                    )}
                                     <button className="rs-action-btn rs-action-btn-delete"
                                         onClick={lambda -> None { startEdit("delete"); }}>
                                         🗑️ Delete
@@ -904,69 +1033,62 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
                             {(
                                 <div className="rs-panel-section">
-                                    <div className="rs-section-heading rs-section-heading-assumptions">
-                                        <span className="rs-section-dot rs-section-dot-assumptions"></span>
-                                        Assumptions
-                                    </div>
-                                    {assumptionElements}
-                                </div>
-                            ) if sel_has_assumptions else None}
-
-                            {(
-                                <div className="rs-panel-section">
                                     <div className="rs-section-heading rs-section-heading-info">
                                         <span className="rs-section-dot rs-section-dot-info"></span>
-                                        More Information
+                                        Analysis & Source
                                     </div>
-                                    <div className="rs-more-info-box">{sel_more_info}</div>
-                                </div>
-                            ) if sel_has_more_info else None}
-
-                            {(
-                                <div className="rs-panel-section">
-                                    <div className="rs-section-heading rs-section-heading-evidence">
-                                        <span className="rs-section-dot rs-section-dot-evidence"></span>
-                                        Evidence Details
-                                    </div>
-                                    <div className="rs-evidence-box">
-                                        <div className="rs-evidence-row">
-                                            <span className="rs-evidence-key">Category</span>
-                                            <span className="rs-evidence-value">{sel_ev_cat_display}</span>
+                                    {(
+                                        <div className="rs-analysis-text">{sel_more_info}</div>
+                                    ) if sel_has_more_info else None}
+                                    {(
+                                        <div className="rs-source-block">
+                                            <span className="rs-evidence-key">Source</span>
+                                            <a href={sel_source_url} target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="rs-source-link">
+                                                {sel_source_url}
+                                            </a>
                                         </div>
-                                        <div className="rs-evidence-row">
-                                            <span className="rs-evidence-key">Quality Score</span>
-                                            <span style={{"fontWeight": "600", "color": sel_str_color}}>
-                                                {str(sel_node_score)}%
-                                            </span>
-                                        </div>
-                                        {(
-                                            <div className="rs-source-divider">
-                                                <div className="rs-source-row">
-                                                    <span className="rs-evidence-key">Source</span>
-                                                    <a href={sel_source_url} target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="rs-source-link">
-                                                        {sel_source_url}
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        ) if sel_has_source else None}
-                                    </div>
+                                    ) if sel_has_source else None}
+                                    {(
+                                        <button className="rs-add-evidence-btn"
+                                            onClick={handleAddAsEvidence}
+                                            disabled={isSaving}>
+                                            📊 Add as Evidence
+                                        </button>
+                                    ) if sel_has_more_info and not sel_is_evidence else None}
+                                    {(
+                                        <div className="rs-analysis-empty">No additional analysis available</div>
+                                    ) if not sel_has_more_info and not sel_has_source else None}
                                 </div>
-                            ) if sel_is_evidence else None}
+                            ) if sel_is_evidence or sel_has_more_info else None}
 
                             {(
                                 <div className="rs-panel-section">
                                     <div className="rs-section-heading rs-section-heading-score">
                                         <span className="rs-section-dot rs-section-dot-score"></span>
-                                        Node Score
+                                        Node Quality
                                     </div>
-                                    <div className="rs-node-score-box">
-                                        <div className="rs-node-score-number"
-                                            style={{"color": sel_str_color}}>
-                                            {str(sel_node_score) + '/100'}
+                                    <div className="rs-quality-box">
+                                        <div className="rs-quality-score-row">
+                                            <div className="rs-quality-score-number"
+                                                style={{"color": sel_str_color}}>
+                                                {str(sel_node_score)}
+                                            </div>
+                                            <div className="rs-quality-score-meta">
+                                                <div className="rs-quality-score-label">Quality Score</div>
+                                                {(
+                                                    <div className="rs-quality-category">
+                                                        {sel_ev_cat_display}
+                                                    </div>
+                                                ) if sel_is_evidence else None}
+                                            </div>
                                         </div>
-                                        <div className="rs-node-score-label">Node Quality</div>
+                                        <div className="rs-quality-bar">
+                                            <div className="rs-quality-bar-fill"
+                                                style={{"width": f"{sel_node_score}%", "background": sel_str_color}}>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             ) if sel_has_node_score else None}

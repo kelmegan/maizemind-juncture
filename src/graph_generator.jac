@@ -121,11 +121,45 @@ def:pub clarify_node_content(
 ) -> str
 by llm(temperature=0.3);
 
+"""Extract Wikipedia search keywords for THIS SPECIFIC NODE — not the general thesis topic.
+Focus on the unique subject matter of the node_text. The thesis is background context only.
+Return ONLY a short search phrase (2-6 words) for the most relevant Wikipedia article about THIS node's specific topic.
+CRITICAL: Each node should get a DIFFERENT, SPECIFIC article. Do NOT return the same generic topic for every node.
+Examples:
+- Node: "I saw the ice wall" + Thesis: "The earth is flat" → "flat Earth ice wall Antarctica"
+- Node: "NASA faked space imagery" + Thesis: "The earth is flat" → "NASA conspiracy theories"
+- Node: "The Bedford Level experiment showed water is flat" + Thesis: "The earth is flat" → "Bedford Level experiment"
+- Node: "Ships disappear bottom-first over the horizon" + Thesis: "The earth is round" → "horizon ship hull down effect"
+- Node: "Gravity pulls objects toward center of mass" + Thesis: "The earth is round" → "gravity spherical Earth"
+- Node: "Vaccines cause autism" + Thesis: "Vaccines are dangerous" → "MMR vaccine autism controversy"
+Do NOT return JSON. Return ONLY the search phrase, nothing else."""
+def:pub extract_search_keywords(
+    node_text: str,
+    node_type: str,
+    thesis_text: str
+) -> str
+by llm(temperature=0.1);
+
+"""You are given a node from an argument graph and a list of Wikipedia search results.
+Pick the ONE result that is most relevant and useful for understanding or fact-checking this specific node.
+Return ONLY the number (0, 1, 2, 3, or 4) of the best result. Nothing else — just the digit.
+If none are relevant at all, return 0."""
+def:pub pick_best_wiki_result(
+    node_text: str,
+    search_results_text: str
+) -> str
+by llm(temperature=0.0);
+
 """Given a claim in an argument, generate 2-3 sub-claims or supporting evidence points that break it down.
 Return JSON: {"branches":[{"content":"<sub-claim or evidence text, max 25 words>","type":"claim|evidence","confidence":0.3}]}
 Rules:
 - Each branch should be a distinct talking point people actually use in this debate.
 - Be specific, not generic. Max 3 branches.
+- TYPE RULES (critical):
+  - "evidence" = measurable observations, published data, specific experiments, direct quotes from sources
+  - "claim" = assertions, theories, accusations, conspiracy theories, opinions, interpretations
+  - If it's an ACCUSATION or ALLEGATION (e.g. "X faked Y", "X conspired to Z"), it is ALWAYS a "claim", never "evidence"
+  - When in doubt, use "claim" — only use "evidence" for concrete, verifiable facts
 - confidence: 0.0-1.0 = how factually defensible is this point? Be HONEST.
   - Conspiracy theories, unfounded claims = 0.1-0.2
   - Common misconceptions with some basis = 0.2-0.4

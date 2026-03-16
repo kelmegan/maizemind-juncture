@@ -63,12 +63,6 @@ def:pub ReviseScreen(props: any) -> JsxElement {
                 nodeId=nodeId,
                 evidenceContent=inputValue
             );
-        } elif actionType == "assumption" {
-            await root spawn AddAssumptionToEvidence(
-                graphId=graphId,
-                nodeId=nodeId,
-                assumptionText=inputValue
-            );
         } elif actionType == "clarify" {
             await root spawn UpdateNodeContent(
                 graphId=graphId,
@@ -80,6 +74,16 @@ def:pub ReviseScreen(props: any) -> JsxElement {
         actionType = None;
         inputValue = "";
 
+        await refreshAndNavigateBack();
+    }
+
+    async def handleInvestigate() -> None {
+        if not graphId or not nodeId { return; }
+        try {
+            await root spawn InvestigateNode(graphId=graphId, nodeId=nodeId);
+        } except Exception as e {
+            print(f"Investigate error: {e}");
+        }
         await refreshAndNavigateBack();
     }
 
@@ -118,11 +122,6 @@ def:pub ReviseScreen(props: any) -> JsxElement {
 
     def selectEvidence() -> None {
         actionType = "evidence";
-        inputValue = "";
-    }
-
-    def selectAssumption() -> None {
-        actionType = "assumption";
         inputValue = "";
     }
 
@@ -232,16 +231,16 @@ def:pub ReviseScreen(props: any) -> JsxElement {
                             />
 
                             <Button
-                                label={(<><span className="revise-action-label">🔗 Add Assumption</span><span className="revise-action-sub">Make the logic link explicit</span></>)}
-                                variant={"default" if actionType == "assumption" else "outline"}
-                                onClick={selectAssumption}
+                                label={(<><span className="revise-action-label">✏️ Clarify Wording</span><span className="revise-action-sub">Rewrite for clarity</span></>)}
+                                variant={"default" if actionType == "clarify" else "outline"}
+                                onClick={selectClarify}
                                 className="revise-action-btn"
                             />
 
                             <Button
-                                label={(<><span className="revise-action-label">✏️ Clarify Wording</span><span className="revise-action-sub">Rewrite for clarity</span></>)}
-                                variant={"default" if actionType == "clarify" else "outline"}
-                                onClick={selectClarify}
+                                label={(<><span className="revise-action-label">🔍 Investigate</span><span className="revise-action-sub">Find Wikipedia source</span></>)}
+                                variant="outline"
+                                onClick={handleInvestigate}
                                 className="revise-action-btn"
                             />
 
@@ -258,7 +257,6 @@ def:pub ReviseScreen(props: any) -> JsxElement {
                                 <div className="revise-input-group">
                                     <label className="revise-input-label">
                                         {"Enter your evidence" if actionType == "evidence" else
-                                        "State the assumption" if actionType == "assumption" else
                                         "Clarify the wording"}
                                     </label>
                                     <textarea
@@ -267,8 +265,6 @@ def:pub ReviseScreen(props: any) -> JsxElement {
                                         placeholder={
                                             "e.g., A 2024 Stanford study found that 87% of remote workers reported higher productivity..."
                                             if actionType == "evidence" else
-                                            "e.g., This assumes that the study sample is representative of all workers..."
-                                            if actionType == "assumption" else
                                             "Enter clearer wording..."
                                         }
                                         className="revise-textarea"
