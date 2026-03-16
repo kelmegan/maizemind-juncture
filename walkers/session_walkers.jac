@@ -1,5 +1,6 @@
 """Session walkers"""
 
+import from datetime { datetime }
 import from graph.session_nodes { Session }
 import from graph.argument_graph_nodes { ArgumentGraph }
 
@@ -10,6 +11,8 @@ walker:pub CreateSession {
         score: dict;
 
     can run with Root entry {
+        timestamp = str(int(datetime.now().timestamp()));
+
         graph_node = None;
         for graph in [-->](?:ArgumentGraph) {
             if graph.id == self.graphId {
@@ -30,8 +33,8 @@ walker:pub CreateSession {
         }
 
         new_session = (root ++> Session(
-            id=f"session_{now()}",
-            date=str(now()),
+            id=f"session_{timestamp}",
+            date=str(datetime.now().isoformat()),
             userId=self.userId,
             title=title,
             initialScore=self.score["overall"],
@@ -43,10 +46,17 @@ walker:pub CreateSession {
             new_session ++> graph_node;
         }
 
-        report new_session;
+        report {
+            "id": new_session.id,
+            "date": new_session.date,
+            "userId": new_session.userId,
+            "title": new_session.title,
+            "initialScore": new_session.initialScore,
+            "finalScore": new_session.finalScore,
+            "notes": new_session.notes
+        };
     }
 }
-
 
 walker:pub GetUserSessions {
     has userId: str;
@@ -56,7 +66,15 @@ walker:pub GetUserSessions {
 
         for s in [-->](?:Session) {
             if s.userId == self.userId {
-                sessions.append(s);
+                sessions.append({
+                    "id": s.id,
+                    "date": s.date,
+                    "userId": s.userId,
+                    "title": s.title,
+                    "initialScore": s.initialScore,
+                    "finalScore": s.finalScore,
+                    "notes": s.notes
+                });
             }
         }
 

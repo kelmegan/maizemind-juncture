@@ -21,10 +21,11 @@ def:pub ExportScreen(props: any) -> JsxElement {
         exportFormat: str = "text",
         copyStatus: str = "",
         saved: bool = False,
-        isLoading: bool = True,
-        _didInit: bool = False;
+        isLoading: bool = True;
 
     async def loadContext() -> None {
+        isLoading = True;
+        saved = False;
         ctx = None;
         try {
             raw = await root spawn GetContext();
@@ -63,15 +64,12 @@ def:pub ExportScreen(props: any) -> JsxElement {
     }
 
     can with entry {
-        if not _didInit {
-            _didInit = True;
-            # Read screen_data synchronously — never loses the props
-            if "graphData" in screen_data { currentGraph = screen_data["graphData"]; }
-            if "scoreData" in screen_data { currentScore = screen_data["scoreData"]; }
-            if "issuesData" in screen_data { currentIssues = screen_data["issuesData"]; }
-            if "nextActionsData" in screen_data { currentNextActions = screen_data["nextActionsData"]; }
-            loadContext();
-        }
+        # Always re-read screen_data — safe because setting the same value is idempotent
+        if "graphData" in screen_data { currentGraph = screen_data["graphData"]; }
+        if "scoreData" in screen_data { currentScore = screen_data["scoreData"]; }
+        if "issuesData" in screen_data { currentIssues = screen_data["issuesData"]; }
+        if "nextActionsData" in screen_data { currentNextActions = screen_data["nextActionsData"]; }
+        loadContext();
     }
 
     def generateOutlineText(includeFlags: bool) -> str {
@@ -252,7 +250,7 @@ def:pub ExportScreen(props: any) -> JsxElement {
 
     return (
         <div className="export-page">
-            <Header navigate={navigate} screen="export" title="Export Outline" backTo="review" />
+            <Header navigate={navigate} screen="export" title="Export" backTo="review" />
 
             {(
                 <Alert className="export-alert-success">
