@@ -1,6 +1,6 @@
 """Juncture - Profile Screen for user settings, history, and statistics."""
 
-import from "lucide-react" { User, UserPlus, LogIn, History, Target, TrendingUp, Award, Settings }
+import from "lucide-react" { User, UserPlus, LogIn, History, Target, TrendingUp, Award, Settings, X }
 
 import from ..components.Badge { Badge }
 import from ..components.Button { Button }
@@ -26,29 +26,38 @@ def:pub ProfileScreen(props: any) -> JsxElement {
         sessions: list = [],
         stats: dict = None,
         activeTab: str = "profile",
-        loading: bool = True;
+        loading: bool = True,
+        confirmDeleteSessionId: str = "";
 
     async def loadContext() -> None {
         loading = True;
         try {
             ctx = await root spawn GetContext();
-            if ctx and ctx["reports"]{
+            if ctx and ctx["reports"] {
                 ctx = ctx["reports"][0];
             }
+
+            local_userId = "";
+            local_isGuest = False;
+
             if ctx and ctx["currentUser"] and "id" in ctx["currentUser"] {
-                userId = ctx["currentUser"]["id"];
-                isGuest = ctx["currentUser"]["isGuest"] if "isGuest" in ctx["currentUser"] else False;
+                local_userId = ctx["currentUser"]["id"];
+                local_isGuest = ctx["currentUser"]["isGuest"] if "isGuest" in ctx["currentUser"] else False;
+                if local_userId == "guest_local" { local_isGuest = True; }
+
+                # Set state variables
+                userId = local_userId;
+                isGuest = local_isGuest;
                 name = ctx["currentUser"]["name"] if "name" in ctx["currentUser"] else "";
-                if userId == "guest_local" { isGuest = True; }
                 userType = ctx["currentUser"]["userType"] if "userType" in ctx["currentUser"] else "student";
                 goals = ctx["currentUser"]["goals"] if "goals" in ctx["currentUser"] else [];
                 theme = ctx["currentUser"]["theme"] if "theme" in ctx["currentUser"] else "system";
                 accessibilityMode = ctx["currentUser"]["accessibilityMode"] if "accessibilityMode" in ctx["currentUser"] else False;
             }
 
-            if userId and not isGuest {
+            if local_userId and not local_isGuest {
                 try {
-                    sess_result = await root spawn GetUserSessions(userId=userId);
+                    sess_result = await root spawn GetUserSessions(userId=local_userId);
                     raw_sessions = sess_result["reports"][0] if sess_result["reports"] else [];
                     sessions = raw_sessions if raw_sessions else [];
                 } except Exception as e {
@@ -56,15 +65,15 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                 }
 
                 try {
-                    stats_result = await root spawn CalculateUserStats(userId=userId);
+                    stats_result = await root spawn CalculateUserStats(userId=local_userId);
                     raw_stats = stats_result["reports"][0] if stats_result["reports"] else None;
                     stats = raw_stats if raw_stats else None;
                 } except Exception as e {
                     print(f"Error loading stats: {e}");
                 }
             }
-        } except Exception {
-            # Context not available
+        } except Exception as e {
+            print(f"Context error: {e}");
         }
 
         if not stats {
@@ -106,6 +115,55 @@ def:pub ProfileScreen(props: any) -> JsxElement {
         );
     }
 
+    async def handleSaveTheme(new_theme: str) -> None {
+        theme = new_theme;
+        await root spawn UpdateUserProfile(
+            userId=userId,
+            name=name,
+            userType=userType,
+            goals=goals,
+            theme=new_theme,
+            accessibilityMode=accessibilityMode
+        );
+        await root spawn UpdateContext(
+            currentUser={
+                "id": userId,
+                "name": name,
+                "email": "",
+                "userType": userType,
+                "goals": goals,
+                "theme": new_theme,
+                "accessibilityMode": accessibilityMode,
+                "isGuest": isGuest
+            }
+        );
+    }
+
+    async def handleOpenSession(sessionId: str) -> None {
+        local_userId = userId;
+        try {
+            result = await root spawn GetSessionGraph(sessionId=sessionId, userId=local_userId);
+            data = result["reports"][0] if result["reports"] else {};
+            if "error" in data {
+                print(f"GetSessionGraph error: {data['error']}");
+                return;
+            }
+            graphId = data["graphId"];
+            scored = await root spawn GetGraphWithScoring(graphId=graphId);
+            scored_data = scored["reports"][0] if scored["reports"] else {};
+            if "error" not in scored_data {
+                navigate("review", {
+                    "graphData": scored_data["graph"] if "graph" in scored_data else {},
+                    "scoreData": scored_data["score"] if "score" in scored_data else {},
+                    "issuesData": scored_data["issues"] if "issues" in scored_data else [],
+                    "nextActionsData": scored_data["nextActions"] if "nextActions" in scored_data else []
+                });
+            }
+        } except Exception as e {
+            print(f"Error opening session: {e}");
+        }
+    }
+
     def toggleGoal(goal: str) -> None {
         if goal in goals {
             goals = [g for g in goals if g != goal];
@@ -132,6 +190,21 @@ def:pub ProfileScreen(props: any) -> JsxElement {
 
     def handleAccessibilityChange(v: bool) -> None {
         accessibilityMode = v;
+    }
+
+    def handleConfirmDelete(sessionId: str) -> None {
+        confirmDeleteSessionId = sessionId;
+    }
+
+    def handleCancelDelete() -> None {
+        confirmDeleteSessionId = "";
+    }
+
+    async def handleDeleteSession(sessionId: str) -> None {
+        local_userId = userId;
+        await root spawn DeleteSession(sessionId=sessionId, userId=local_userId);
+        confirmDeleteSessionId = "";
+        loadContext();
     }
 
     if loading {
@@ -301,7 +374,9 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                                         <Switch
                                             checked={isDark}
                                             onCheckedChange={lambda v: bool -> None {
+                                                new_theme = "light" if isDark else "dark";
                                                 if toggleTheme { toggleTheme(); }
+                                                handleSaveTheme(new_theme);
                                             }}
                                         />
                                     </div>
@@ -331,26 +406,55 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                                 <div className="profile-history-list">
                                     <div className="profile-history-items">
                                         {sessions.map(lambda session -> any {
+                                            session_id = session["id"] if session["id"] else "";
                                             formatted_date = str(session["date"] if "date" in session else "").replace("T", " at ");
-                                            return <div
-                                                key={session["id"] if "id" in session else ""}
-                                                className="profile-session-item"
-                                            >
-                                                <div className="profile-session-inner">
-                                                    <div className="profile-session-body">
-                                                        <h4 className="profile-session-title">{session["title"] if "title" in session else "Untitled"}</h4>
-                                                        <p className="profile-session-date">{formatted_date}</p>
+                                            is_confirming = confirmDeleteSessionId == session_id;
+                                            return (
+                                                <div key={session_id} className="profile-session-item">
+                                                    <div className="profile-session-inner">
+                                                        <div className="profile-session-body profile-session-body-clickable"
+                                                            onClick={lambda -> None { handleOpenSession(session_id); }}
+                                                        >
+                                                            <h4 className="profile-session-title">{session["title"] if "title" in session else "Untitled"}</h4>
+                                                            <p className="profile-session-date">{formatted_date}</p>
+                                                        </div>
+                                                        <div className="profile-session-badges">
+                                                            <Badge variant="outline">Score: {' ' + session["finalScore"] if "finalScore" in session else ' 0'}</Badge>
+                                                            {(
+                                                                <Badge className="badge-improvement">
+                                                                    +{session["finalScore"] - session["initialScore"]}
+                                                                </Badge>
+                                                            ) if ("finalScore" in session and "initialScore" in session and session["finalScore"] > session["initialScore"]) else None}
+                                                            <button
+                                                                className="upload-file-chip-remove"
+                                                                onClick={lambda -> None { handleConfirmDelete(session_id); }}
+                                                                aria-label="Delete session"
+                                                            >
+                                                                <X className="upload-file-chip-remove-icon" />
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                    <div className="profile-session-badges">
-                                                        <Badge variant="outline">Score: {session["finalScore"] if "finalScore" in session else 0}</Badge>
-                                                        {(
-                                                            <Badge className="badge-improvement">
-                                                                +{session["finalScore"] - session["initialScore"]}
-                                                            </Badge>
-                                                        ) if ("finalScore" in session and "initialScore" in session and session["finalScore"] > session["initialScore"]) else None}
-                                                    </div>
+                                                    {is_confirming and (
+                                                        <div className="session-delete-confirm">
+                                                            <p className="session-delete-confirm-text">This deletion is permanent and cannot be undone.</p>
+                                                            <div className="session-delete-confirm-actions">
+                                                                <button
+                                                                    className="session-delete-confirm-btn"
+                                                                    onClick={lambda -> None { handleDeleteSession(session_id); }}
+                                                                >
+                                                                    Delete
+                                                                </button>
+                                                                <button
+                                                                    className="session-delete-cancel-btn"
+                                                                    onClick={lambda -> None { handleCancelDelete(); }}
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            </div>;
+                                            );
                                         })}
                                     </div>
                                 </div>

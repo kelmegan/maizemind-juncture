@@ -301,7 +301,7 @@ def:pub ExportScreen(props: any) -> JsxElement {
                     <Alert className="export-alert-warning">
                         <AlertTriangle className="export-alert-warning-icon" />
                         <div>
-                            <p>Export now, but {unsupported_claims} claims are unsupported. Want to fix the top {fix_count} issues first?</p>
+                            <p>Export now, but {'' + unsupported_claims} claims are unsupported. Want to fix the top {' ' + fix_count} issues first?</p>
                             <div style={{"marginTop": "10px"}}>
                                 <Button label="Fix Top Issues First" variant="outline" onClick={handleFixTopIssues} />
                             </div>

@@ -120,3 +120,41 @@ walker:pub CalculateUserStats {
         };
     }
 }
+
+walker:pub DeleteSession {
+    has sessionId: str,
+        userId: str;
+
+    can run with Root entry {
+        for s in [-->](?:Session) {
+            if s.id == self.sessionId and s.userId == self.userId {
+                del s;
+                break;
+            }
+        }
+        report {"success": True};
+    }
+}
+
+walker:pub GetSessionGraph {
+    has sessionId: str,
+        userId: str;
+
+    can run with Root entry {
+        for s in [-->](?:Session) {
+            if s.id == self.sessionId and s.userId == self.userId {
+                visit s;
+                return;
+            }
+        }
+        report {"error": "Session not found"};
+    }
+
+    can find_graph with Session entry {
+        for graph in [-->](?:ArgumentGraph) {
+            report {"graphId": graph.id};
+            return;
+        }
+        report {"error": "No graph linked to this session"};
+    }
+}

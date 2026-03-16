@@ -4134,3 +4134,59 @@ body {
     width: 14px;
     height: 14px;
 }
+
+.session-delete-confirm {
+    margin-top: 8px;
+    padding: 10px 14px;
+    background: var(--color-error-bg);
+    border: 1px solid var(--color-error-border);
+    border-radius: var(--radius-sm);
+}
+
+.session-delete-confirm-text {
+    font-size: 0.875rem;
+    color: var(--color-destructive);
+    margin-bottom: 8px;
+}
+
+.session-delete-confirm-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.session-delete-confirm-btn {
+    padding: 4px 12px;
+    background: var(--color-destructive);
+    color: var(--color-destructive-foreground);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.session-delete-confirm-btn:hover {
+    background: var(--color-destructive-hover);
+}
+
+.session-delete-cancel-btn {
+    padding: 4px 12px;
+    background: none;
+    color: var(--color-muted-foreground);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.session-delete-cancel-btn:hover {
+    background: var(--color-muted);
+}
+
+.profile-session-body-clickable {
+    cursor: pointer;
+    flex: 1;
+}
+
+.profile-session-body-clickable:hover .profile-session-title {
+    color: var(--color-accent);
+}

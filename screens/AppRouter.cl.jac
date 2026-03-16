@@ -20,11 +20,14 @@ def:pub AppRouter -> JsxElement {
     async def loadContext() -> None {
         try {
             ctx = await root spawn GetContext();
-            if ctx and ctx["reports"]{
+            if ctx and ctx["reports"] {
                 ctx = ctx["reports"][0];
             }
             if ctx and ctx["currentScreen"] {
                 currentScreen = ctx["currentScreen"];
+            }
+            if ctx and ctx["currentUser"] and "theme" in ctx["currentUser"] {
+                isDark = ctx["currentUser"]["theme"] == "dark";
             }
         } except Exception {
             # Not logged in yet, stay on welcome
