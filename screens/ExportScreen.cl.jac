@@ -19,16 +19,17 @@ def:pub ExportScreen(props: any) -> JsxElement {
         currentNextActions: list = [],
         userId: str = "",
         exportFormat: str = "text",
-        copyStatus: str = "", # "" | "success" | "failure" | "pdf-success" | "pdf-failure"
+        copyStatus: str = "",
         saved: bool = False,
-        isLoading: bool = True;
+        isLoading: bool = True,
+        _didInit: bool = False;
 
     async def loadContext() -> None {
         ctx = None;
         try {
-            ctx = await root spawn GetContext();
-            if ctx and ctx["reports"] {
-                ctx = ctx["reports"][0];
+            raw = await root spawn GetContext();
+            if raw and raw["reports"] {
+                ctx = raw["reports"][0];
             }
             if ctx and "currentUser" in ctx and ctx["currentUser"] {
                 userId = ctx["currentUser"]["id"] if "id" in ctx["currentUser"] else "";
@@ -37,12 +38,13 @@ def:pub ExportScreen(props: any) -> JsxElement {
             # Context not available
         }
 
-        currentGraph = screen_data["graphData"] if "graphData" in screen_data else (ctx["currentGraph"] if ctx and "currentGraph" in ctx else None);
-        currentScore = screen_data["scoreData"] if "scoreData" in screen_data else None;
-        currentIssues = screen_data["issuesData"] if "issuesData" in screen_data else [];
-        currentNextActions = screen_data["nextActionsData"] if "nextActionsData" in screen_data else [];
+        # Only fall back to context if screen_data had nothing
+        if not currentGraph and ctx and "currentGraph" in ctx {
+            currentGraph = ctx["currentGraph"];
+        }
 
-        if currentGraph and (not currentScore) and "id" in currentGraph {
+        # Only fetch scoring if we have a graph but still no score
+        if currentGraph and not currentScore and "id" in currentGraph {
             try {
                 scored = await root spawn GetGraphWithScoring(graphId=currentGraph["id"]);
                 scored_data = scored["reports"][0] if scored["reports"] else {};
@@ -53,7 +55,7 @@ def:pub ExportScreen(props: any) -> JsxElement {
                     currentNextActions = scored_data["nextActions"] if "nextActions" in scored_data else currentNextActions;
                 }
             } except Exception {
-                # Keep whatever context data we have
+                # Keep whatever we have
             }
         }
 
@@ -61,7 +63,15 @@ def:pub ExportScreen(props: any) -> JsxElement {
     }
 
     can with entry {
-        loadContext();
+        if not _didInit {
+            _didInit = True;
+            # Read screen_data synchronously — never loses the props
+            if "graphData" in screen_data { currentGraph = screen_data["graphData"]; }
+            if "scoreData" in screen_data { currentScore = screen_data["scoreData"]; }
+            if "issuesData" in screen_data { currentIssues = screen_data["issuesData"]; }
+            if "nextActionsData" in screen_data { currentNextActions = screen_data["nextActionsData"]; }
+            loadContext();
+        }
     }
 
     def generateOutlineText(includeFlags: bool) -> str {
@@ -201,7 +211,6 @@ def:pub ExportScreen(props: any) -> JsxElement {
             return;
         }
         graphId = currentGraph["id"] if currentGraph and "id" in currentGraph else "";
-        print(f"handleSaveSession: userId={userId} graphId={graphId} score={currentScore}");
         await root spawn CreateSession(
             userId=userId,
             graphId=graphId,
