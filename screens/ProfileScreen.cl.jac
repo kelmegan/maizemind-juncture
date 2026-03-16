@@ -31,21 +31,21 @@ def:pub ProfileScreen(props: any) -> JsxElement {
 
     async def loadContext() -> None {
         loading = True;
+        local_userId = "";
+        local_isGuest = False;
+        local_stats = None;
+
         try {
             ctx = await root spawn GetContext();
             if ctx and ctx["reports"] {
                 ctx = ctx["reports"][0];
             }
 
-            local_userId = "";
-            local_isGuest = False;
-
             if ctx and ctx["currentUser"] and "id" in ctx["currentUser"] {
                 local_userId = ctx["currentUser"]["id"];
                 local_isGuest = ctx["currentUser"]["isGuest"] if "isGuest" in ctx["currentUser"] else False;
                 if local_userId == "guest_local" { local_isGuest = True; }
 
-                # Set state variables
                 userId = local_userId;
                 isGuest = local_isGuest;
                 name = ctx["currentUser"]["name"] if "name" in ctx["currentUser"] else "";
@@ -66,8 +66,7 @@ def:pub ProfileScreen(props: any) -> JsxElement {
 
                 try {
                     stats_result = await root spawn CalculateUserStats(userId=local_userId);
-                    raw_stats = stats_result["reports"][0] if stats_result["reports"] else None;
-                    stats = raw_stats if raw_stats else None;
+                    local_stats = stats_result["reports"][0] if stats_result["reports"] else None;
                 } except Exception as e {
                     print(f"Error loading stats: {e}");
                 }
@@ -76,14 +75,15 @@ def:pub ProfileScreen(props: any) -> JsxElement {
             print(f"Context error: {e}");
         }
 
-        if not stats {
-            stats = {
+        if not local_stats {
+            local_stats = {
                 "totalSessions": len(sessions),
                 "averageScore": 0,
                 "averageImprovement": 0
             };
         }
 
+        stats = local_stats;
         loading = False;
     }
 
@@ -466,7 +466,7 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                         <div className="profile-stats-grid">
                             <Card title={<span className="profile-stat-label">Total Sessions</span>}>
                                 <div className="profile-stat-number">{total_sessions}</div>
-                                <p className="profile-stat-sub">Argument maps created</p>
+                                <p className="profile-stat-sub">Argument maps saved</p>
                             </Card>
 
                             <Card title={<span className="profile-stat-label">Average Score</span>}>

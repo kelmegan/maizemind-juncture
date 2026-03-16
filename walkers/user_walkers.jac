@@ -30,7 +30,7 @@ walker:pub GetUserProfile {
         user_node = None;
 
         for user in [-->](?:User) {
-            if user.id == self.userId {
+            if user.id == self.userId or user.email == self.userId {
                 user_node = user;
                 break;
             }
@@ -71,7 +71,7 @@ walker:pub UpdateUserProfile {
         user_node = None;
 
         for user in [-->](?:User) {
-            if user.id == self.userId {
+            if user.id == self.userId or user.email == self.userId {
                 user_node = user;
                 break;
             }
