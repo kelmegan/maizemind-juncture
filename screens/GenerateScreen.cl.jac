@@ -1,12 +1,13 @@
 """Juncture - Generate Screen for creating argument maps from notes."""
 
-import from "lucide-react" { Upload, Sparkles, ArrowRight }
+import from "lucide-react" { Upload, Sparkles, ArrowRight, FileText, X }
 import from "pdfjs-dist" { getDocument, GlobalWorkerOptions }
 import from "mammoth" { extractRawText }
 
 import from ..components.Button { Button }
 import from ..components.Card { Card }
 import from ..components.Header { Header }
+import from ..components.Alert { Alert }
 
 def:pub GenerateScreen(props: any) -> JsxElement {
     navigate = props.navigate;
@@ -17,7 +18,9 @@ def:pub GenerateScreen(props: any) -> JsxElement {
         currentUserId: str = "",
         isGuest: bool = False,
         showConfirmRegenerate: bool = False,
-        hasExistingGraph: bool = False;
+        hasExistingGraph: bool = False,
+        uploadAlert: any = None,
+        uploadedFiles: list = [];
 
     async def loadContext() -> None {
         try {
@@ -36,6 +39,13 @@ def:pub GenerateScreen(props: any) -> JsxElement {
 
     can with entry {
         loadContext();
+    }
+
+    def showUploadAlert(message: str, variant: str) -> None {
+        uploadAlert = {"message": message, "variant": variant};
+        setTimeout(lambda -> None {
+            uploadAlert = None;
+        }, 3000);
     }
 
     async def handleGenerate() -> None {
@@ -61,8 +71,9 @@ def:pub GenerateScreen(props: any) -> JsxElement {
             }
         }, 2600);
         try {
+            combined_uploaded = uploadedFiles.map(lambda f -> any { return f["content"]; }).join("\n");
             result = await root spawn GenerateArgumentGraph(
-                notes=notes,
+                notes=notes + combined_uploaded,
                 userId=currentUserId
             );
 
@@ -128,29 +139,49 @@ def:pub GenerateScreen(props: any) -> JsxElement {
         file = e.target.files[0] if e.target.files else None;
         if not file { return; }
         file_name = file.name.toLowerCase();
-        if file_name.endswith(".txt") or file_name.endswith(".md") {
-            reader = Reflect.construct(FileReader, []);
-            reader.onload = lambda event -> None { notes = event.target.result; };
-            reader.readAsText(file);
-        } elif file_name.endswith(".pdf") {
-            GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
-            array_buffer = await file.arrayBuffer();
-            pdf = await getDocument({"data": array_buffer}).promise;
-            text = "";
-            i = 1;
-            while i <= pdf.numPages {
-                page = await pdf.getPage(i);
-                content = await page.getTextContent();
-                page_text = content.items.map(lambda item -> any { return item.str; }).join(" ");
-                text = text + page_text + "\n";
-                i = i + 1;
+        array_buffer = None;
+        result = None;
+        try {
+            if file_name.endsWith(".txt") or file_name.endsWith(".md") {
+                reader = Reflect.construct(FileReader, []);
+                reader.onload = lambda event -> None {
+                    uploadedFiles = uploadedFiles + [{"name": file.name, "content": event.target.result}];
+                };
+                reader.readAsText(file);
+            } elif file_name.endsWith(".pdf") {
+                GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
+                array_buffer = await file.arrayBuffer();
+                pdf = await getDocument({"data": array_buffer}).promise;
+                text = "";
+                i = 1;
+                while i <= pdf.numPages {
+                    page = await pdf.getPage(i);
+                    content = await page.getTextContent();
+                    page_text = content.items.map(lambda item -> any { return item.str; }).join(" ");
+                    text = text + page_text + "\n";
+                    i = i + 1;
+                }
+                uploadedFiles = uploadedFiles + [{"name": file.name, "content": text}];
+            } elif file_name.endsWith(".docx") {
+                array_buffer = await file.arrayBuffer();
+                result = await extractRawText({"arrayBuffer": array_buffer});
+                uploadedFiles = uploadedFiles + [{"name": file.name, "content": result.value}];
             }
-            notes = text;
-        } elif file_name.endswith(".docx") {
-            array_buffer = await file.arrayBuffer();
-            result = await extractRawText({"arrayBuffer": array_buffer});
-            notes = result.value;
+            showUploadAlert(f"\"{file.name}\" uploaded successfully", "default");
+        } except Exception as err {
+            print(f"Upload error: {err}");
+            showUploadAlert(f"\"{file.name}\" failed to upload", "destructive");
         }
+    }
+
+    def handleRemoveFile(name: str) -> None {
+        new_files = [];
+        for f in uploadedFiles {
+            if f["name"] != name {
+                new_files = new_files + [f];
+            }
+        }
+        uploadedFiles = new_files;
     }
 
     def handleNotesChange(e: any) -> None {
@@ -185,6 +216,33 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                                 disabled={isGenerating}
                             />
                         </div>
+
+                        {uploadAlert and (
+                            <Alert
+                                variant={uploadAlert["variant"]}
+                                description={uploadAlert["message"]}
+                            />
+                        )}
+
+                        {len(uploadedFiles) > 0 and (
+                            <div className="upload-file-chips">
+                                {uploadedFiles.map(lambda f -> any {
+                                    return (
+                                        <div className="upload-file-chip" key={f["name"]}>
+                                            <FileText className="upload-file-chip-icon" />
+                                            <span className="upload-file-chip-name">{f["name"]}</span>
+                                            <button
+                                                className="upload-file-chip-remove"
+                                                onClick={lambda -> None { handleRemoveFile(f["name"]); }}
+                                                aria-label="Remove file"
+                                            >
+                                                <X className="upload-file-chip-remove-icon" />
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
 
                         <input
                             id="file-input"
