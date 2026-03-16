@@ -12,33 +12,65 @@ import from ..components.Alert { Alert }
 def:pub GenerateScreen(props: any) -> JsxElement {
     navigate = props.navigate;
 
-    has notes: str = "",
-        isGenerating: bool = False,
-        generateStatus: str = "",
-        currentUserId: str = "",
-        isGuest: bool = False,
-        showConfirmRegenerate: bool = False,
-        hasExistingGraph: bool = False,
-        uploadAlert: any = None,
-        uploadedFiles: list = [];
+    has currentGraph: dict = None,
+        currentScore: dict = None,
+        currentIssues: list = [],
+        currentNextActions: list = [],
+        userId: str = "",
+        exportFormat: str = "text",
+        copyStatus: str = "",
+        saved: bool = False,
+        isLoading: bool = True,
+        _didInit: bool = False;
 
     async def loadContext() -> None {
+        ctx = None;
         try {
-            ctx = await root spawn GetContext();
-            if ctx and ctx["currentUser"] {
-                currentUserId = ctx["currentUser"]["id"];
-                isGuest = ctx["currentUser"]["isGuest"];
+            raw = await root spawn GetContext();
+            if raw and raw["reports"] {
+                ctx = raw["reports"][0];
             }
-            if ctx and ctx["currentGraph"] {
-                hasExistingGraph = True;
+            if ctx and "currentUser" in ctx and ctx["currentUser"] {
+                userId = ctx["currentUser"]["id"] if "id" in ctx["currentUser"] else "";
             }
         } except Exception {
             # Context not available
         }
+
+        # Only fall back to context if screen_data had nothing
+        if not currentGraph and ctx and "currentGraph" in ctx {
+            currentGraph = ctx["currentGraph"];
+        }
+
+        # Only fetch scoring if we have a graph but still no score
+        if currentGraph and not currentScore and "id" in currentGraph {
+            try {
+                scored = await root spawn GetGraphWithScoring(graphId=currentGraph["id"]);
+                scored_data = scored["reports"][0] if scored["reports"] else {};
+                if "error" not in scored_data {
+                    currentGraph = scored_data["graph"] if "graph" in scored_data else currentGraph;
+                    currentScore = scored_data["score"] if "score" in scored_data else currentScore;
+                    currentIssues = scored_data["issues"] if "issues" in scored_data else currentIssues;
+                    currentNextActions = scored_data["nextActions"] if "nextActions" in scored_data else currentNextActions;
+                }
+            } except Exception {
+                # Keep whatever we have
+            }
+        }
+
+        isLoading = False;
     }
 
     can with entry {
-        loadContext();
+        if not _didInit {
+            _didInit = True;
+            # Read screen_data synchronously — never loses the props
+            if "graphData" in screen_data { currentGraph = screen_data["graphData"]; }
+            if "scoreData" in screen_data { currentScore = screen_data["scoreData"]; }
+            if "issuesData" in screen_data { currentIssues = screen_data["issuesData"]; }
+            if "nextActionsData" in screen_data { currentNextActions = screen_data["nextActionsData"]; }
+            loadContext();
+        }
     }
 
     def showUploadAlert(message: str, variant: str) -> None {
@@ -77,7 +109,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                 userId=currentUserId
             );
 
-            data = result.reports[0] if result.reports else {};
+            data = result["reports"][0] if result["reports"] else {};
 
             # Check for error
             if "error" in data {
@@ -184,6 +216,11 @@ def:pub GenerateScreen(props: any) -> JsxElement {
         uploadedFiles = new_files;
     }
 
+    def handleOpenPreviousGraph() -> None {
+        navigate("review");
+        showConfirmRegenerate = False;
+    }
+
     def handleNotesChange(e: any) -> None {
         notes = e.target.value;
     }
@@ -262,10 +299,11 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                         {(
                             <div className="generate-confirm-box">
                                 <p className="generate-confirm-text">
-                                    You already have a graph. Generating a new one will replace it. Continue?
+                                    You already have a graph. What would you like to do?
                                 </p>
                                 <div className="generate-confirm-actions">
-                                    <Button label="Yes, regenerate" onClick={handleGenerate} className="generate-btn" />
+                                    <Button label="Generate new graph" onClick={handleGenerate} className="generate-btn" />
+                                    <Button label="Open previous graph" variant="outline" onClick={handleOpenPreviousGraph} />
                                     <Button label="Cancel" variant="outline" onClick={cancelRegenerate} />
                                 </div>
                             </div>

@@ -20,12 +20,16 @@ def:pub ExportScreen(props: any) -> JsxElement {
         userId: str = "",
         exportFormat: str = "text",
         copyStatus: str = "", # "" | "success" | "failure" | "pdf-success" | "pdf-failure"
-        saved: bool = False;
+        saved: bool = False,
+        isLoading: bool = True;
 
     async def loadContext() -> None {
         ctx = None;
         try {
             ctx = await root spawn GetContext();
+            if ctx and ctx["reports"] {
+                ctx = ctx["reports"][0];
+            }
             if ctx and "currentUser" in ctx and ctx["currentUser"] {
                 userId = ctx["currentUser"]["id"] if "id" in ctx["currentUser"] else "";
             }
@@ -38,11 +42,10 @@ def:pub ExportScreen(props: any) -> JsxElement {
         currentIssues = screen_data["issuesData"] if "issuesData" in screen_data else [];
         currentNextActions = screen_data["nextActionsData"] if "nextActionsData" in screen_data else [];
 
-        # If we only have graph id from context, fetch latest scoring/issues.
         if currentGraph and (not currentScore) and "id" in currentGraph {
             try {
                 scored = await root spawn GetGraphWithScoring(graphId=currentGraph["id"]);
-                scored_data = scored.reports[0] if scored.reports else {};
+                scored_data = scored["reports"][0] if scored["reports"] else {};
                 if "error" not in scored_data {
                     currentGraph = scored_data["graph"] if "graph" in scored_data else currentGraph;
                     currentScore = scored_data["score"] if "score" in scored_data else currentScore;
@@ -53,6 +56,8 @@ def:pub ExportScreen(props: any) -> JsxElement {
                 # Keep whatever context data we have
             }
         }
+
+        isLoading = False;
     }
 
     can with entry {
@@ -196,6 +201,7 @@ def:pub ExportScreen(props: any) -> JsxElement {
             return;
         }
         graphId = currentGraph["id"] if currentGraph and "id" in currentGraph else "";
+        print(f"handleSaveSession: userId={userId} graphId={graphId} score={currentScore}");
         await root spawn CreateSession(
             userId=userId,
             graphId=graphId,
@@ -205,9 +211,19 @@ def:pub ExportScreen(props: any) -> JsxElement {
         saved = True;
     }
 
-    if not currentGraph or not currentScore {
+    if isLoading {
         return <div className="export-loading"><p>Loading...</p></div>;
     }
+
+    if not currentGraph or not currentScore {
+        return (
+            <div className="export-loading">
+                <p>No data available. Please generate an argument map first.</p>
+                <Button label="Go to Generate" onClick={lambda -> None { navigate("generate"); }} />
+            </div>
+        );
+    }
+
 
     show_warning = currentScore["overall"] < 75;
     unsupported_claims = currentScore["unsupportedClaims"] if "unsupportedClaims" in currentScore else 0;
@@ -278,7 +294,7 @@ def:pub ExportScreen(props: any) -> JsxElement {
                     <Alert className="export-alert-warning">
                         <AlertTriangle className="export-alert-warning-icon" />
                         <div>
-                            <p>Export now, but {str(unsupported_claims)} claims are unsupported. Want to fix the top {str(fix_count)} issues first?</p>
+                            <p>Export now, but {unsupported_claims} claims are unsupported. Want to fix the top {fix_count} issues first?</p>
                             <div style={{"marginTop": "10px"}}>
                                 <Button label="Fix Top Issues First" variant="outline" onClick={handleFixTopIssues} />
                             </div>

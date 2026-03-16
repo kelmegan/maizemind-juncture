@@ -643,6 +643,7 @@ body {
 
 .card-title {
     line-height: 1;
+    color: var(--color-text-dark)
 }
 
 .card-description {

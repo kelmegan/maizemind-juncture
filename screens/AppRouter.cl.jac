@@ -20,6 +20,9 @@ def:pub AppRouter -> JsxElement {
     async def loadContext() -> None {
         try {
             ctx = await root spawn GetContext();
+            if ctx and ctx["reports"]{
+                ctx = ctx["reports"][0];
+            }
             if ctx and ctx["currentScreen"] {
                 currentScreen = ctx["currentScreen"];
             }
@@ -63,6 +66,16 @@ def:pub AppRouter -> JsxElement {
                 "issuesData": cachedIssuesData,
                 "nextActionsData": cachedNextActionsData,
                 "suggestedCounterarguments": cachedCounterargSuggestions
+            };
+        }
+
+        # Same fallback for export
+        if screen == "export" and "graphData" not in data and cachedGraphData {
+            data = {
+                "graphData": cachedGraphData,
+                "scoreData": cachedScoreData,
+                "issuesData": cachedIssuesData,
+                "nextActionsData": cachedNextActionsData
             };
         }
 

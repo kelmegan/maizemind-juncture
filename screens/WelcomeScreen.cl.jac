@@ -28,7 +28,7 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
 
         try {
             check_result = await root spawn GetUserByEmail(email=email);
-            existing_user = check_result.reports[0] if check_result.reports else None;
+            existing_user = check_result["reports"][0] if check_result["reports"] else None;
             if existing_user {
                 error = "An account with this email already exists. Please log in instead.";
                 loading = False;
@@ -48,7 +48,7 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
                     email=email,
                     isGuest=False
                 );
-                user_data = walker_result.reports[0] if walker_result.reports else {};
+                user_data = walker_result["reports"][0] if walker_result["reports"] else {};
 
                 await root spawn UpdateContext(
                     currentUser={
@@ -89,7 +89,7 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
         if success {
             try {
                 walker_result = await root spawn GetUserByEmail(email=email);
-                user_data = walker_result.reports[0] if walker_result.reports else None;
+                user_data = walker_result["reports"][0] if walker_result["reports"] else None;
 
                 if user_data {
                     await root spawn UpdateContext(

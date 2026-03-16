@@ -99,7 +99,7 @@ def:pub ReviseScreen(props: any) -> JsxElement {
         if graphId {
             try {
                 result = await root spawn GetGraphWithScoring(graphId=graphId);
-                data = result.reports[0] if result.reports else {};
+                data = result["reports"][0] if result["reports"] else {};
                 if "error" not in data {
                     navigate("review", {
                         "graphData": data["graph"] if "graph" in data else graphData,
