@@ -7,6 +7,7 @@ import from ..components.Header { Header }
 def:pub ReviewScreen(props: any) -> JsxElement {
     navigate = props.navigate;
     screen_data = props.screenData if props.screenData else {};
+    onDataUpdate = props.onDataUpdate if props.onDataUpdate else None;
 
     has currentGraph: dict = None,
         currentScore: dict = None,
@@ -48,19 +49,22 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         } except Exception {
             # Context not available
         }
+        pushUpdate();
     }
 
-    has _didInit: bool = False;
-
     can with entry {
-        if not _didInit {
-            currentGraph = screen_data["graphData"] if "graphData" in screen_data else None;
-            currentScore = screen_data["scoreData"] if "scoreData" in screen_data else None;
-            currentIssues = screen_data["issuesData"] if "issuesData" in screen_data else [];
-            currentNextActions = screen_data["nextActionsData"] if "nextActionsData" in screen_data else [];
-            suggestedCounterargs = screen_data["suggestedCounterarguments"] if "suggestedCounterarguments" in screen_data else [];
-            _didInit = True;
-            if not currentGraph { loadContext(); }
+        currentGraph = screen_data["graphData"] if "graphData" in screen_data else None;
+        currentScore = screen_data["scoreData"] if "scoreData" in screen_data else None;
+        currentIssues = screen_data["issuesData"] if "issuesData" in screen_data else [];
+        currentNextActions = screen_data["nextActionsData"] if "nextActionsData" in screen_data else [];
+        suggestedCounterargs = screen_data["suggestedCounterarguments"] if "suggestedCounterarguments" in screen_data else [];
+        if not currentGraph { loadContext(); }
+        pushUpdate();
+    }
+
+    def pushUpdate() -> None {
+        if onDataUpdate and currentGraph {
+            onDataUpdate(currentGraph, currentScore, currentIssues, currentNextActions);
         }
     }
 
@@ -175,6 +179,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             selectedNode = _gcFound;
         } except Exception { }
         isSaving = False;
+        pushUpdate();
     }
 
     async def handleClarifyNode() -> None {
@@ -205,6 +210,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             selectedNode = _clFound;
         } except Exception { }
         isSaving = False;
+        pushUpdate();
     }
 
     async def handleInvestigateNode() -> None {
@@ -238,6 +244,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             selectedNode = _invFound;
         } except Exception { }
         isSaving = False;
+        pushUpdate();
     }
 
     async def handleAutoFix() -> None {
@@ -269,6 +276,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             selectedNode = _afFound;
         } except Exception { }
         isSaving = False;
+        pushUpdate();
     }
 
     async def handleAddAsEvidence() -> None {
@@ -305,6 +313,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             selectedNode = _aeFound;
         } except Exception { }
         isSaving = False;
+        pushUpdate();
     }
 
     def cancelEdit() -> None {
@@ -400,6 +409,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         editInputValue = "";
         sourceUrlValue = "";
         isSaving = False;
+        pushUpdate();
     }
 
     async def handleDelete() -> None {
@@ -427,6 +437,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         showConfirmDelete = False;
         editMode = "";
         isSaving = False;
+        pushUpdate();
     }
 
     async def handleAcceptCounterarg(ca: dict) -> None {
@@ -459,6 +470,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         } except Exception { }
 
         isSaving = False;
+        pushUpdate();
     }
 
     async def handleExpandBranch() -> None {
@@ -490,6 +502,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             selectedNode = _ebFound;
         } except Exception { }
         isSaving = False;
+        pushUpdate();
     }
 
     if not currentGraph or not currentScore {

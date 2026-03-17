@@ -20,8 +20,10 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
 
     async def handleSignup() -> None {
         error = "";
+        local_error = "";
         if email == "" or password == "" {
-            error = "Please fill in all fields";
+            local_error = "Please fill in all fields";
+            error = local_error;
             return;
         }
         loading = True;
@@ -30,7 +32,8 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
             check_result = await root spawn GetUserByEmail(email=email);
             existing_user = check_result["reports"][0] if check_result["reports"] else None;
             if existing_user {
-                error = "An account with this email already exists. Please log in instead.";
+                local_error = "An account with this email already exists. Please log in instead.";
+                error = local_error;
                 loading = False;
                 return;
             }
@@ -57,7 +60,9 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
                         "email": email,
                         "userType": "student",
                         "isGuest": False
-                    }
+                    },
+                    currentGraph=None,
+                    currentScreen="generate"
                 );
             } except Exception {
                 # Context update failed, still navigate
@@ -67,18 +72,21 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
             password = "";
             name = "";
         } else {
-            error = result["error"] if "error" in result and result["error"] else "Signup failed";
+            local_error = result["error"] if "error" in result and result["error"] else "Signup failed";
+            error = local_error;
         }
 
-        if not error {
+        if not local_error {
             navigate("generate");
         }
     }
 
     async def handleLogin() -> None {
+        local_error = "";
         error = "";
         if email == "" or password == "" {
-            error = "Please fill in all fields";
+            local_error = "Please fill in all fields";
+            error = local_error;
             return;
         }
 
@@ -102,7 +110,9 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
                             "theme": user_data["theme"] if "theme" in user_data else "system",
                             "accessibilityMode": user_data["accessibilityMode"] if "accessibilityMode" in user_data else False,
                             "isGuest": False
-                        }
+                        },
+                        currentGraph=None,
+                        currentScreen="generate"
                     );
                 } else {
                     await root spawn UpdateContext(
@@ -115,7 +125,9 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
                             "theme": "system",
                             "accessibilityMode": False,
                             "isGuest": False
-                        }
+                        },
+                        currentGraph=None,
+                        currentScreen="generate"
                     );
                 }
             } except Exception {
@@ -125,10 +137,11 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
             email = "";
             password = "";
         } else {
-            error = "Invalid email or password";
+            local_error = "Invalid email or password";
+            error = local_error;
         }
 
-        if not error {
+        if not local_error {
             navigate("generate");
         }
     }
@@ -158,7 +171,9 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
                         "email": guest_email,
                         "userType": "student",
                         "isGuest": True
-                    }
+                    },
+                    currentGraph=None,
+                    currentScreen="generate"
                 );
             } except Exception {
                 # Context update failed, navigate anyway

@@ -1,5 +1,6 @@
 """User walkers"""
 
+import time;
 import from graph.user_nodes { User }
 
 walker:pub CreateUser {
@@ -10,11 +11,11 @@ walker:pub CreateUser {
 
     can run with Root entry {
         new_user = (root ++> User(
-            id=f"user_{now()}",
+            id=f"user_{int(time.time())}",
             name=self.name,
             email=self.email,
             userType=self.userType,
-            createdAt=str(now()),
+            createdAt=str(int(time.time())),
             isGuest=self.isGuest
         ))[0];
 

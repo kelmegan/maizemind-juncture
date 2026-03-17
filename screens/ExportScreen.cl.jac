@@ -41,12 +41,10 @@ def:pub ExportScreen(props: any) -> JsxElement {
             # Context not available
         }
 
-        # Only fall back to context if screen_data had nothing
         if not currentGraph and ctx and "currentGraph" in ctx {
             currentGraph = ctx["currentGraph"];
         }
 
-        # Only fetch scoring if we have a graph but still no score
         if currentGraph and not currentScore and "id" in currentGraph {
             try {
                 scored = await root spawn GetGraphWithScoring(graphId=currentGraph["id"]);
@@ -66,7 +64,6 @@ def:pub ExportScreen(props: any) -> JsxElement {
     }
 
     can with entry {
-        # Always re-read screen_data — safe because setting the same value is idempotent
         if "graphData" in screen_data { currentGraph = screen_data["graphData"]; }
         if "scoreData" in screen_data { currentScore = screen_data["scoreData"]; }
         if "issuesData" in screen_data { currentIssues = screen_data["issuesData"]; }

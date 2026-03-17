@@ -11,6 +11,7 @@ def:pub AppRouter -> JsxElement {
     has currentScreen: str = "welcome",
         screenData: dict = {},
         isDark: bool = False,
+        navigationCount: int = 0,
         cachedGraphData: any = None,
         cachedScoreData: any = None,
         cachedIssuesData: list = [],
@@ -33,7 +34,7 @@ def:pub AppRouter -> JsxElement {
                 if ctx["currentUser"]["id"] == "guest_local" { local_isGuest = True; }
             }
 
-            if ctx and "currentGraph" in ctx and ctx["currentGraph"] {
+            if ctx and "currentGraph" in ctx and ctx["currentGraph"] and not local_isGuest {
                 cachedGraphData = ctx["currentGraph"];
                 graphId = ctx["currentGraph"]["id"] if "id" in ctx["currentGraph"] else "";
                 if graphId {
@@ -62,6 +63,13 @@ def:pub AppRouter -> JsxElement {
 
     can with entry {
         loadContext();
+    }
+
+    def handleDataUpdate(graphData: any, scoreData: any, issuesData: list, nextActionsData: list) -> None {
+        if graphData { cachedGraphData = graphData; }
+        if scoreData { cachedScoreData = scoreData; }
+        if issuesData is not None { cachedIssuesData = issuesData; }
+        if nextActionsData is not None { cachedNextActionsData = nextActionsData; }
     }
 
     async def navigate(screen: str, data: dict = {}) -> None {
@@ -106,8 +114,8 @@ def:pub AppRouter -> JsxElement {
 
         screenData = data;
         currentScreen = screen;
+        navigationCount = navigationCount + 1;
 
-        # Persist screen to context so reload restores the correct screen
         try {
             root spawn UpdateContext(currentScreen=screen);
         } except Exception {
@@ -120,15 +128,16 @@ def:pub AppRouter -> JsxElement {
     }
 
     wrapper_class = "app-root dark" if isDark else "app-root";
+    nav_key = str(navigationCount);
 
-    return <div className={wrapper_class}> 
+    return <div className={wrapper_class}>
         {
             <WelcomeScreen navigate={navigate} /> if currentScreen == "welcome" else
-            <ExportScreen navigate={navigate} screenData={screenData} /> if currentScreen == "export" else
-            <GenerateScreen navigate={navigate} /> if currentScreen == "generate" else
-            <ReviewScreen navigate={navigate} screenData={screenData} /> if currentScreen == "review" else
-            <ProfileScreen navigate={navigate} screenData={screenData} toggleTheme={toggleTheme} isDark={isDark}/> if currentScreen == "profile" else
-            <ReviseScreen navigate={navigate} screenData={screenData} /> if currentScreen == "revise" else
+            <ExportScreen key={"export_" + nav_key} navigate={navigate} screenData={screenData} onDataUpdate={handleDataUpdate} /> if currentScreen == "export" else
+            <GenerateScreen navigate={navigate} onDataUpdate={handleDataUpdate} /> if currentScreen == "generate" else
+            <ReviewScreen key={"review_" + nav_key} navigate={navigate} screenData={screenData} onDataUpdate={handleDataUpdate} /> if currentScreen == "review" else
+            <ProfileScreen key={"profile_" + nav_key} navigate={navigate} screenData={screenData} toggleTheme={toggleTheme} isDark={isDark}/> if currentScreen == "profile" else
+            <ReviseScreen key={"revise_" + nav_key} navigate={navigate} screenData={screenData} /> if currentScreen == "revise" else
             <WelcomeScreen navigate={navigate} />
         }
     </div>;

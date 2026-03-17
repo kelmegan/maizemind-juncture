@@ -85,7 +85,9 @@ walker:pub AddEvidenceToNode {
             "sourceUrl": ev_source
         };
 
-        graph_node.nodes.append(new_evidence);
+        updated_nodes = list(graph_node.nodes)
+        updated_nodes.append(new_evidence)
+        graph_node.nodes = updated_nodes
 
         new_edge = {
             "id": f"edge_{evidence_id}",
@@ -94,7 +96,9 @@ walker:pub AddEvidenceToNode {
             "type": "SUPPORTS"
         };
 
-        graph_node.edges.append(new_edge);
+        updated_edges = list(graph_node.edges)
+        updated_edges.append(new_edge)
+        graph_node.edges = updated_edges
         graph_node.updatedAt = str(int(time.time()));
 
         # Return full scored result so client needs only 1 await
@@ -158,8 +162,15 @@ walker:pub AddAssumptionToEvidence {
                     "moreInfo": node.get("moreInfo", ""),
                     "acknowledged": node.get("acknowledged", False)
                 };
-                idx = graph_node.nodes.index(node);
-                graph_node.nodes[idx] = updated_node;
+                new_nodes: list = []
+                for n in graph_node.nodes {
+                    if n["id"] == self.nodeId {
+                        new_nodes.append(updated_node)
+                    } else {
+                        new_nodes.append(n)
+                    }
+                }
+                graph_node.nodes = new_nodes
                 break;
             }
         }
@@ -231,8 +242,15 @@ walker:pub UpdateNodeContent {
                     "moreInfo": node.get("moreInfo", ""),
                     "acknowledged": node.get("acknowledged", False)
                 };
-                idx = graph_node.nodes.index(node);
-                graph_node.nodes[idx] = updated_node;
+                new_nodes: list = []
+                for n in graph_node.nodes {
+                    if n["id"] == self.nodeId {
+                        new_nodes.append(updated_node)
+                    } else {
+                        new_nodes.append(n)
+                    }
+                }
+                graph_node.nodes = new_nodes
                 break;
             }
         }
@@ -365,7 +383,9 @@ walker:pub AddCounterargumentNode {
             "nodeScore": 50
         };
 
-        graph_node.nodes.append(new_counter);
+        updated_nodes = list(graph_node.nodes)
+        updated_nodes.append(new_counter)
+        graph_node.nodes = updated_nodes
 
         new_edge = {
             "id": f"edge_{counter_id}",
@@ -374,7 +394,9 @@ walker:pub AddCounterargumentNode {
             "type": "CONTRADICTS"
         };
 
-        graph_node.edges.append(new_edge);
+        updated_edges = list(graph_node.edges)
+        updated_edges.append(new_edge)
+        graph_node.edges = updated_edges
         graph_node.updatedAt = str(int(time.time()));
 
         # Return full scored result so client needs only 1 await
@@ -452,7 +474,9 @@ walker:pub AddAddressEdge {
             "nodeScore": 50
         };
 
-        graph_node.nodes.append(new_evidence);
+        updated_nodes = list(graph_node.nodes)
+        updated_nodes.append(new_evidence)
+        graph_node.nodes = updated_nodes
 
         support_edge = {
             "id": f"edge_sup_{evidence_id}",
@@ -468,8 +492,10 @@ walker:pub AddAddressEdge {
             "type": "ADDRESSES"
         };
 
-        graph_node.edges.append(support_edge);
-        graph_node.edges.append(address_edge);
+        updated_edges = list(graph_node.edges)
+        updated_edges.append(support_edge)
+        updated_edges.append(address_edge)
+        graph_node.edges = updated_edges
         graph_node.updatedAt = str(int(time.time()));
 
         # Return full scored result so client needs only 1 await
@@ -752,13 +778,20 @@ walker:pub GenerateCounter {
             "nodeScore": 50
         };
 
-        graph_node.nodes.append(new_counter);
-        graph_node.edges.append({
+        updated_nodes = list(graph_node.nodes)
+        updated_nodes.append(new_counter)
+        graph_node.nodes = updated_nodes
+
+        new_edge = {
             "id": f"edge_{counter_id}",
             "source": counter_id,
             "target": self.targetNodeId,
             "type": "CONTRADICTS"
-        });
+        };
+
+        updated_edges = list(graph_node.edges)
+        updated_edges.append(new_edge)
+        graph_node.edges = updated_edges
         graph_node.updatedAt = str(int(time.time()));
 
         # Return full scored result so client needs only 1 await
@@ -1127,13 +1160,18 @@ walker:pub InvestigateNode {
                 "sourceUrl": source_url,
                 "moreInfo": summary
             };
-            graph_node.nodes.append(ev_node);
-            graph_node.edges.append({
+            updated_nodes = list(graph_node.nodes)
+            updated_nodes.append(ev_node)
+            graph_node.nodes = updated_nodes
+            nw_edge = {
                 "id": f"edge_{ev_id}",
                 "source": ev_id,
                 "target": self.nodeId,
                 "type": "SUPPORTS"
-            });
+            };
+            updated_edges = list(graph_node.edges)
+            updated_edges.append(nw_edge)
+            graph_node.edges = updated_edges
             graph_node.updatedAt = str(int(time.time()));
             print(f"  AutoFix: added evidence node {ev_id}");
         }
@@ -1304,7 +1342,9 @@ walker:pub ExpandBranch {
                 "nodeScore": b_node_score,
                 "sourceUrl": ""
             };
-            graph_node.nodes.append(new_node);
+            updated_nodes = list(graph_node.nodes)
+            updated_nodes.append(new_node)
+            graph_node.nodes = updated_nodes
 
             new_edge = {
                 "id": f"edge_{branch_id}",
@@ -1312,7 +1352,9 @@ walker:pub ExpandBranch {
                 "target": self.nodeId,
                 "type": "SUPPORTS"
             };
-            graph_node.edges.append(new_edge);
+            updated_edges = list(graph_node.edges)
+            updated_edges.append(new_edge)
+            graph_node.edges = updated_edges
             branch_idx = branch_idx + 1;
         }
 
