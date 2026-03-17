@@ -23,11 +23,37 @@ def:pub AppRouter -> JsxElement {
             if ctx and ctx["reports"] {
                 ctx = ctx["reports"][0];
             }
-            if ctx and ctx["currentScreen"] {
-                currentScreen = ctx["currentScreen"];
-            }
             if ctx and ctx["currentUser"] and "theme" in ctx["currentUser"] {
                 isDark = ctx["currentUser"]["theme"] == "dark";
+            }
+
+            local_isGuest = True;
+            if ctx and ctx["currentUser"] {
+                local_isGuest = ctx["currentUser"]["isGuest"] if "isGuest" in ctx["currentUser"] else True;
+                if ctx["currentUser"]["id"] == "guest_local" { local_isGuest = True; }
+            }
+
+            if ctx and "currentGraph" in ctx and ctx["currentGraph"] {
+                cachedGraphData = ctx["currentGraph"];
+                graphId = ctx["currentGraph"]["id"] if "id" in ctx["currentGraph"] else "";
+                if graphId {
+                    try {
+                        scored = await root spawn GetGraphWithScoring(graphId=graphId);
+                        scored_data = scored["reports"][0] if scored["reports"] else {};
+                        if "error" not in scored_data {
+                            cachedGraphData = scored_data["graph"] if "graph" in scored_data else cachedGraphData;
+                            cachedScoreData = scored_data["score"] if "score" in scored_data else None;
+                            cachedIssuesData = scored_data["issues"] if "issues" in scored_data else [];
+                            cachedNextActionsData = scored_data["nextActions"] if "nextActions" in scored_data else [];
+                        }
+                    } except Exception {
+                        # Keep whatever we have
+                    }
+                }
+            }
+
+            if ctx and ctx["currentScreen"] and not local_isGuest {
+                currentScreen = ctx["currentScreen"];
             }
         } except Exception {
             # Not logged in yet, stay on welcome
@@ -38,13 +64,11 @@ def:pub AppRouter -> JsxElement {
         loadContext();
     }
 
-    def navigate(screen: str, data: dict = {}) -> None {
-        # Guard against undefined/None data from Jac client compiler
+    async def navigate(screen: str, data: dict = {}) -> None {
         if not data {
             data = {};
         }
 
-        # Cache graph data whenever it's passed through navigation
         if "graphData" in data and data["graphData"] {
             cachedGraphData = data["graphData"];
         }
@@ -61,7 +85,6 @@ def:pub AppRouter -> JsxElement {
             cachedCounterargSuggestions = data["suggestedCounterarguments"];
         }
 
-        # When navigating to review without data, use cached
         if screen == "review" and "graphData" not in data and cachedGraphData {
             data = {
                 "graphData": cachedGraphData,
@@ -72,7 +95,6 @@ def:pub AppRouter -> JsxElement {
             };
         }
 
-        # Same fallback for export
         if screen == "export" and "graphData" not in data and cachedGraphData {
             data = {
                 "graphData": cachedGraphData,
@@ -84,6 +106,13 @@ def:pub AppRouter -> JsxElement {
 
         screenData = data;
         currentScreen = screen;
+
+        # Persist screen to context so reload restores the correct screen
+        try {
+            root spawn UpdateContext(currentScreen=screen);
+        } except Exception {
+            # Non-critical
+        }
     }
 
     def toggleTheme() -> None {

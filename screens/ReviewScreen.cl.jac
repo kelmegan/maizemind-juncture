@@ -12,7 +12,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         currentScore: dict = None,
         currentIssues: list = [],
         currentNextActions: list = [],
-        selectedNode: dict = None,
+        selectedNode: dict | None = None,
         focusBranch: str = None,
         editMode: str = "",
         editInputValue: str = "",
@@ -164,14 +164,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
             if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _gcNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
-            _gcFound = {};
+            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
+            _gcNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
+            _gcFound = None;
             _gci = 0;
             while _gci < len(_gcNodes) {
                 if _gcNodes[_gci]["id"] == _gcNodeId { _gcFound = _gcNodes[_gci]; break; }
                 _gci = _gci + 1;
             }
-            selectedNode = {};
             selectedNode = _gcFound;
         } except Exception { }
         isSaving = False;
@@ -194,14 +194,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
             if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _clNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
-            _clFound = {};
+            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
+            _clNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
+            _clFound = None;
             _cli = 0;
             while _cli < len(_clNodes) {
                 if _clNodes[_cli]["id"] == _clNodeId { _clFound = _clNodes[_cli]; break; }
                 _cli = _cli + 1;
             }
-            selectedNode = {};
             selectedNode = _clFound;
         } except Exception { }
         isSaving = False;
@@ -227,14 +227,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
             if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _invNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
-            _invFound = {};
+            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
+            _invNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
+            _invFound = None;
             _invi = 0;
             while _invi < len(_invNodes) {
                 if _invNodes[_invi]["id"] == _invNodeId { _invFound = _invNodes[_invi]; break; }
                 _invi = _invi + 1;
             }
-            selectedNode = {};
             selectedNode = _invFound;
         } except Exception { }
         isSaving = False;
@@ -258,14 +258,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
             if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _afNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
-            _afFound = {};
+            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
+            _afNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
+            _afFound = None;
             _afi = 0;
             while _afi < len(_afNodes) {
                 if _afNodes[_afi]["id"] == _afNodeId { _afFound = _afNodes[_afi]; break; }
                 _afi = _afi + 1;
             }
-            selectedNode = {};
             selectedNode = _afFound;
         } except Exception { }
         isSaving = False;
@@ -294,14 +294,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
             if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _aeNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
-            _aeFound = {};
+            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
+            _aeNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
+            _aeFound = None;
             _aei = 0;
             while _aei < len(_aeNodes) {
                 if _aeNodes[_aei]["id"] == _aeNodeId { _aeFound = _aeNodes[_aei]; break; }
                 _aei = _aei + 1;
             }
-            selectedNode = {};
             selectedNode = _aeFound;
         } except Exception { }
         isSaving = False;
@@ -384,14 +384,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 }
                 if "issues" in mutData { currentIssues = mutData["issues"]; }
                 if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-                _seNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
-                _seFound = {};
+                _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
+                _seNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
+                _seFound = None;
                 _sefi = 0;
                 while _sefi < len(_seNodes) {
                     if _seNodes[_sefi]["id"] == _seNodeId { _seFound = _seNodes[_sefi]; break; }
                     _sefi = _sefi + 1;
                 }
-                selectedNode = {};
                 selectedNode = _seFound;
             }
         } except Exception { }
@@ -479,14 +479,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             if "issues" in mutData { currentIssues = mutData["issues"]; }
             if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
             # Re-select same node
-            _ebNodes = currentGraph["nodes"] if currentGraph and "nodes" in currentGraph else [];
-            _ebFound = {};
+            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
+            _ebNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
+            _ebFound = None;
             _ebi = 0;
             while _ebi < len(_ebNodes) {
                 if _ebNodes[_ebi]["id"] == _ebNodeId { _ebFound = _ebNodes[_ebi]; break; }
                 _ebi = _ebi + 1;
             }
-            selectedNode = {};
             selectedNode = _ebFound;
         } except Exception { }
         isSaving = False;

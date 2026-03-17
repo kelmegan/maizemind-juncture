@@ -21,7 +21,8 @@ def:pub ExportScreen(props: any) -> JsxElement {
         exportFormat: str = "text",
         copyStatus: str = "",
         saved: bool = False,
-        isLoading: bool = True;
+        isLoading: bool = True,
+        isGuest: bool = True;
 
     async def loadContext() -> None {
         isLoading = True;
@@ -34,6 +35,7 @@ def:pub ExportScreen(props: any) -> JsxElement {
             }
             if ctx and "currentUser" in ctx and ctx["currentUser"] {
                 userId = ctx["currentUser"]["id"] if "id" in ctx["currentUser"] else "";
+                isGuest = ctx["currentUser"]["isGuest"];
             }
         } except Exception {
             # Context not available
@@ -301,7 +303,7 @@ def:pub ExportScreen(props: any) -> JsxElement {
                     <Alert className="export-alert-warning">
                         <AlertTriangle className="export-alert-warning-icon" />
                         <div>
-                            <p>Export now, but {'' + unsupported_claims} claims are unsupported. Want to fix the top {' ' + fix_count} issues first?</p>
+                            <p>Export now, but {' ' + unsupported_claims} claims are unsupported. Want to fix the top {' ' + fix_count} issues first?</p>
                             <div style={{"marginTop": "10px"}}>
                                 <Button label="Fix Top Issues First" variant="outline" onClick={handleFixTopIssues} />
                             </div>
@@ -321,12 +323,12 @@ def:pub ExportScreen(props: any) -> JsxElement {
                             <Button label={(<><Copy className="export-btn-icon" />Copy Outline</>)} variant="outline" onClick={handleCopyOutline} />
                             <Button label={(<><Download className="export-btn-icon" />Download PDF</>)} variant="outline" onClick={handleExportPDF} />
                         </div>
-                        <Button
+                        {<Button
                             label={(<><FileText className="export-btn-icon-sm" />{("Saved!" if saved else "Save to History")}</>)}
                             onClick={handleSaveSession}
                             disabled={saved or not userId}
                             className="export-save-btn"
-                        />
+                        /> if not isGuest else None}
                     </div>
                 </Card>
             </div>

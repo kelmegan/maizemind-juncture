@@ -55,7 +55,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
         if not notes.trim() { return; }
 
         # If user already has a graph, confirm first
-        if hasExistingGraph and not showConfirmRegenerate {
+        if hasExistingGraph and not showConfirmRegenerate and not isGuest {
             showConfirmRegenerate = True;
             return;
         }
