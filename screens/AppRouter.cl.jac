@@ -2,7 +2,6 @@ import from ..screens.WelcomeScreen { WelcomeScreen }
 import from ..screens.ExportScreen { ExportScreen }
 import from ..screens.GenerateScreen { GenerateScreen }
 import from ..screens.ReviewScreen { ReviewScreen }
-import from ..screens.ReviseScreen { ReviseScreen }
 import from ..screens.ProfileScreen { ProfileScreen }
 
 import "../styles.css";
@@ -12,11 +11,15 @@ def:pub AppRouter -> JsxElement {
         screenData: dict = {},
         isDark: bool = False,
         navigationCount: int = 0,
-        cachedGraphData: any = None,
-        cachedScoreData: any = None,
+        cachedGraphData: dict | None = None,
+        cachedScoreData: dict | None = None,
         cachedIssuesData: list = [],
         cachedNextActionsData: list = [],
         cachedCounterargSuggestions: list = [];
+
+    has safe_screens: list = ["generate", "review", "profile"];
+
+    has graph_screens: list = ["review", "profile"];
 
     async def loadContext() -> None {
         try {
@@ -24,40 +27,74 @@ def:pub AppRouter -> JsxElement {
             if ctx and ctx["reports"] {
                 ctx = ctx["reports"][0];
             }
-            if ctx and ctx["currentUser"] and "theme" in ctx["currentUser"] {
-                isDark = ctx["currentUser"]["theme"] == "dark";
-            }
 
             local_isGuest = True;
             if ctx and ctx["currentUser"] {
-                local_isGuest = ctx["currentUser"]["isGuest"] if "isGuest" in ctx["currentUser"] else True;
-                if ctx["currentUser"]["id"] == "guest_local" { local_isGuest = True; }
-            }
-
-            if ctx and "currentGraph" in ctx and ctx["currentGraph"] and not local_isGuest {
-                cachedGraphData = ctx["currentGraph"];
-                graphId = ctx["currentGraph"]["id"] if "id" in ctx["currentGraph"] else "";
-                if graphId {
-                    try {
-                        scored = await root spawn GetGraphWithScoring(graphId=graphId);
-                        scored_data = scored["reports"][0] if scored["reports"] else {};
-                        if "error" not in scored_data {
-                            cachedGraphData = scored_data["graph"] if "graph" in scored_data else cachedGraphData;
-                            cachedScoreData = scored_data["score"] if "score" in scored_data else None;
-                            cachedIssuesData = scored_data["issues"] if "issues" in scored_data else [];
-                            cachedNextActionsData = scored_data["nextActions"] if "nextActions" in scored_data else [];
-                        }
-                    } except Exception {
-                        # Keep whatever we have
-                    }
+                if "isGuest" in ctx["currentUser"] {
+                    local_isGuest = ctx["currentUser"]["isGuest"];
+                }
+                if "id" in ctx["currentUser"] and ctx["currentUser"]["id"] == "guest_local" {
+                    local_isGuest = True;
                 }
             }
 
-            if ctx and ctx["currentScreen"] and not local_isGuest {
-                currentScreen = ctx["currentScreen"];
+            if ctx and ctx["currentUser"] and not local_isGuest and "theme" in ctx["currentUser"] {
+                isDark = ctx["currentUser"]["theme"] == "dark";
+            }
+
+            if not local_isGuest {
+                restored_screen = "generate";
+                if ctx and ctx["currentScreen"] and ctx["currentScreen"] in safe_screens {
+                    restored_screen = ctx["currentScreen"];
+                }
+
+                if ctx and "currentGraph" in ctx and ctx["currentGraph"]
+                    and restored_screen in graph_screens {
+
+                    cachedGraphData = ctx["currentGraph"];
+
+                    graphId = "";
+                    if "id" in ctx["currentGraph"] {
+                        graphId = ctx["currentGraph"]["id"];
+                    }
+
+                    if graphId {
+                        try {
+                            scored = await root spawn GetGraphWithScoring(graphId=graphId);
+                            scored_data: dict = {};
+                            if scored and scored["reports"] {
+                                scored_data = scored["reports"][0];
+                            }
+
+                            if "error" not in scored_data {
+                                if "graph" in scored_data { cachedGraphData = scored_data["graph"]; }
+                                if "score" in scored_data { cachedScoreData = scored_data["score"]; }
+                                if "issues" in scored_data { cachedIssuesData = scored_data["issues"]; }
+                                if "nextActions" in scored_data { cachedNextActionsData = scored_data["nextActions"]; }
+                                if "suggestedCounterarguments" in scored_data { cachedCounterargSuggestions = scored_data["suggestedCounterarguments"]; }
+                            }
+                        } except Exception {
+                            # Keep whatever graph data we already have
+                        }
+                    }
+
+                    if restored_screen == "review" {
+                        screenData = {
+                            "graphData": cachedGraphData,
+                            "scoreData": cachedScoreData,
+                            "issuesData": cachedIssuesData,
+                            "nextActionsData": cachedNextActionsData,
+                            "suggestedCounterarguments": cachedCounterargSuggestions
+                        };
+                    }
+                }
+
+                currentScreen = restored_screen;
             }
         } except Exception {
-            # Not logged in yet, stay on welcome
+            # Not logged in or context unavailable — stay on welcome with defaults
+            currentScreen = "welcome";
+            isDark = False;
         }
     }
 
@@ -65,16 +102,44 @@ def:pub AppRouter -> JsxElement {
         loadContext();
     }
 
-    def handleDataUpdate(graphData: any, scoreData: any, issuesData: list, nextActionsData: list) -> None {
+    def handleDataUpdate(
+        graphData: dict | None,
+        scoreData: dict | None,
+        issuesData: list,
+        nextActionsData: list,
+        counterargSuggestions: list = []
+    ) -> None {
         if graphData { cachedGraphData = graphData; }
         if scoreData { cachedScoreData = scoreData; }
         if issuesData is not None { cachedIssuesData = issuesData; }
         if nextActionsData is not None { cachedNextActionsData = nextActionsData; }
+        if counterargSuggestions is not None { cachedCounterargSuggestions = counterargSuggestions; }
     }
 
     async def navigate(screen: str, data: dict = {}) -> None {
         if not data {
             data = {};
+        }
+
+        # On logout: clear all state, notify server, and return early
+        if screen == "welcome" {
+            isDark = False;
+            cachedGraphData = None;
+            cachedScoreData = None;
+            cachedIssuesData = [];
+            cachedNextActionsData = [];
+            cachedCounterargSuggestions = [];
+            screenData = {};
+            currentScreen = "welcome";
+            navigationCount = navigationCount + 1;
+
+            try {
+                root spawn UpdateContext(currentScreen="welcome", currentGraph=None);
+            } except Exception {
+                # Non-critical
+            }
+
+            return;
         }
 
         if "graphData" in data and data["graphData"] {
@@ -136,8 +201,7 @@ def:pub AppRouter -> JsxElement {
             <ExportScreen key={"export_" + nav_key} navigate={navigate} screenData={screenData} onDataUpdate={handleDataUpdate} /> if currentScreen == "export" else
             <GenerateScreen navigate={navigate} onDataUpdate={handleDataUpdate} /> if currentScreen == "generate" else
             <ReviewScreen key={"review_" + nav_key} navigate={navigate} screenData={screenData} onDataUpdate={handleDataUpdate} /> if currentScreen == "review" else
-            <ProfileScreen key={"profile_" + nav_key} navigate={navigate} screenData={screenData} toggleTheme={toggleTheme} isDark={isDark}/> if currentScreen == "profile" else
-            <ReviseScreen key={"revise_" + nav_key} navigate={navigate} screenData={screenData} /> if currentScreen == "revise" else
+            <ProfileScreen key={"profile_" + nav_key} navigate={navigate} screenData={screenData} toggleTheme={toggleTheme} isDark={isDark} /> if currentScreen == "profile" else
             <WelcomeScreen navigate={navigate} />
         }
     </div>;

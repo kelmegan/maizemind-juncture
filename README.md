@@ -105,7 +105,7 @@ rm -rf .jac && jac start main.jac
 - `main.jac` — Entry point, imports all walkers, renders client app
 - `src/graph_generator.jac` — LLM pipeline (2 calls: parse notes into graph, analyze weaknesses)
 - `walkers/` — Server-side walkers for graph generation, revision, user/session management
-- `screens/` — Client `.cl.jac` React screens (Welcome, Generate, Review, Revise, Export, Profile)
+- `screens/` — Client `.cl.jac` React screens (Welcome, Generate, Review, Export, Profile)
 - `components/` — Reusable UI components (ArgumentGraphView, Button, Card, etc.)
 - `graph/` — Node schema definitions (AppContext, User, Session, ArgumentGraph)
 
