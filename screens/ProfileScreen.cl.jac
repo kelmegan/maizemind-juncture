@@ -1,6 +1,7 @@
 """Juncture - Profile Screen for user settings, history, and statistics."""
 
 import from "lucide-react" { User, UserPlus, LogIn, History, Target, TrendingUp, Award, Settings, X }
+import from "@jac/runtime" { jacLogout }
 
 import from ..components.Badge { Badge }
 import from ..components.Button { Button }
@@ -15,13 +16,14 @@ def:pub ProfileScreen(props: any) -> JsxElement {
     back_to = screen_data["from"] if "from" in screen_data else "generate";
     toggleTheme = props.toggleTheme if props.toggleTheme else None;
     isDark = props.isDark if props.isDark else False;
+    isLoggedIn = props.isLoggedIn if props.isLoggedIn else False;
 
     has userId: str = "",
         isGuest: bool = False,
         name: str = "",
         userType: str = "student",
         goals: list[str] = [],
-        theme: str = "system",
+        theme: str = "light",
         accessibilityMode: bool = False,
         sessions: list = [],
         stats: dict = None,
@@ -32,47 +34,55 @@ def:pub ProfileScreen(props: any) -> JsxElement {
     async def loadContext() -> None {
         loading = True;
         local_userId = "";
-        local_isGuest = False;
         local_stats = None;
 
+        if not isLoggedIn {
+            isGuest = True;
+            loading = False;
+            return;
+        }
+
         try {
-            ctx = await root spawn GetContext();
-            if ctx and ctx["reports"] {
-                ctx = ctx["reports"][0];
+            result = await root spawn GetCurrentUser();
+            data = result["reports"][0] if result["reports"] else {};
+
+            if not data or not data["authenticated"] or data["isGuest"] {
+                isGuest = True;
+                loading = False;
+                return;
             }
 
-            if ctx and ctx["currentUser"] and "id" in ctx["currentUser"] {
-                local_userId = ctx["currentUser"]["id"];
-                local_isGuest = ctx["currentUser"]["isGuest"] if "isGuest" in ctx["currentUser"] else False;
-                if local_userId == "guest_local" { local_isGuest = True; }
+            local_userId = data["id"] if "id" in data else "";
 
-                userId = local_userId;
-                isGuest = local_isGuest;
-                name = ctx["currentUser"]["name"] if "name" in ctx["currentUser"] else "";
-                userType = ctx["currentUser"]["userType"] if "userType" in ctx["currentUser"] else "student";
-                goals = ctx["currentUser"]["goals"] if "goals" in ctx["currentUser"] else [];
-                theme = ctx["currentUser"]["theme"] if "theme" in ctx["currentUser"] else "system";
-                accessibilityMode = ctx["currentUser"]["accessibilityMode"] if "accessibilityMode" in ctx["currentUser"] else False;
-            }
+            userId = local_userId;
+            isGuest = False;
+            if "name" in data { name = data["name"]; }
+            if "userType" in data { userType = data["userType"]; }
+            if "goals" in data { goals = data["goals"]; }
+            if "theme" in data { theme = data["theme"]; }
+            if "accessibilityMode" in data { accessibilityMode = data["accessibilityMode"]; }
 
-            if local_userId and not local_isGuest {
+            if local_userId {
                 try {
                     sess_result = await root spawn GetUserSessions(userId=local_userId);
                     raw_sessions = sess_result["reports"][0] if sess_result["reports"] else [];
                     sessions = raw_sessions if raw_sessions else [];
-                } except Exception as e {
+                } except (e) {
                     print(f"Error loading sessions: {e}");
                 }
 
                 try {
                     stats_result = await root spawn CalculateUserStats(userId=local_userId);
                     local_stats = stats_result["reports"][0] if stats_result["reports"] else None;
-                } except Exception as e {
+                } except (e) {
                     print(f"Error loading stats: {e}");
                 }
             }
-        } except Exception as e {
-            print(f"Context error: {e}");
+        } except (e) {
+            print(f"Error in ProfileScreen loadContext: {e}");
+            isGuest = True;
+            loading = False;
+            return;
         }
 
         if not local_stats {
@@ -100,19 +110,6 @@ def:pub ProfileScreen(props: any) -> JsxElement {
             theme=theme,
             accessibilityMode=accessibilityMode
         );
-
-        await root spawn UpdateContext(
-            currentUser={
-                "id": userId,
-                "name": name,
-                "email": "",
-                "userType": userType,
-                "goals": goals,
-                "theme": theme,
-                "accessibilityMode": accessibilityMode,
-                "isGuest": isGuest
-            }
-        );
     }
 
     async def handleSaveTheme(new_theme: str) -> None {
@@ -124,18 +121,6 @@ def:pub ProfileScreen(props: any) -> JsxElement {
             goals=goals,
             theme=new_theme,
             accessibilityMode=accessibilityMode
-        );
-        await root spawn UpdateContext(
-            currentUser={
-                "id": userId,
-                "name": name,
-                "email": "",
-                "userType": userType,
-                "goals": goals,
-                "theme": new_theme,
-                "accessibilityMode": accessibilityMode,
-                "isGuest": isGuest
-            }
         );
     }
 
@@ -152,16 +137,33 @@ def:pub ProfileScreen(props: any) -> JsxElement {
             scored = await root spawn GetGraphWithScoring(graphId=graphId);
             scored_data = scored["reports"][0] if scored["reports"] else {};
             if "error" not in scored_data {
+                graph_data: dict = {};
+                score_data: dict = {};
+                issues_data: list = [];
+                next_actions_data: list = [];
+                if "graph" in scored_data { graph_data = scored_data["graph"]; }
+                if "score" in scored_data { score_data = scored_data["score"]; }
+                if "issues" in scored_data { issues_data = scored_data["issues"]; }
+                if "nextActions" in scored_data { next_actions_data = scored_data["nextActions"]; }
                 navigate("review", {
-                    "graphData": scored_data["graph"] if "graph" in scored_data else {},
-                    "scoreData": scored_data["score"] if "score" in scored_data else {},
-                    "issuesData": scored_data["issues"] if "issues" in scored_data else [],
-                    "nextActionsData": scored_data["nextActions"] if "nextActions" in scored_data else []
+                    "graphData": graph_data,
+                    "scoreData": score_data,
+                    "issuesData": issues_data,
+                    "nextActionsData": next_actions_data
                 });
             }
         } except Exception as e {
             print(f"Error opening session: {e}");
         }
+    }
+
+    def handleLogout() -> None {
+        try {
+            jacLogout();
+        } except Exception as e {
+            print(f"Logout error: {e}");
+        }
+        navigate("welcome");
     }
 
     def toggleGoal(goal: str) -> None {
@@ -214,7 +216,7 @@ def:pub ProfileScreen(props: any) -> JsxElement {
     if isGuest {
         return (
             <div className="profile-page">
-                <Header navigate={navigate} screen="profile" title="Profile" backTo={back_to} isGuest={isGuest} />
+                <Header navigate={navigate} screen="profile" title="Profile" backTo={back_to} isGuest={isGuest} onLogout={handleLogout}/>
                 <div className="guest-wall-outer">
                     <div className="guest-wall-card">
                         <div className="guest-wall-icon-ring">
@@ -228,13 +230,13 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                         <div className="guest-wall-actions">
                             <Button
                                 label={(<><UserPlus className="guest-wall-btn-icon" />Create Account</>)}
-                                onClick={lambda -> None { navigate("welcome", {"tab": "signup"}); }}
+                                onClick={lambda -> None { navigate("welcome"); }}
                                 className="guest-wall-signup-btn"
                             />
                             <Button
                                 label={(<><LogIn className="guest-wall-btn-icon" />Sign In</>)}
                                 variant="outline"
-                                onClick={lambda -> None { navigate("welcome", {"tab": "login"}); }}
+                                onClick={lambda -> None { navigate("welcome"); }}
                                 className="guest-wall-login-btn"
                             />
                         </div>
@@ -258,7 +260,6 @@ def:pub ProfileScreen(props: any) -> JsxElement {
         );
     }
 
-
     available_goals = [
         "Improve argument structure",
         "Add more evidence",
@@ -273,7 +274,7 @@ def:pub ProfileScreen(props: any) -> JsxElement {
 
     return (
         <div className="profile-page">
-            <Header navigate={navigate} screen="profile" title="Profile" backTo={back_to} isGuest={isGuest}/>
+            <Header navigate={navigate} screen="profile" title="Profile" backTo={back_to} isGuest={isGuest} onLogout={handleLogout}/>
 
             <div className="profile-content">
                 <Tabs value={activeTab} onValueChange={handleTabChange} className="profile-tabs">
@@ -321,15 +322,6 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                                             <option value="other">Other</option>
                                         </select>
                                     </div>
-
-                                    {(
-                                        <div className="profile-guest-notice">
-                                            <p className="profile-guest-title">Guest Mode</p>
-                                            <p className="profile-guest-body">
-                                                Sign up to save your profile and access it across devices
-                                            </p>
-                                        </div>
-                                    ) if isGuest else None}
 
                                     {(
                                         <Button label="Save Changes" onClick={handleSaveProfile} className="profile-save-btn" />

@@ -92,3 +92,35 @@ walker:pub UpdateUserProfile {
         report {"success": True, "user": user_node};
     }
 }
+
+walker:pub GetCurrentUser {
+    can run with Root entry {
+        try {
+            user = None;
+            for u in [-->](?:User) {
+                user = u;
+                break;
+            }
+
+            if not user {
+                report {"authenticated": False, "isGuest": True};
+                return;
+            }
+
+            report {
+                "authenticated": True,
+                "isGuest": False,
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "userType": user.userType if user.userType else "student",
+                "goals": user.goals if user.goals else [],
+                "theme": user.theme if user.theme else "light",
+                "accessibilityMode": user.accessibilityMode if user.accessibilityMode else False
+            };
+        } except Exception as e {
+            print(f"GetCurrentUser error: {e}");
+            report {"authenticated": False, "isGuest": True};
+        }
+    }
+}

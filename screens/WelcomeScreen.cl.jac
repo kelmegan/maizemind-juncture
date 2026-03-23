@@ -1,6 +1,5 @@
 """Welcome Screen"""
 
-sv import from ...main { CreateUser, GetUserByEmail, UpdateContext }
 import from "@jac/runtime" { jacSignup, jacLogin }
 import from "lucide-react" { Brain, Lightbulb, TrendingUp }
 
@@ -20,167 +19,68 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
 
     async def handleSignup() -> None {
         error = "";
-        local_error = "";
-        if email == "" or password == "" {
-            local_error = "Please fill in all fields";
-            error = local_error;
-            return;
-        }
+        if email == "" or password == "" { error = "Please fill in all fields"; return; }
         loading = True;
 
+        signup_result = await jacSignup(email, password);
+        if not signup_result["success"] {
+            error = signup_result["error"] if "error" in signup_result else "Signup failed";
+            loading = False;
+            return;
+        }
+
+        # Login BEFORE CreateUser — token confirmed active, node lands on correct root
+        login_success = await jacLogin(email, password);
+        if not login_success {
+            error = "Account created but login failed. Please sign in.";
+            loading = False;
+            return;
+        }
+
+        userId = "";
         try {
-            check_result = await root spawn GetUserByEmail(email=email);
-            existing_user = check_result["reports"][0] if check_result["reports"] else None;
-            if existing_user {
-                local_error = "An account with this email already exists. Please log in instead.";
-                error = local_error;
-                loading = False;
-                return;
-            }
-        } except Exception {
-            # Check failed, proceed with signup anyway
-        }
+            result = await root spawn CreateUser(
+                name=name if name else email.split("@")[0],
+                email=email,
+                isGuest=False
+            );
+            user_data = result["reports"][0] if result["reports"] else {};
+            userId = user_data["id"] if "id" in user_data else "";
+        } except Exception {}
 
-        result = await jacSignup(email, password);
         loading = False;
-
-        if result["success"] {
-            try {
-                walker_result = await root spawn CreateUser(
-                    name=name if name else email.split("@")[0],
-                    email=email,
-                    isGuest=False
-                );
-                user_data = walker_result["reports"][0] if walker_result["reports"] else {};
-
-                await root spawn UpdateContext(
-                    currentUser={
-                        "id": user_data["id"] if user_data and "id" in user_data else "",
-                        "name": user_data["name"] if user_data and "name" in user_data else name,
-                        "email": email,
-                        "userType": "student",
-                        "isGuest": False
-                    },
-                    currentGraph=None,
-                    currentScreen="generate"
-                );
-            } except Exception {
-                # Context update failed, still navigate
-            }
-
-            email = "";
-            password = "";
-            name = "";
-        } else {
-            local_error = result["error"] if "error" in result and result["error"] else "Signup failed";
-            error = local_error;
-        }
-
-        if not local_error {
-            navigate("generate");
-        }
+        email = "";
+        password = "";
+        name = "";
+        navigate("generate", {"userId": userId});
     }
 
     async def handleLogin() -> None {
-        local_error = "";
         error = "";
-        if email == "" or password == "" {
-            local_error = "Please fill in all fields";
-            error = local_error;
+        if email == "" or password == "" { error = "Please fill in all fields"; return; }
+        loading = True;
+
+        success = await jacLogin(email, password);
+        if not success {
+            error = "Invalid email or password";
+            loading = False;
             return;
         }
 
-        loading = True;
-        success = await jacLogin(email, password);
+        userId = "";
+        try {
+            result = await root spawn GetCurrentUser();
+            data = result["reports"][0] if result["reports"] else {};
+            userId = data["id"] if "id" in data else "";
+        } except Exception {}
+
         loading = False;
-
-        if success {
-            try {
-                walker_result = await root spawn GetUserByEmail(email=email);
-                user_data = walker_result["reports"][0] if walker_result["reports"] else None;
-
-                if user_data {
-                    await root spawn UpdateContext(
-                        currentUser={
-                            "id": user_data["id"] if "id" in user_data else "",
-                            "name": user_data["name"] if "name" in user_data else "",
-                            "email": user_data["email"] if "email" in user_data else email,
-                            "userType": user_data["userType"] if "userType" in user_data else "student",
-                            "goals": user_data["goals"] if "goals" in user_data else [],
-                            "theme": user_data["theme"] if "theme" in user_data else "system",
-                            "accessibilityMode": user_data["accessibilityMode"] if "accessibilityMode" in user_data else False,
-                            "isGuest": False
-                        },
-                        currentGraph=None,
-                        currentScreen="generate"
-                    );
-                } else {
-                    await root spawn UpdateContext(
-                        currentUser={
-                            "id": email,
-                            "name": email.split("@")[0],
-                            "email": email,
-                            "userType": "student",
-                            "goals": [],
-                            "theme": "system",
-                            "accessibilityMode": False,
-                            "isGuest": False
-                        },
-                        currentGraph=None,
-                        currentScreen="generate"
-                    );
-                }
-            } except Exception {
-                # Context update failed, still navigate
-            }
-
-            email = "";
-            password = "";
-        } else {
-            local_error = "Invalid email or password";
-            error = local_error;
-        }
-
-        if not local_error {
-            navigate("generate");
-        }
+        email = "";
+        password = "";
+        navigate("generate", {"userId": userId});
     }
 
     async def handleContinueAsGuest() -> None {
-        error = "";
-        loading = True;
-        guest_email = "__guest__";
-        guest_pass = "__no_password__";
-
-        success = await jacLogin(guest_email, guest_pass);
-        if not success {
-            try {
-                await jacSignup(guest_email, guest_pass);
-            } except Exception {
-                # ignore
-            }
-            success = await jacLogin(guest_email, guest_pass);
-        }
-
-        if success {
-            try {
-                await root spawn UpdateContext(
-                    currentUser={
-                        "id": "guest_local",
-                        "name": "Guest",
-                        "email": guest_email,
-                        "userType": "student",
-                        "isGuest": True
-                    },
-                    currentGraph=None,
-                    currentScreen="generate"
-                );
-            } except Exception {
-                # Context update failed, navigate anyway
-            }
-        }
-
-        loading = False;
         navigate("generate");
     }
 

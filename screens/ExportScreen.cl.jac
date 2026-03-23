@@ -12,63 +12,22 @@ import from ..components.Header { Header }
 def:pub ExportScreen(props: any) -> JsxElement {
     navigate = props.navigate;
     screen_data = props.screenData if props.screenData else {};
+    isLoggedIn = props.isLoggedIn if props.isLoggedIn else False;
+    userId = props.userId if props.userId else "";
 
     has currentGraph: dict = None,
         currentScore: dict = None,
         currentIssues: list = [],
         currentNextActions: list = [],
-        userId: str = "",
         exportFormat: str = "text",
         copyStatus: str = "",
-        saved: bool = False,
-        isLoading: bool = True,
-        isGuest: bool = True;
-
-    async def loadContext() -> None {
-        isLoading = True;
-        saved = False;
-        ctx = None;
-        try {
-            raw = await root spawn GetContext();
-            if raw and raw["reports"] {
-                ctx = raw["reports"][0];
-            }
-            if ctx and "currentUser" in ctx and ctx["currentUser"] {
-                userId = ctx["currentUser"]["id"] if "id" in ctx["currentUser"] else "";
-                isGuest = ctx["currentUser"]["isGuest"];
-            }
-        } except Exception {
-            # Context not available
-        }
-
-        if not currentGraph and ctx and "currentGraph" in ctx {
-            currentGraph = ctx["currentGraph"];
-        }
-
-        if currentGraph and not currentScore and "id" in currentGraph {
-            try {
-                scored = await root spawn GetGraphWithScoring(graphId=currentGraph["id"]);
-                scored_data = scored["reports"][0] if scored["reports"] else {};
-                if "error" not in scored_data {
-                    currentGraph = scored_data["graph"] if "graph" in scored_data else currentGraph;
-                    currentScore = scored_data["score"] if "score" in scored_data else currentScore;
-                    currentIssues = scored_data["issues"] if "issues" in scored_data else currentIssues;
-                    currentNextActions = scored_data["nextActions"] if "nextActions" in scored_data else currentNextActions;
-                }
-            } except Exception {
-                # Keep whatever we have
-            }
-        }
-
-        isLoading = False;
-    }
+        saved: bool = False;
 
     can with entry {
         if "graphData" in screen_data { currentGraph = screen_data["graphData"]; }
         if "scoreData" in screen_data { currentScore = screen_data["scoreData"]; }
         if "issuesData" in screen_data { currentIssues = screen_data["issuesData"]; }
         if "nextActionsData" in screen_data { currentNextActions = screen_data["nextActionsData"]; }
-        loadContext();
     }
 
     def generateOutlineText(includeFlags: bool) -> str {
@@ -204,7 +163,7 @@ def:pub ExportScreen(props: any) -> JsxElement {
     }
 
     async def handleSaveSession() -> None {
-        if not userId or saved {
+        if not userId or not isLoggedIn or saved {
             return;
         }
         graphId = currentGraph["id"] if currentGraph and "id" in currentGraph else "";
@@ -215,10 +174,6 @@ def:pub ExportScreen(props: any) -> JsxElement {
             score=currentScore
         );
         saved = True;
-    }
-
-    if isLoading {
-        return <div className="export-loading"><p>Loading...</p></div>;
     }
 
     if not currentGraph or not currentScore {
@@ -325,7 +280,7 @@ def:pub ExportScreen(props: any) -> JsxElement {
                             onClick={handleSaveSession}
                             disabled={saved or not userId}
                             className="export-save-btn"
-                        /> if not isGuest else None}
+                        /> if isLoggedIn else None}
                     </div>
                 </Card>
             </div>
