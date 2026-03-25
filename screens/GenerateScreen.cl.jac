@@ -11,38 +11,17 @@ import from ..components.Alert { Alert }
 
 def:pub GenerateScreen(props: any) -> JsxElement {
     navigate = props.navigate;
+    isLoggedIn = props.isLoggedIn if props.isLoggedIn else False;
+    userId = props.userId if props.userId else "";
 
     has notes: str = "",
         isGenerating: bool = False,
         generateStatus: str = "",
         currentUserId: str = "",
-        isGuest: bool = False,
         showConfirmRegenerate: bool = False,
         hasExistingGraph: bool = False,
         uploadAlert: any = None,
         uploadedFiles: list = [];
-
-    async def loadContext() -> None {
-        try {
-            ctx = await root spawn GetContext();
-            if ctx and ctx["reports"]{
-                ctx = ctx["reports"][0];
-            }
-            if ctx and ctx["currentUser"] {
-                currentUserId = ctx["currentUser"]["id"];
-                isGuest = ctx["currentUser"]["isGuest"];
-            }
-            if ctx and ctx["currentGraph"] {
-                hasExistingGraph = True;
-            }
-        } except Exception {
-            # Context not available
-        }
-    }
-
-    can with entry {
-        loadContext();
-    }
 
     def showUploadAlert(message: str, variant: str) -> None {
         uploadAlert = {"message": message, "variant": variant};
@@ -55,7 +34,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
         if not notes.trim() { return; }
 
         # If user already has a graph, confirm first
-        if hasExistingGraph and not showConfirmRegenerate and not isGuest {
+        if hasExistingGraph and not showConfirmRegenerate and isLoggedIn {
             showConfirmRegenerate = True;
             return;
         }
@@ -113,12 +92,6 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                 "nextActionsData": nextActionsData,
                 "suggestedCounterarguments": counterargSuggestions
             });
-
-            try {
-                await root spawn UpdateContext(currentGraph=graphData);
-            } except Exception {
-                # Context update is non-critical
-            }
         } except Exception as e {
             print(f"Generation error: {e}");
             generateStatus = f"Error generating graph. Please try again.";

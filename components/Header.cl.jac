@@ -11,6 +11,7 @@ def:pub Header(props: any) -> JsxElement {
     backTo = props.backTo if props.backTo else None;
     onBack = props.onBack if props.onBack else None;
     isGuest = props.isGuest if props.isGuest else None;
+    onLogout = props.onLogout if props.onLogout else None;
 
 
     def handleLogoClick() -> None {
@@ -30,7 +31,11 @@ def:pub Header(props: any) -> JsxElement {
     }
 
     def handleLogout() -> None {
-        navigate("welcome");
+        if onLogout {
+            onLogout();
+        } else {
+            navigate("welcome");
+        }
     }
 
     def handleExport() -> None {

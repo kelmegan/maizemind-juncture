@@ -27,38 +27,15 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _acceptedTexts: list = [];
 
     async def loadContext() -> None {
-        try {
-            ctx = await root spawn GetContext();
-            if ctx and ctx["reports"]{
-                ctx = ctx["reports"][0];
-            }
-            if ctx and ctx["currentGraph"] {
-                graphObj = ctx["currentGraph"];
-                graphId = graphObj["id"] if "id" in graphObj else "";
-                if graphId {
-                    result = await root spawn GetGraphWithScoring(graphId=graphId);
-                    data = result["reports"][0] if result["reports"] else {};
-                    if "error" not in data {
-                        currentGraph = data["graph"] if "graph" in data else None;
-                        currentScore = data["score"] if "score" in data else None;
-                        currentIssues = data["issues"] if "issues" in data else [];
-                        currentNextActions = data["nextActions"] if "nextActions" in data else [];
-                    }
-                }
-            }
-        } except Exception {
-            # Context not available
-        }
         pushUpdate();
     }
 
     can with entry {
-        currentGraph = screen_data["graphData"] if "graphData" in screen_data else None;
-        currentScore = screen_data["scoreData"] if "scoreData" in screen_data else None;
-        currentIssues = screen_data["issuesData"] if "issuesData" in screen_data else [];
-        currentNextActions = screen_data["nextActionsData"] if "nextActionsData" in screen_data else [];
-        suggestedCounterargs = screen_data["suggestedCounterarguments"] if "suggestedCounterarguments" in screen_data else [];
-        if not currentGraph { loadContext(); }
+        if "graphData" in screen_data { currentGraph = screen_data["graphData"]; }
+        if "scoreData" in screen_data { currentScore = screen_data["scoreData"]; }
+        if "issuesData" in screen_data { currentIssues = screen_data["issuesData"]; }
+        if "nextActionsData" in screen_data { currentNextActions = screen_data["nextActionsData"]; }
+        if "suggestedCounterarguments" in screen_data { suggestedCounterargs = screen_data["suggestedCounterarguments"]; }
         pushUpdate();
     }
 

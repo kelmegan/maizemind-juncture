@@ -10,6 +10,13 @@ walker:pub CreateUser {
         isGuest: bool = False;
 
     can run with Root entry {
+        for user in [-->](?:User) {
+            if user.email == self.email {
+                report {"error": "account_exists", "id": user.id};
+                return;
+            }
+        }
+
         new_user = (root ++> User(
             id=f"user_{int(time.time())}",
             name=self.name,
@@ -90,5 +97,40 @@ walker:pub UpdateUserProfile {
         if self.accessibilityMode is not None { user_node.accessibilityMode = self.accessibilityMode; }
 
         report {"success": True, "user": user_node};
+    }
+}
+
+
+walker:pub GetCurrentUser {
+    can run with Root entry {
+        try {
+            user = None;
+            for u in [-->](?:User) {
+                if not u.isGuest {
+                    user = u;
+                    break;
+                }
+            }
+
+            if not user {
+                report {"authenticated": False, "isGuest": True};
+                return;
+            }
+
+            report {
+                "authenticated": True,
+                "isGuest": False,
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "userType": user.userType if user.userType else "student",
+                "goals": user.goals if user.goals else [],
+                "theme": user.theme if user.theme else "light",
+                "accessibilityMode": user.accessibilityMode if user.accessibilityMode else False
+            };
+        } except Exception as e {
+            print(f"GetCurrentUser error: {e}");
+            report {"authenticated": False, "isGuest": True};
+        }
     }
 }

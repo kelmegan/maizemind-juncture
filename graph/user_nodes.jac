@@ -9,7 +9,7 @@ node User {
         goals: list[str] = [],
         strengths: list[str] = [],
         weaknesses: list[str] = [],
-        theme: str = "system",
+        theme: str = "light",
         accessibilityMode: bool = False,
         isGuest: bool = False;
 }
