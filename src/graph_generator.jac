@@ -66,11 +66,11 @@ obj GraphSummary {
 # ============================================================
 
 """Extract a compact argument graph from the user's notes. Return ONLY valid JSON, with no explanation.
-Format: {"nodes":[{"id":"n1","kind":"thesis|claim|evidence|counterarg","text":"...","evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["Does X hold in this context?"]},...],
-"edges":[{"from_id":"n2","to_id":"n1","kind":"supports|contradicts|addresses","reasoning_type":"deductive|inductive|causal|correlational|analogical","weight":0.8},...]}
+Format: {"nodes":[{"id":"n1","kind":"thesis|claim|evidence|counterarg","text":"...","evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["Short question only if clearly necessary"]},...],
+"edges":[{"from_id":"n2","to_id":"n1","kind":"supports|contradicts|addresses"},...]}
 STRICT RULES:
 1. EXACTLY 1 thesis node.
-2. Prefer 5-7 total nodes. Keep only the strongest claims, evidence, and counterarguments.
+2. Prefer 4-6 total nodes. Keep only the strongest claims, evidence, and counterarguments.
 3. SUPPORTS direction must go from supporting node -> supported node.
    - evidence -> claim
    - claim -> thesis or broader claim
@@ -79,9 +79,10 @@ STRICT RULES:
 6. The thesis should almost never be the source of a SUPPORTS edge.
 7. Every evidence node must support a claim. Every major claim should connect to the thesis or another claim.
 8. Discard meta-commentary. Keep node text under 22 words when possible.
-9. evidence_category is REQUIRED for evidence nodes. empirical_data means published data or studies only. Personal observations are anecdotal.
-10. assumptions must be phrased as short questions.
-11. If unsure about an edge, omit it rather than reversing it.
+9. Include evidence_category ONLY for evidence nodes.
+10. Include assumptions ONLY when a hidden assumption is obvious. Max 1 short question per node.
+11. Omit optional fields when empty. Do not include extra fields.
+12. If unsure about an edge, omit it rather than reversing it.
 Return valid JSON only. No markdown fences."""
 def parse_notes_and_edges(
     notes: str,
@@ -897,6 +898,109 @@ def issue_looks_generic(issue_text: str, nodes: list[GraphNode]) -> bool {
     return False;
 }
 
+"Create a short issue line from local rule-based hints."
+def build_fast_top_issues(issue_hints: list[dict[str, object]]) -> list[str] {
+    issues: list[str] = [];
+    count = 0;
+    for hint in issue_hints {
+        if count >= 3 {
+            break;
+        }
+        text = issue_text_from_hint(hint);
+        if text {
+            issues.append(text);
+            count = count + 1;
+        }
+    }
+    return issues;
+}
+
+"Choose node ids that most need revision."
+def build_improvement_nodes(issue_hints: list[dict[str, object]]) -> list[str] {
+    improvement_ids: list[str] = [];
+    for hint in issue_hints {
+        hint_node_id = str(hint.get("node_id", ""));
+        if hint_node_id and hint_node_id not in improvement_ids {
+            improvement_ids.append(hint_node_id);
+        }
+    }
+    return improvement_ids[:3];
+}
+
+"Find node text by id."
+def find_node_text(nodes: list[GraphNode], node_id: str) -> str {
+    for n in nodes {
+        if n.id == node_id {
+            return n.text;
+        }
+    }
+    return "";
+}
+
+"Heuristic counterargument text for weak claims."
+def heuristic_counter_text(node_text: str, issue_type: str) -> str {
+    lowered = node_text.lower();
+    if "cost" in lowered or "save money" in lowered or "reduce costs" in lowered {
+        return "Migration, storage, and vendor fees can offset the claimed savings.";
+    }
+    if "secure" in lowered or "security" in lowered or "privacy" in lowered or "encryption" in lowered {
+        return "Encryption helps, but breaches and misconfiguration still leave real security risks.";
+    }
+    if "accessible" in lowered or "convenient" in lowered or "anywhere" in lowered {
+        return "Those benefits depend on reliable internet, uptime, and equal user access.";
+    }
+    if "scalable" in lowered or "flexible" in lowered {
+        return "Scalability can add complexity, vendor lock-in, and cost tradeoffs.";
+    }
+    if issue_type == "weak_evidence" {
+        return "The claim may be true in some cases, but the current support is too thin.";
+    }
+    if issue_type == "unsupported_claim" {
+        return "This point may be overstated without direct evidence or a narrower scope.";
+    }
+    return "This claim may overstate the benefit without enough direct support or tradeoff analysis.";
+}
+
+"Build fast local counterargument suggestions without a second LLM call."
+def build_suggested_counterarguments(nodes: list[GraphNode], issue_hints: list[dict[str, object]]) -> list[dict] {
+    suggestions: list[dict] = [];
+    used_targets: list[str] = [];
+    for hint in issue_hints {
+        hint_type = str(hint.get("type", ""));
+        if hint_type not in ["unsupported_claim", "weak_evidence", "countered_claim"] {
+            continue;
+        }
+        target_node = str(hint.get("node_id", ""));
+        if not target_node or target_node in used_targets {
+            continue;
+        }
+        target_text = find_node_text(nodes, target_node);
+        if not target_text {
+            continue;
+        }
+        suggestions.append({
+            "target_node": target_node,
+            "text": heuristic_counter_text(target_text, hint_type),
+            "severity": str(hint.get("severity", "medium"))
+        });
+        used_targets.append(target_node);
+        if len(suggestions) >= 2 {
+            break;
+        }
+    }
+    return suggestions;
+}
+
+"Fast local summary builder used instead of a second LLM pass."
+def build_fast_summary(nodes: list[GraphNode], issue_hints: list[dict[str, object]], strength_ids: list[str]) -> GraphSummary {
+    summary = GraphSummary();
+    summary.top_issues = build_fast_top_issues(issue_hints);
+    summary.strength_nodes = strength_ids[:3];
+    summary.improvement_nodes = build_improvement_nodes(issue_hints);
+    summary.suggested_counterarguments = build_suggested_counterarguments(nodes, issue_hints);
+    return summary;
+}
+
 "Clamp a numeric value into [0, 1] for shared scoring."
 def:pub score_clamp01(val: float) -> float {
     v = val;
@@ -1435,105 +1539,12 @@ def generate_argument_graph(
     issue_hints = build_issue_hints(all_nodes, all_edges);
     strength_ids = build_strength_nodes(all_nodes, all_edges);
 
-    compact_nodes: list[dict[str, object]] = [];
-    for n in all_nodes {
-        if n.label in ["thesis", "claim", "counterarg"] or n.id in strength_ids {
-            compact_nodes.append({
-                "id": n.id,
-                "kind": n.label,
-                "text": compact_text(n.text, 100)
-            });
-        }
-    }
-    compact_meta = {
-        "strength_nodes": strength_ids,
-        "claim_ids": [n.id for n in all_nodes if n.label in ["claim", "thesis"]],
-        "counterarg_ids": [n.id for n in all_nodes if n.label == "counterarg"]
-    };
-    compact_edges: list[dict[str, object]] = [];
-    for e in all_edges {
-        compact_edges.append({
-            "from_id": e.from_id,
-            "to_id": e.to_id,
-            "kind": e.label
-        });
-    }
-    nj = json.dumps(compact_nodes);
-    ej = json.dumps(issue_hints);
-    meta_json = json.dumps(compact_meta);
-
-    # Step 3: Brief analysis + summary (single compact LLM call)
+    # Step 3: Build summary locally to avoid a second high-latency LLM call
     t1 = time.time();
-    print(f"  [Step 3/4] Analyzing graph and generating summary...");
-    raw_result = analyze_and_summarize_llm(nj, ej, meta_json);
-    print(f"  [Step 3/4] Done in {time.time() - t1:.1f}s");
-    print(f"  [Step 3/4] Raw summary preview: {debug_preview(extract_llm_text(raw_result))}");
-    parsed_result = safe_parse_json(raw_result);
-
+    print(f"  [Step 3/4] Building summary from rule-based diagnostics...");
     analysis_dicts: list[dict[str, str]] = [];
-    summary = GraphSummary();
-    if isinstance(parsed_result, dict) {
-        raw_top_issues = parsed_result.get("top_issues", []);
-        if isinstance(raw_top_issues, list) {
-            for issue_text in raw_top_issues {
-                issue_str = str(issue_text).strip();
-                if issue_str and not issue_looks_generic(issue_str, all_nodes) {
-                    summary.top_issues.append(issue_str);
-                }
-            }
-        }
-
-        raw_strength_nodes = parsed_result.get("strength_nodes", []);
-        if isinstance(raw_strength_nodes, list) {
-            summary.strength_nodes = [str(item) for item in raw_strength_nodes if str(item)];
-        }
-
-        raw_improvement_nodes = parsed_result.get("improvement_nodes", []);
-        if isinstance(raw_improvement_nodes, list) {
-            summary.improvement_nodes = [str(item) for item in raw_improvement_nodes if str(item)];
-        }
-
-        raw_counters = parsed_result.get("counterarguments", []);
-        if isinstance(raw_counters, list) {
-            valid_counters: list[dict] = [];
-            valid_ids = [n.id for n in all_nodes if n.label in ["claim", "thesis"]];
-            for item in raw_counters {
-                if not isinstance(item, dict) {
-                    continue;
-                }
-                target_node = str(item.get("target_node", ""));
-                text = compact_text(str(item.get("text", "")), 80);
-                severity = str(item.get("severity", "medium")).lower().strip();
-                if target_node in valid_ids and text {
-                    valid_counters.append({
-                        "target_node": target_node,
-                        "text": text,
-                        "severity": severity if severity in ["high", "medium", "low"] else "medium"
-                    });
-                }
-            }
-            summary.suggested_counterarguments = valid_counters[:2];
-        }
-    }
-
-    if not summary.top_issues {
-        for hint in issue_hints[:3] {
-            summary.top_issues.append(issue_text_from_hint(hint));
-        }
-    }
-    if not summary.strength_nodes {
-        summary.strength_nodes = strength_ids[:3];
-    }
-    if not summary.improvement_nodes {
-        improvement_ids: list[str] = [];
-        for hint in issue_hints {
-            hint_node_id = str(hint.get("node_id", ""));
-            if hint_node_id and hint_node_id not in improvement_ids {
-                improvement_ids.append(hint_node_id);
-            }
-        }
-        summary.improvement_nodes = improvement_ids[:3];
-    }
+    summary = build_fast_summary(all_nodes, issue_hints, strength_ids);
+    print(f"  [Step 3/4] Done in {time.time() - t1:.1f}s");
 
     print(f"  [Step 4/4] Finalizing output...");
     print(f"  [Done] Total pipeline: {time.time() - t0:.1f}s | Nodes: {len(all_nodes)} | Edges: {len(all_edges)} | Score: {score.get('overall', 0)}");
