@@ -65,31 +65,47 @@ obj GraphSummary {
 # Optimized: 2 lean LLM calls with minimal output
 # ============================================================
 
-"""You MUST extract a complete argument graph from the user's notes. Return ONLY valid JSON, no explanation.
+"""Extract a compact argument graph from the user's notes. Return ONLY valid JSON, with no explanation.
 Format: {"nodes":[{"id":"n1","kind":"thesis|claim|evidence|counterarg","text":"...","evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["Does X hold in this context?"]},...],
 "edges":[{"from_id":"n2","to_id":"n1","kind":"supports|contradicts|addresses","reasoning_type":"deductive|inductive|causal|correlational|analogical","weight":0.8},...]}
 STRICT RULES:
-1. EXACTLY 1 thesis node. Identify the user's main argument.
-2. Extract ALL claims and evidence from the notes — do NOT skip or summarize. Create a node for every distinct point.
-3. Max 8 nodes. If more than 8 points exist, keep the strongest.
-4. Every claim MUST connect to the thesis or another claim via edges. Every evidence MUST connect to what it supports.
-5. Discard meta-commentary ('I won't change my mind', 'this is my essay') — only real claims/evidence become nodes.
-6. evidence_category is REQUIRED for evidence nodes. empirical_data=published studies ONLY. Personal observations=anecdotal.
-7. assumptions: list as questions (e.g. 'Does this sample size generalize?').
-8. Edge weight 0.0-1.0 based on how strongly the source supports/contradicts the target.
-You MUST return valid JSON. Do NOT wrap in markdown fences."""
+1. EXACTLY 1 thesis node.
+2. Prefer 5-7 total nodes. Keep only the strongest claims, evidence, and counterarguments.
+3. SUPPORTS direction must go from supporting node -> supported node.
+   - evidence -> claim
+   - claim -> thesis or broader claim
+4. CONTRADICTS direction must go from counterargument -> claim or thesis.
+5. ADDRESSES direction must go from response/rebuttal -> counterargument.
+6. The thesis should almost never be the source of a SUPPORTS edge.
+7. Every evidence node must support a claim. Every major claim should connect to the thesis or another claim.
+8. Discard meta-commentary. Keep node text under 22 words when possible.
+9. evidence_category is REQUIRED for evidence nodes. empirical_data means published data or studies only. Personal observations are anecdotal.
+10. assumptions must be phrased as short questions.
+11. If unsure about an edge, omit it rather than reversing it.
+Return valid JSON only. No markdown fences."""
 def parse_notes_and_edges(
     notes: str,
     documents: list[Document]
 ) -> str
 by llm(temperature=0.2);
 
-"""Given argument graph nodes and edges as JSON, return:
-{"top_issues":["issue1","issue2","issue3"],
-"strength_nodes":["n1"],
-"improvement_nodes":["n3","n4"],
-"counterarguments":[{"target_node":"n2","text":"A specific counterargument","severity":"high|medium|low"}]}
-List the 3 most critical weaknesses. Suggest 1-3 specific counterarguments someone could raise against the weakest claims. Be brief."""
+"""Rewrite compact rule-based graph diagnostics into brief critique JSON.
+Input 1 is nodes_json: [{"id":"n1","kind":"claim","text":"..."}, ...]
+Input 2 is issue_hints_json: [{"node_id":"n2","type":"unsupported_claim","severity":"high","explanation":"...","suggested_action":"..."}, ...]
+Input 3 is graph_meta_json: {"strength_nodes":["n4"],"claim_ids":["n1","n2"],"counterarg_ids":["n7"]}
+Return:
+{"top_issues":["[n2] Unsupported claim: no direct evidence yet", "..."],
+"strength_nodes":["n4"],
+"improvement_nodes":["n2","n3"],
+"counterarguments":[{"target_node":"n2","text":"A short specific counterargument","severity":"high|medium|low"}]}
+RULES:
+- Do NOT restate the claim text as an issue.
+- top_issues must describe weaknesses like unsupported claim, weak evidence, missing assumption, unresolved counterargument, or disconnected claim.
+- Prefer the provided issue_hints over inventing new issues.
+- Keep top_issues to 3 items max.
+- improvement_nodes must be node ids that most need revision.
+- counterarguments should target the weakest claims or thesis only, max 2, and be under 18 words each.
+- Return valid JSON only."""
 def analyze_and_summarize_llm(
     all_nodes_json: str,
     all_edges_json: str,
@@ -324,6 +340,36 @@ def:pub extract_llm_text(raw: object) -> str {
     return str(raw);
 }
 
+"Short preview for debug logs."
+def debug_preview(text: str, limit: int = 240) -> str {
+    preview = text.replace("\n", "\\n");
+    if len(preview) > limit {
+        return preview[:limit] + "...";
+    }
+    return preview;
+}
+
+"Best-effort extraction of a JSON object or array from mixed model output."
+def extract_json_candidate(cleaned: str) -> str {
+    if not cleaned {
+        return "";
+    }
+
+    first_obj = cleaned.find("{");
+    last_obj = cleaned.rfind("}");
+    if first_obj != -1 and last_obj != -1 and last_obj > first_obj {
+        return cleaned[first_obj:last_obj + 1];
+    }
+
+    first_arr = cleaned.find("[");
+    last_arr = cleaned.rfind("]");
+    if first_arr != -1 and last_arr != -1 and last_arr > first_arr {
+        return cleaned[first_arr:last_arr + 1];
+    }
+
+    return cleaned;
+}
+
 "Parse JSON string from LLM, handling markdown fences."
 def safe_parse_json(raw: object) -> list {
     cleaned = extract_llm_text(raw).strip();
@@ -337,9 +383,18 @@ def safe_parse_json(raw: object) -> list {
         }
         cleaned = "\n".join(lines).strip();
     }
+
+    candidate = extract_json_candidate(cleaned);
+
     try {
-        return json.loads(cleaned);
-    } except Exception {
+        parsed = json.loads(candidate);
+        parsed_kind = "dict" if isinstance(parsed, dict) else ("list" if isinstance(parsed, list) else str(type(parsed)));
+        print(f"  [Parser] JSON parse success: type={parsed_kind} raw_len={len(cleaned)} candidate_len={len(candidate)}");
+        return parsed;
+    } except Exception as e {
+        print(f"  [Parser] JSON parse failed: {e}");
+        print(f"  [Parser] Raw preview: {debug_preview(cleaned)}");
+        print(f"  [Parser] Candidate preview: {debug_preview(candidate)}");
         return [];
     }
 }
@@ -533,6 +588,315 @@ def normalize_edges(edges: list[GraphEdge]) -> list[GraphEdge] {
     return edges;
 }
 
+"Get normalized node label for a given id."
+def get_node_label(nodes: list[GraphNode], node_id: str) -> str {
+    for n in nodes {
+        if n.id == node_id {
+            return n.label.lower().strip();
+        }
+    }
+    return "";
+}
+
+"Get a node by id."
+def get_node(nodes: list[GraphNode], node_id: str) -> GraphNode {
+    for n in nodes {
+        if n.id == node_id {
+            return n;
+        }
+    }
+    return GraphNode(id=node_id);
+}
+
+"More specific nodes should support broader nodes. Lower rank means more specific."
+def support_rank(label: str) -> int {
+    lowered = label.lower().strip();
+    if lowered == "evidence" { return 0; }
+    if lowered == "claim" { return 1; }
+    if lowered == "counterarg" { return 1; }
+    if lowered == "thesis" { return 2; }
+    return 1;
+}
+
+"Repair common LLM edge-direction mistakes and remove invalid edges."
+def repair_edge_directions(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[GraphEdge] {
+    fixed: list[GraphEdge] = [];
+    for e in edges {
+        src = e.from_id.strip();
+        tgt = e.to_id.strip();
+        if not src or not tgt or src == tgt {
+            continue;
+        }
+
+        src_label = get_node_label(nodes, src);
+        tgt_label = get_node_label(nodes, tgt);
+        if not src_label or not tgt_label {
+            continue;
+        }
+
+        if e.label == "supports" {
+            src_rank = support_rank(src_label);
+            tgt_rank = support_rank(tgt_label);
+            if src_rank > tgt_rank {
+                old_src = e.from_id;
+                e.from_id = e.to_id;
+                e.to_id = old_src;
+                src_label = get_node_label(nodes, e.from_id);
+                tgt_label = get_node_label(nodes, e.to_id);
+            }
+            if src_label == "thesis" and tgt_label != "thesis" {
+                old_src2 = e.from_id;
+                e.from_id = e.to_id;
+                e.to_id = old_src2;
+            }
+        } elif e.label == "contradicts" {
+            if tgt_label == "counterarg" and src_label != "counterarg" {
+                old_src3 = e.from_id;
+                e.from_id = e.to_id;
+                e.to_id = old_src3;
+            }
+        } elif e.label == "addresses" {
+            if src_label == "counterarg" and tgt_label != "counterarg" {
+                old_src4 = e.from_id;
+                e.from_id = e.to_id;
+                e.to_id = old_src4;
+            }
+        }
+
+        if e.weight < 0.0 { e.weight = 0.0; }
+        if e.weight > 1.0 { e.weight = 1.0; }
+        fixed.append(e);
+    }
+    return fixed;
+}
+
+"Remove duplicate edges after normalization and repair."
+def dedupe_edges(edges: list[GraphEdge]) -> list[GraphEdge] {
+    kept: list[GraphEdge] = [];
+    seen: list[str] = [];
+    for e in edges {
+        key = f"{e.from_id}|{e.to_id}|{e.label}";
+        if key in seen {
+            continue;
+        }
+        seen.append(key);
+        kept.append(e);
+    }
+    return kept;
+}
+
+"Compact text for prompt payloads."
+def compact_text(text: str, limit: int = 120) -> str {
+    trimmed = text.strip().replace("\n", " ");
+    if len(trimmed) <= limit {
+        return trimmed;
+    }
+    return trimmed[:limit - 3] + "...";
+}
+
+"Count incoming edges by label."
+def incoming_count(edges: list[GraphEdge], node_id: str, label: str) -> int {
+    count = 0;
+    for e in edges {
+        if e.to_id == node_id and e.label == label {
+            count = count + 1;
+        }
+    }
+    return count;
+}
+
+"Count incoming evidence supports."
+def incoming_evidence_support_count(nodes: list[GraphNode], edges: list[GraphEdge], node_id: str) -> int {
+    count = 0;
+    for e in edges {
+        if e.to_id == node_id and e.label == "supports" {
+            if get_node_label(nodes, e.from_id) == "evidence" {
+                count = count + 1;
+            }
+        }
+    }
+    return count;
+}
+
+"Check whether a claim is attached to thesis or another claim."
+def has_outgoing_support_link(nodes: list[GraphNode], edges: list[GraphEdge], node_id: str) -> bool {
+    for e in edges {
+        if e.from_id == node_id and e.label == "supports" {
+            target_label = get_node_label(nodes, e.to_id);
+            if target_label in ["claim", "thesis"] {
+                return True;
+            }
+        }
+    }
+    return False;
+}
+
+"Get the primary thesis node id, or empty string if absent."
+def get_primary_thesis_id(nodes: list[GraphNode]) -> str {
+    for n in nodes {
+        if n.label == "thesis" {
+            return n.id;
+        }
+    }
+    return "";
+}
+
+"Backfill missing claim-to-thesis links so major claims stay on the thesis path."
+def ensure_claim_paths(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[GraphEdge] {
+    thesis_id = get_primary_thesis_id(nodes);
+    if not thesis_id {
+        return edges;
+    }
+
+    added_edges = 0;
+    for n in nodes {
+        if n.label != "claim" {
+            continue;
+        }
+        if n.id == thesis_id {
+            continue;
+        }
+        if has_outgoing_support_link(nodes, edges, n.id) {
+            continue;
+        }
+
+        link = GraphEdge(from_id=n.id, to_id=thesis_id);
+        link.label = "supports";
+        link.weight = 0.55;
+        link.reasoning_type = "inductive";
+        edges.append(link);
+        added_edges = added_edges + 1;
+    }
+
+    if added_edges > 0 {
+        print(f"  [Step 1/3] Backfilled {added_edges} claim-to-thesis SUPPORTS edges");
+    }
+    return edges;
+}
+
+"Rule-based hints to guide critique generation."
+def build_issue_hints(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[dict[str, object]] {
+    hints: list[dict[str, object]] = [];
+    for n in nodes {
+        if n.label in ["thesis", "claim"] {
+            evidence_supports = incoming_evidence_support_count(nodes, edges, n.id);
+            total_supports = incoming_count(edges, n.id, "supports");
+            contradiction_count = incoming_count(edges, n.id, "contradicts");
+
+            if evidence_supports == 0 {
+                hints.append({
+                    "node_id": n.id,
+                    "type": "unsupported_claim",
+                    "severity": "high" if n.label == "thesis" else "medium",
+                    "explanation": "This point has no direct evidence supporting it yet.",
+                    "suggested_action": "Add evidence that directly supports this point."
+                });
+            } elif evidence_supports == 1 {
+                hints.append({
+                    "node_id": n.id,
+                    "type": "weak_evidence",
+                    "severity": "medium",
+                    "explanation": "This point relies on only one supporting evidence node.",
+                    "suggested_action": "Add another source or a stronger piece of evidence."
+                });
+            }
+
+            if not has_outgoing_support_link(nodes, edges, n.id) and n.label == "claim" {
+                hints.append({
+                    "node_id": n.id,
+                    "type": "disconnected_claim",
+                    "severity": "medium",
+                    "explanation": "This claim is not clearly linked back to the thesis path.",
+                    "suggested_action": "Connect this claim to the thesis or parent claim."
+                });
+            }
+
+            if contradiction_count > 0 {
+                hints.append({
+                    "node_id": n.id,
+                    "type": "countered_claim",
+                    "severity": "medium",
+                    "explanation": "A counterargument targets this point and may need a response.",
+                    "suggested_action": "Address the counterargument or qualify the claim."
+                });
+            }
+
+            if total_supports > 0 and evidence_supports == 0 {
+                hints.append({
+                    "node_id": n.id,
+                    "type": "missing_assumption",
+                    "severity": "medium",
+                    "explanation": "This point is supported by reasoning or sub-claims but lacks explicit factual grounding.",
+                    "suggested_action": "Add evidence or state the missing assumption explicitly."
+                });
+            }
+        } elif n.label == "counterarg" {
+            addressed = incoming_count(edges, n.id, "addresses");
+            if addressed == 0 {
+                hints.append({
+                    "node_id": n.id,
+                    "type": "unresolved_counterargument",
+                    "severity": "high",
+                    "explanation": "This counterargument is present but not answered anywhere in the graph.",
+                    "suggested_action": "Add a rebuttal or acknowledge the limitation."
+                });
+            }
+        }
+    }
+    return hints;
+}
+
+"Choose strong nodes for summary payload."
+def build_strength_nodes(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[str] {
+    strong_ids: list[str] = [];
+    for n in nodes {
+        if n.label == "evidence" and n.evidence_category in ["empirical_data", "expert_testimony"] {
+            strong_ids.append(n.id);
+        }
+    }
+    if strong_ids {
+        return strong_ids[:3];
+    }
+    for n in nodes {
+        if n.label in ["claim", "thesis"] and incoming_evidence_support_count(nodes, edges, n.id) >= 2 {
+            strong_ids.append(n.id);
+        }
+    }
+    return strong_ids[:3];
+}
+
+"Fallback human-readable issue string."
+def issue_text_from_hint(hint: dict[str, object]) -> str {
+    node_id = str(hint.get("node_id", ""));
+    issue_type = str(hint.get("type", "")).replace("_", " ");
+    explanation = str(hint.get("explanation", ""));
+    if node_id and explanation {
+        return f"[{node_id}] {issue_type}: {explanation}";
+    }
+    return explanation;
+}
+
+"Detect weak issue strings that only repeat node text."
+def issue_looks_generic(issue_text: str, nodes: list[GraphNode]) -> bool {
+    cleaned = issue_text.lower().strip();
+    if not cleaned {
+        return True;
+    }
+    for n in nodes {
+        node_text = n.text.lower().strip();
+        if cleaned == node_text {
+            return True;
+        }
+        if len(cleaned) > 40 and cleaned in node_text {
+            return True;
+        }
+    }
+    if "unsupported" not in cleaned and "weak" not in cleaned and "missing" not in cleaned and "counter" not in cleaned and "disconnected" not in cleaned and "evidence" not in cleaned {
+        return True;
+    }
+    return False;
+}
+
 
 # ============================================================
 # 5. SCORING - Rule-based, NOT LLM
@@ -702,6 +1066,7 @@ def generate_argument_graph(
     print(f"  [Step 1/3] Parsing notes into graph structure...");
     raw_json = parse_notes_and_edges(raw_text, documents);
     print(f"  [Step 1/3] Done in {time.time() - t0:.1f}s");
+    print(f"  [Step 1/3] Raw LLM preview: {debug_preview(extract_llm_text(raw_json))}");
     parsed = safe_parse_json(raw_json);
 
     # Handle both list and dict responses
@@ -714,6 +1079,7 @@ def generate_argument_graph(
         # Fallback: if LLM returns a list, treat it as nodes
         raw_nodes_list = parsed;
     }
+    print(f"  [Step 1/3] Parsed nodes={len(raw_nodes_list)} edges={len(raw_edges_list)}");
 
     new_nodes: list[GraphNode] = [];
     for rd in raw_nodes_list {
@@ -731,40 +1097,118 @@ def generate_argument_graph(
         }
     }
     new_edges = normalize_edges(new_edges);
+    new_edges = repair_edge_directions(new_nodes, new_edges);
+    new_edges = ensure_claim_paths(new_nodes, new_edges);
+    new_edges = dedupe_edges(new_edges);
     all_edges = existing_edges + new_edges;
 
-    # Build JSON representations for next call
-    nj = json.dumps([{"id": n.id, "kind": n.label, "text": n.text, "parent_id": n.parent_id} for n in all_nodes]);
-    ej = json.dumps([{"from_id": e.from_id, "to_id": e.to_id, "kind": e.label, "weight": e.weight} for e in all_edges]);
+    # Step 2: Calculate score and compact issue hints before critique generation
+    print(f"  [Step 2/4] Calculating score (rule-based)...");
+    score = calculate_score(all_nodes, all_edges);
+    issue_hints = build_issue_hints(all_nodes, all_edges);
+    strength_ids = build_strength_nodes(all_nodes, all_edges);
 
-    # Step 2: Brief analysis + summary (single LLM call)
-    t1 = time.time();
-    print(f"  [Step 2/3] Analyzing graph and generating summary...");
-    doc_list: list[dict[str, str]] = [];
-    for doc in documents {
-        doc_list.append({"title": doc.title, "content": doc.content});
+    compact_nodes: list[dict[str, object]] = [];
+    for n in all_nodes {
+        if n.label in ["thesis", "claim", "counterarg"] or n.id in strength_ids {
+            compact_nodes.append({
+                "id": n.id,
+                "kind": n.label,
+                "text": compact_text(n.text, 100)
+            });
+        }
     }
+    compact_meta = {
+        "strength_nodes": strength_ids,
+        "claim_ids": [n.id for n in all_nodes if n.label in ["claim", "thesis"]],
+        "counterarg_ids": [n.id for n in all_nodes if n.label == "counterarg"]
+    };
+    compact_edges: list[dict[str, object]] = [];
+    for e in all_edges {
+        compact_edges.append({
+            "from_id": e.from_id,
+            "to_id": e.to_id,
+            "kind": e.label
+        });
+    }
+    nj = json.dumps(compact_nodes);
+    ej = json.dumps(issue_hints);
+    meta_json = json.dumps(compact_meta);
 
-    raw_result = analyze_and_summarize_llm(nj, ej, json.dumps(doc_list));
-    print(f"  [Step 2/3] Done in {time.time() - t1:.1f}s");
+    # Step 3: Brief analysis + summary (single compact LLM call)
+    t1 = time.time();
+    print(f"  [Step 3/4] Analyzing graph and generating summary...");
+    raw_result = analyze_and_summarize_llm(nj, ej, meta_json);
+    print(f"  [Step 3/4] Done in {time.time() - t1:.1f}s");
+    print(f"  [Step 3/4] Raw summary preview: {debug_preview(extract_llm_text(raw_result))}");
     parsed_result = safe_parse_json(raw_result);
 
     analysis_dicts: list[dict[str, str]] = [];
     summary = GraphSummary();
-
     if isinstance(parsed_result, dict) {
-        summary.top_issues = parsed_result.get("top_issues", []);
-        summary.strength_nodes = parsed_result.get("strength_nodes", []);
-        summary.improvement_nodes = parsed_result.get("improvement_nodes", []);
+        raw_top_issues = parsed_result.get("top_issues", []);
+        if isinstance(raw_top_issues, list) {
+            for issue_text in raw_top_issues {
+                issue_str = str(issue_text).strip();
+                if issue_str and not issue_looks_generic(issue_str, all_nodes) {
+                    summary.top_issues.append(issue_str);
+                }
+            }
+        }
+
+        raw_strength_nodes = parsed_result.get("strength_nodes", []);
+        if isinstance(raw_strength_nodes, list) {
+            summary.strength_nodes = [str(item) for item in raw_strength_nodes if str(item)];
+        }
+
+        raw_improvement_nodes = parsed_result.get("improvement_nodes", []);
+        if isinstance(raw_improvement_nodes, list) {
+            summary.improvement_nodes = [str(item) for item in raw_improvement_nodes if str(item)];
+        }
+
         raw_counters = parsed_result.get("counterarguments", []);
         if isinstance(raw_counters, list) {
-            summary.suggested_counterarguments = raw_counters;
+            valid_counters: list[dict] = [];
+            valid_ids = [n.id for n in all_nodes if n.label in ["claim", "thesis"]];
+            for item in raw_counters {
+                if not isinstance(item, dict) {
+                    continue;
+                }
+                target_node = str(item.get("target_node", ""));
+                text = compact_text(str(item.get("text", "")), 80);
+                severity = str(item.get("severity", "medium")).lower().strip();
+                if target_node in valid_ids and text {
+                    valid_counters.append({
+                        "target_node": target_node,
+                        "text": text,
+                        "severity": severity if severity in ["high", "medium", "low"] else "medium"
+                    });
+                }
+            }
+            summary.suggested_counterarguments = valid_counters[:2];
         }
     }
 
-    # Step 3: Calculate score (rule-based, no LLM)
-    print(f"  [Step 3/3] Calculating score (rule-based)...");
-    score = calculate_score(all_nodes, all_edges);
+    if not summary.top_issues {
+        for hint in issue_hints[:3] {
+            summary.top_issues.append(issue_text_from_hint(hint));
+        }
+    }
+    if not summary.strength_nodes {
+        summary.strength_nodes = strength_ids[:3];
+    }
+    if not summary.improvement_nodes {
+        improvement_ids: list[str] = [];
+        for hint in issue_hints {
+            hint_node_id = str(hint.get("node_id", ""));
+            if hint_node_id and hint_node_id not in improvement_ids {
+                improvement_ids.append(hint_node_id);
+            }
+        }
+        summary.improvement_nodes = improvement_ids[:3];
+    }
+
+    print(f"  [Step 4/4] Finalizing output...");
     print(f"  [Done] Total pipeline: {time.time() - t0:.1f}s | Nodes: {len(all_nodes)} | Edges: {len(all_edges)} | Score: {score.overall}");
 
     # Build output dicts

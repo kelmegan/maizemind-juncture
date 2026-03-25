@@ -221,7 +221,7 @@ walker:pub GenerateArgumentGraph {
     }
 
     def capitalize_text(text: str) -> str {
-        """Sentence-case: capitalize first letter of each sentence."""
+        # Sentence-case the first letter of each sentence.
         result = text;
         if len(text) > 0 {
             sentences = text.split(". ");
@@ -413,7 +413,7 @@ walker:pub GetGraphWithScoring {
     }
 
     def find_weak_nodes(nodes: list, edges: list) -> list {
-        """Find all weak node IDs via evidence quality + upward propagation."""
+        # Find weak node IDs via evidence quality and upward propagation.
         weak_ids: list[str] = [];
 
         # Evidence with low quality
@@ -502,7 +502,7 @@ walker:pub GetGraphWithScoring {
     }
 
     def has_assumption(nodes: list, edges: list, claim_id: str) -> bool {
-        """Check if a claim has assumptions — looks at supporting evidence nodes' assumptions lists."""
+        # Check whether a claim is backed by evidence carrying assumption metadata.
         for e in edges {
             if e.get("type", "") == "SUPPORTS" and e.get("target", "") == claim_id {
                 src_node = self.get_node(nodes, e.get("source", ""));
