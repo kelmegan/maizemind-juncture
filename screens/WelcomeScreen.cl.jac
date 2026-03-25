@@ -22,6 +22,16 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
         if email == "" or password == "" { error = "Please fill in all fields"; return; }
         loading = True;
 
+        try {
+            existing_result = await root spawn GetUserByEmail(email=email);
+            existing_user = existing_result["reports"][0] if existing_result["reports"] else None;
+            if existing_user and "id" in existing_user {
+                error = "An account with this email already exists. Please log in instead.";
+                loading = False;
+                return;
+            }
+        } except Exception {}
+
         signup_result = await jacSignup(email, password);
         if not signup_result["success"] {
             error = signup_result["error"] if "error" in signup_result else "Signup failed";
@@ -29,7 +39,6 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
             return;
         }
 
-        # Login BEFORE CreateUser — token confirmed active, node lands on correct root
         login_success = await jacLogin(email, password);
         if not login_success {
             error = "Account created but login failed. Please sign in.";
@@ -45,14 +54,20 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
                 isGuest=False
             );
             user_data = result["reports"][0] if result["reports"] else {};
+            if "error" in user_data and user_data["error"] == "account_exists" {
+                error = "An account with this email already exists. Please log in instead.";
+                loading = False;
+                return;
+            }
             userId = user_data["id"] if "id" in user_data else "";
         } except Exception {}
 
         loading = False;
+        saved_email = email;
         email = "";
         password = "";
         name = "";
-        navigate("generate", {"userId": userId});
+        navigate("generate", {"userId": userId, "userEmail": saved_email});
     }
 
     async def handleLogin() -> None {
@@ -67,17 +82,11 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
             return;
         }
 
-        userId = "";
-        try {
-            result = await root spawn GetCurrentUser();
-            data = result["reports"][0] if result["reports"] else {};
-            userId = data["id"] if "id" in data else "";
-        } except Exception {}
-
         loading = False;
+        saved_email = email;
         email = "";
         password = "";
-        navigate("generate", {"userId": userId});
+        navigate("generate", {"userEmail": saved_email});
     }
 
     async def handleContinueAsGuest() -> None {
@@ -144,7 +153,7 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
                         </TabsList>
 
                         <TabsContent value="login" activeValue={activeTab} className="auth-tab-content">
-                            {(<div className="auth-error">{error}</div>) if error and not isSignup else None}
+                            {(<div className="auth-error">{error}</div>) if error else None}
                             <div className="form-field">
                                 <label className="form-label">Email</label>
                                 <input

@@ -13,6 +13,7 @@ def:pub AppRouter -> JsxElement {
         isLoading: bool = True,
         isLoggedIn: bool = False,
         currentUserId: str = "",
+        currentUserEmail: str = "",
         navigationCount: int = 0,
         cachedGraphData: dict | None = None,
         cachedScoreData: dict | None = None,
@@ -28,6 +29,7 @@ def:pub AppRouter -> JsxElement {
                 if data and not data["isGuest"] {
                     isLoggedIn = True;
                     currentUserId = data["id"] if "id" in data else "";
+                    currentUserEmail = data["email"] if "email" in data else "";
                     if "theme" in data { isDark = data["theme"] == "dark"; }
                     currentScreen = "generate";
                 }
@@ -35,7 +37,6 @@ def:pub AppRouter -> JsxElement {
                 print(f"loadContext error: {e}");
             }
         }
-        
         isLoading = False;
     }
 
@@ -63,6 +64,7 @@ def:pub AppRouter -> JsxElement {
         if screen == "welcome" {
             isLoggedIn = False;
             currentUserId = "";
+            currentUserEmail = "";
             isDark = False;
             cachedGraphData = None;
             cachedScoreData = None;
@@ -81,6 +83,33 @@ def:pub AppRouter -> JsxElement {
             cachedIssuesData = [];
             cachedNextActionsData = [];
             cachedCounterargSuggestions = [];
+
+            if jacIsLoggedIn() {
+                try {
+                    known_email = data["userEmail"] if "userEmail" in data and data["userEmail"] else "";
+                    if known_email {
+                        result = await root spawn GetUserByEmail(email=known_email);
+                        user_data = result["reports"][0] if result["reports"] else {};
+                        if user_data and "id" in user_data {
+                            isLoggedIn = True;
+                            currentUserId = user_data["id"];
+                            currentUserEmail = user_data["email"] if "email" in user_data else known_email;
+                            if "theme" in user_data { isDark = user_data["theme"] == "dark"; }
+                        }
+                    } else {
+                        result = await root spawn GetCurrentUser();
+                        data_ctx = result["reports"][0] if result["reports"] else {};
+                        if data_ctx and not data_ctx["isGuest"] {
+                            isLoggedIn = True;
+                            currentUserId = data_ctx["id"] if "id" in data_ctx else "";
+                            currentUserEmail = data_ctx["email"] if "email" in data_ctx else "";
+                            if "theme" in data_ctx { isDark = data_ctx["theme"] == "dark"; }
+                        }
+                    }
+                } except Exception as e {
+                    print(f"navigate loadContext error: {e}");
+                }
+            }
         }
 
         if "userId" in data and data["userId"] {
@@ -126,16 +155,15 @@ def:pub AppRouter -> JsxElement {
         return <div className="app-root"></div>;
     }
 
-    wrapper_class = "app-root dark" if isDark else "app-root";
     nav_key = str(navigationCount);
 
-    return <div className={wrapper_class}>
+    return <div className={"app-root" + (" dark" if isDark else "")}>
         {
             <WelcomeScreen navigate={navigate} /> if currentScreen == "welcome" else
             <ExportScreen key={"export_" + nav_key} navigate={navigate} screenData={screenData} onDataUpdate={handleDataUpdate} isLoggedIn={isLoggedIn} userId={currentUserId} /> if currentScreen == "export" else
             <GenerateScreen navigate={navigate} onDataUpdate={handleDataUpdate} isLoggedIn={isLoggedIn} userId={currentUserId} /> if currentScreen == "generate" else
             <ReviewScreen key={"review_" + nav_key} navigate={navigate} screenData={screenData} onDataUpdate={handleDataUpdate} /> if currentScreen == "review" else
-            <ProfileScreen key={"profile_" + nav_key} navigate={navigate} screenData={screenData} toggleTheme={toggleTheme} isDark={isDark} isLoggedIn={isLoggedIn} /> if currentScreen == "profile" else
+            <ProfileScreen key={"profile_" + nav_key} navigate={navigate} screenData={screenData} toggleTheme={toggleTheme} isDark={isDark} isLoggedIn={isLoggedIn} userEmail={currentUserEmail} /> if currentScreen == "profile" else
             <WelcomeScreen navigate={navigate} />
         }
     </div>;

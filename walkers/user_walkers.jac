@@ -10,6 +10,13 @@ walker:pub CreateUser {
         isGuest: bool = False;
 
     can run with Root entry {
+        for user in [-->](?:User) {
+            if user.email == self.email {
+                report {"error": "account_exists", "id": user.id};
+                return;
+            }
+        }
+
         new_user = (root ++> User(
             id=f"user_{int(time.time())}",
             name=self.name,
@@ -93,13 +100,16 @@ walker:pub UpdateUserProfile {
     }
 }
 
+
 walker:pub GetCurrentUser {
     can run with Root entry {
         try {
             user = None;
             for u in [-->](?:User) {
-                user = u;
-                break;
+                if not u.isGuest {
+                    user = u;
+                    break;
+                }
             }
 
             if not user {

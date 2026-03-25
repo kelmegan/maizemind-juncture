@@ -17,6 +17,7 @@ def:pub ProfileScreen(props: any) -> JsxElement {
     toggleTheme = props.toggleTheme if props.toggleTheme else None;
     isDark = props.isDark if props.isDark else False;
     isLoggedIn = props.isLoggedIn if props.isLoggedIn else False;
+    props_email = props.userEmail if props.userEmail else "";
 
     has userId: str = "",
         isGuest: bool = False,
@@ -36,24 +37,23 @@ def:pub ProfileScreen(props: any) -> JsxElement {
         local_userId = "";
         local_stats = None;
 
-        if not isLoggedIn {
+        if not isLoggedIn or not props_email {
             isGuest = True;
             loading = False;
             return;
         }
 
         try {
-            result = await root spawn GetCurrentUser();
+            result = await root spawn GetUserByEmail(email=props_email);
             data = result["reports"][0] if result["reports"] else {};
 
-            if not data or not data["authenticated"] or data["isGuest"] {
+            if not data or "id" not in data {
                 isGuest = True;
                 loading = False;
                 return;
             }
 
-            local_userId = data["id"] if "id" in data else "";
-
+            local_userId = data["id"];
             userId = local_userId;
             isGuest = False;
             if "name" in data { name = data["name"]; }
@@ -67,18 +67,18 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                     sess_result = await root spawn GetUserSessions(userId=local_userId);
                     raw_sessions = sess_result["reports"][0] if sess_result["reports"] else [];
                     sessions = raw_sessions if raw_sessions else [];
-                } except (e) {
+                } except Exception as e {
                     print(f"Error loading sessions: {e}");
                 }
 
                 try {
                     stats_result = await root spawn CalculateUserStats(userId=local_userId);
                     local_stats = stats_result["reports"][0] if stats_result["reports"] else None;
-                } except (e) {
+                } except Exception as e {
                     print(f"Error loading stats: {e}");
                 }
             }
-        } except (e) {
+        } except Exception as e {
             print(f"Error in ProfileScreen loadContext: {e}");
             isGuest = True;
             loading = False;
