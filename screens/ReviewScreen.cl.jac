@@ -31,9 +31,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
     async def loadGraphData() -> None {
         graph_id = screen_data["graphId"] if "graphId" in screen_data else "";
-        if "suggestedCounterarguments" in screen_data and screen_data["suggestedCounterarguments"] {
-            suggestedCounterargs = screen_data["suggestedCounterarguments"];
-        }
         if graph_id {
             try {
                 result = await root spawn GetGraphWithScoring(graphId=graph_id);
@@ -44,6 +41,9 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 if "nextActions" in data { currentNextActions = data["nextActions"]; }
             } except Exception as e {
                 print(f"ReviewScreen load error: {e}");
+            }
+            if "suggestedCounterarguments" in screen_data and screen_data["suggestedCounterarguments"] {
+                suggestedCounterargs = screen_data["suggestedCounterarguments"];
             }
         }
         pushUpdate();

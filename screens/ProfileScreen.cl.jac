@@ -133,25 +133,9 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                 print(f"GetSessionGraph error: {data['error']}");
                 return;
             }
-            graphId = data["graphId"];
-            scored = await root spawn GetGraphWithScoring(graphId=graphId);
-            scored_data = scored["reports"][0] if scored["reports"] else {};
-            if "error" not in scored_data {
-                graph_data: dict = {};
-                score_data: dict = {};
-                issues_data: list = [];
-                next_actions_data: list = [];
-                if "graph" in scored_data { graph_data = scored_data["graph"]; }
-                if "score" in scored_data { score_data = scored_data["score"]; }
-                if "issues" in scored_data { issues_data = scored_data["issues"]; }
-                if "nextActions" in scored_data { next_actions_data = scored_data["nextActions"]; }
-                navigate("review", {
-                    "graphData": graph_data,
-                    "scoreData": score_data,
-                    "issuesData": issues_data,
-                    "nextActionsData": next_actions_data
-                });
-            }
+            navigate("review", {
+                "graphId": data["graphId"]
+            });
         } except Exception as e {
             print(f"Error opening session: {e}");
         }
