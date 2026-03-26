@@ -590,7 +590,7 @@ def:pub GraphViewer(
 
                             <text x="155" y="14" fontSize="9" fill="white"
                                   fontWeight="500" textAnchor="end" fontFamily="system-ui">
-                                {f"{int(node.get('confidence', 0) * 100)}%"}
+                                {f"{int(node.get('nodeScore', 50))}"}
                             </text>
                             <text x="10" y="38" fontSize="11" fill="#1e293b"
                                   fontFamily="system-ui">

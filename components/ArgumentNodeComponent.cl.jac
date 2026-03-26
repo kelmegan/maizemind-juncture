@@ -27,7 +27,7 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
     node_issues = node_data["issues"] if "issues" in node_data else [];
     is_weak = node_data["isWeak"] if "isWeak" in node_data else False;
     has_issues = is_weak or len(node_issues) > 0;
-    confidence = node_data["confidence"] if "confidence" in node_data else 0.5;
+    node_score = node_data["nodeScore"] if "nodeScore" in node_data else 50;
 
     config = nodeTypeConfig[node_type] if node_type in nodeTypeConfig else nodeTypeConfig["CLAIM"];
 
@@ -48,9 +48,9 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
     text_color = config["text"];
     ht_color = config["ht"];
 
-    # Strength color
-    conf_val = confidence if confidence else 0.5;
-    str_color = "#16a34a" if conf_val >= 0.7 else ("#ca8a04" if conf_val >= 0.5 else "#dc2626");
+    # Score badge color (matches nodeScore thresholds)
+    score_val = node_score if node_score else 50;
+    str_color = "#16a34a" if score_val >= 70 else ("#ca8a04" if score_val >= 50 else "#dc2626");
 
     # Wrap text into lines
     max_chars = 26;
@@ -122,7 +122,7 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
                 rx="9" fill={str_color} />
             <text x={str(w/2 - 22)} y={str(-h/2 + 16)} fontSize="9.5" fontWeight="600"
                 textAnchor="middle" fill="#fff" fontFamily="DM Sans, sans-serif">
-                {str(int(conf_val * 100))}
+                {str(int(score_val))}
             </text>
 
             {line_elements}

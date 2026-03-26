@@ -71,7 +71,10 @@ def:pub AppRouter -> JsxElement {
             cachedGraphId = "";
             cachedCounterargSuggestions = [];
 
-            if jacIsLoggedIn() {
+            # Guest users skip auth entirely
+            is_guest_nav = "isGuest" in data and data["isGuest"];
+
+            if not is_guest_nav and jacIsLoggedIn() {
                 try {
                     known_email = data["userEmail"] if "userEmail" in data and data["userEmail"] else "";
                     if known_email {
