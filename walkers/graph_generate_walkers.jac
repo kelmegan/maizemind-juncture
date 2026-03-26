@@ -194,8 +194,8 @@ walker:pub GenerateArgumentGraph {
         summary = result.get("summary", {});
         suggested_counterargs = summary.get("suggested_counterarguments", []);
 
-        scored = root spawn GetGraphWithScoring(graphId=graph_id);
-        scored_data = scored.reports[0] if scored.reports else {};
+        scorer = GetGraphWithScoring(graphId=graph_id);
+        scored_data = scorer.score_graph(new_graph);
         if "error" in scored_data {
             report {"error": scored_data["error"]};
             return;
@@ -268,6 +268,27 @@ walker:pub GetGraphWithScoring {
         self.annotate_nodes(graph_node.nodes, graph_node.edges, issues);
 
         report {
+            "graph": {
+                "id": graph_node.id,
+                "nodes": graph_node.nodes,
+                "edges": graph_node.edges,
+                "createdAt": graph_node.createdAt,
+                "updatedAt": graph_node.updatedAt
+            },
+            "score": score,
+            "issues": issues,
+            "nextActions": next_actions
+        };
+    }
+
+    def score_graph(graph_node: obj) -> dict {
+        nodes = graph_node.nodes;
+        edges = graph_node.edges;
+        score = self.calculate_score(nodes, edges);
+        issues = self.identify_issues(nodes, edges, score);
+        next_actions = self.build_next_actions(issues);
+        self.annotate_nodes(nodes, edges, issues);
+        return {
             "graph": {
                 "id": graph_node.id,
                 "nodes": graph_node.nodes,

@@ -16,18 +16,31 @@ def:pub ExportScreen(props: any) -> JsxElement {
     userId = props.userId if props.userId else "";
 
     has currentGraph: dict = None,
-        currentScore: dict = None,
-        currentIssues: list = [],
-        currentNextActions: list = [],
-        exportFormat: str = "text",
-        copyStatus: str = "",
-        saved: bool = False;
+    currentScore: dict = None,
+    currentIssues: list = [],
+    currentNextActions: list = [],
+    exportFormat: str = "text",
+    copyStatus: str = "",
+    saved: bool = False;
+
+    async def loadGraphData() -> None {
+        graph_id = screen_data["graphId"] if "graphId" in screen_data else "";
+        if graph_id {
+            try {
+                result = await root spawn GetGraphWithScoring(graphId=graph_id);
+                data = result["reports"][0] if result["reports"] else {};
+                if "graph" in data { currentGraph = data["graph"]; }
+                if "score" in data { currentScore = data["score"]; }
+                if "issues" in data { currentIssues = data["issues"]; }
+                if "nextActions" in data { currentNextActions = data["nextActions"]; }
+            } except Exception as e {
+                print(f"ExportScreen load error: {e}");
+            }
+        }
+    }
 
     can with entry {
-        if "graphData" in screen_data { currentGraph = screen_data["graphData"]; }
-        if "scoreData" in screen_data { currentScore = screen_data["scoreData"]; }
-        if "issuesData" in screen_data { currentIssues = screen_data["issuesData"]; }
-        if "nextActionsData" in screen_data { currentNextActions = screen_data["nextActionsData"]; }
+        loadGraphData();
     }
 
     def generateOutlineText(includeFlags: bool) -> str {
@@ -154,11 +167,9 @@ def:pub ExportScreen(props: any) -> JsxElement {
     }
 
     def handleFixTopIssues() -> None {
+        if not currentGraph { return; }
         navigate("review", {
-            "graphData": currentGraph,
-            "scoreData": currentScore,
-            "issuesData": currentIssues,
-            "nextActionsData": currentNextActions
+            "graphId": currentGraph["id"] if "id" in currentGraph else ""
         });
     }
 

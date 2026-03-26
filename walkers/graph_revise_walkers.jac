@@ -101,9 +101,10 @@ walker:pub AddEvidenceToNode {
         graph_node.edges = updated_edges
         graph_node.updatedAt = str(int(time.time()));
 
-        # Return full scored result so client needs only 1 await
-        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
-        scored_data = scored.reports[0] if scored.reports else {};
+        # Call scoring methods directly on the walker instance
+        scorer = GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scorer.score_graph(graph_node);
+
         report {
             "success": True,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
@@ -177,9 +178,10 @@ walker:pub AddAssumptionToEvidence {
 
         graph_node.updatedAt = str(int(time.time()));
 
-        # Return full scored result so client needs only 1 await
-        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
-        scored_data = scored.reports[0] if scored.reports else {};
+        # Call scoring methods directly on the walker instance
+        scorer = GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scorer.score_graph(graph_node);
+
         report {
             "success": True,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
@@ -257,9 +259,10 @@ walker:pub UpdateNodeContent {
 
         graph_node.updatedAt = str(int(time.time()));
 
-        # Return full scored result so client needs only 1 await
-        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
-        scored_data = scored.reports[0] if scored.reports else {};
+        # Call scoring methods directly on the walker instance
+        scorer = GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scorer.score_graph(graph_node);
+
         report {
             "success": True,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
@@ -301,9 +304,10 @@ walker:pub DeleteNode {
         ];
         graph_node.updatedAt = str(int(time.time()));
 
-        # Return full scored result so client needs only 1 await
-        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
-        scored_data = scored.reports[0] if scored.reports else {};
+        # Call scoring methods directly on the walker instance
+        scorer = GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scorer.score_graph(graph_node);
+
         report {
             "success": True,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
@@ -399,9 +403,10 @@ walker:pub AddCounterargumentNode {
         graph_node.edges = updated_edges
         graph_node.updatedAt = str(int(time.time()));
 
-        # Return full scored result so client needs only 1 await
-        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
-        scored_data = scored.reports[0] if scored.reports else {};
+        # Call scoring methods directly on the walker instance
+        scorer = GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scorer.score_graph(graph_node);
+
         report {
             "success": True,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
@@ -498,9 +503,10 @@ walker:pub AddAddressEdge {
         graph_node.edges = updated_edges
         graph_node.updatedAt = str(int(time.time()));
 
-        # Return full scored result so client needs only 1 await
-        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
-        scored_data = scored.reports[0] if scored.reports else {};
+        # Call scoring methods directly on the walker instance
+        scorer = GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scorer.score_graph(graph_node);
+
         report {
             "success": True,
             "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
@@ -794,9 +800,10 @@ walker:pub GenerateCounter {
         graph_node.edges = updated_edges
         graph_node.updatedAt = str(int(time.time()));
 
-        # Return full scored result so client needs only 1 await
-        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
-        scored_data = scored.reports[0] if scored.reports else {};
+        # Call scoring methods directly on the walker instance
+        scorer = GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scorer.score_graph(graph_node);
+
         report {
             "success": True,
             "generatedText": ca_text,
@@ -917,9 +924,10 @@ walker:pub ClarifyNode {
         graph_node.nodes = new_nodes;
         graph_node.updatedAt = str(int(time.time()));
 
-        # Return full scored result so client needs only 1 await
-        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
-        scored_data = scored.reports[0] if scored.reports else {};
+        # Call scoring methods directly on the walker instance
+        scorer = GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scorer.score_graph(graph_node);
+
         report {
             "success": True,
             "moreInfo": more_info,
@@ -1176,9 +1184,10 @@ walker:pub InvestigateNode {
             print(f"  AutoFix: added evidence node {ev_id}");
         }
 
-        # Return full scored result
-        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
-        scored_data = scored.reports[0] if scored.reports else {};
+        # Call scoring methods directly on the walker instance
+        scorer = GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scorer.score_graph(graph_node);
+
         report {
             "success": True,
             "moreInfo": summary,
@@ -1360,9 +1369,10 @@ walker:pub ExpandBranch {
 
         graph_node.updatedAt = str(int(time.time()));
 
-        # Return full scored result
-        scored = root spawn GetGraphWithScoring(graphId=self.graphId);
-        scored_data = scored.reports[0] if scored.reports else {};
+        # Call scoring methods directly on the walker instance
+        scorer = GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scorer.score_graph(graph_node);
+
         report {
             "success": True,
             "branchCount": branch_idx,

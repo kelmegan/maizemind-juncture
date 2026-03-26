@@ -15,10 +15,7 @@ def:pub AppRouter -> JsxElement {
         currentUserId: str = "",
         currentUserEmail: str = "",
         navigationCount: int = 0,
-        cachedGraphData: dict | None = None,
-        cachedScoreData: dict | None = None,
-        cachedIssuesData: list = [],
-        cachedNextActionsData: list = [],
+        cachedGraphId: str = "",
         cachedCounterargSuggestions: list = [];
 
     async def loadContext() -> None {
@@ -45,17 +42,13 @@ def:pub AppRouter -> JsxElement {
     }
 
     def handleDataUpdate(
-        graphData: dict | None,
-        scoreData: dict | None,
-        issuesData: list,
-        nextActionsData: list,
+        graphId: str,
         counterargSuggestions: list = []
     ) -> None {
-        if graphData { cachedGraphData = graphData; }
-        if scoreData { cachedScoreData = scoreData; }
-        if issuesData is not None { cachedIssuesData = issuesData; }
-        if nextActionsData is not None { cachedNextActionsData = nextActionsData; }
-        if counterargSuggestions is not None { cachedCounterargSuggestions = counterargSuggestions; }
+        if graphId { cachedGraphId = graphId; }
+        if counterargSuggestions is not None and len(counterargSuggestions) > 0 {
+            cachedCounterargSuggestions = counterargSuggestions;
+        }
     }
 
     async def navigate(screen: str, data: dict = {}) -> None {
@@ -66,10 +59,7 @@ def:pub AppRouter -> JsxElement {
             currentUserId = "";
             currentUserEmail = "";
             isDark = False;
-            cachedGraphData = None;
-            cachedScoreData = None;
-            cachedIssuesData = [];
-            cachedNextActionsData = [];
+            cachedGraphId = "";
             cachedCounterargSuggestions = [];
             screenData = {};
             currentScreen = "welcome";
@@ -78,10 +68,7 @@ def:pub AppRouter -> JsxElement {
         }
 
         if currentScreen == "welcome" {
-            cachedGraphData = None;
-            cachedScoreData = None;
-            cachedIssuesData = [];
-            cachedNextActionsData = [];
+            cachedGraphId = "";
             cachedCounterargSuggestions = [];
 
             if jacIsLoggedIn() {
@@ -117,29 +104,18 @@ def:pub AppRouter -> JsxElement {
             isLoggedIn = True;
         }
 
-        if "graphData" in data and data["graphData"] { cachedGraphData = data["graphData"]; }
-        if "scoreData" in data and data["scoreData"] { cachedScoreData = data["scoreData"]; }
-        if "issuesData" in data { cachedIssuesData = data["issuesData"]; }
-        if "nextActionsData" in data { cachedNextActionsData = data["nextActionsData"]; }
+        if "graphId" in data and data["graphId"] { cachedGraphId = data["graphId"]; }
         if "suggestedCounterarguments" in data { cachedCounterargSuggestions = data["suggestedCounterarguments"]; }
 
-        if screen == "review" and "graphData" not in data and cachedGraphData {
+        if screen == "review" and "graphId" not in data and cachedGraphId {
             data = {
-                "graphData": cachedGraphData,
-                "scoreData": cachedScoreData,
-                "issuesData": cachedIssuesData,
-                "nextActionsData": cachedNextActionsData,
+                "graphId": cachedGraphId,
                 "suggestedCounterarguments": cachedCounterargSuggestions
             };
         }
 
-        if screen == "export" and "graphData" not in data and cachedGraphData {
-            data = {
-                "graphData": cachedGraphData,
-                "scoreData": cachedScoreData,
-                "issuesData": cachedIssuesData,
-                "nextActionsData": cachedNextActionsData
-            };
+        if screen == "export" and "graphId" not in data and cachedGraphId {
+            data = {"graphId": cachedGraphId};
         }
 
         screenData = data;
