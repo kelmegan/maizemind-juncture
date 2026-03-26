@@ -1065,7 +1065,28 @@ walker:pub GetGraphWithScoring {
                 }
                 if logical_points < 0 { logical_points = 0; }
 
-                n["nodeScore"] = int(0.6 * support_points + 0.4 * logical_points);
+                # Penalize for unresolved counterarguments targeting this node
+                counter_penalty = 0;
+                for e in edges {
+                    if e.get("type", "") == "CONTRADICTS" and e.get("target", "") == nid {
+                        counter_src_id = e.get("source", "");
+                        is_addressed = False;
+                        for e2 in edges {
+                            if e2.get("type", "") == "ADDRESSES" and e2.get("target", "") == counter_src_id {
+                                is_addressed = True;
+                                break;
+                            }
+                        }
+                        if not is_addressed and not self.is_acknowledged(self.get_node(nodes, counter_src_id)) {
+                            counter_penalty = counter_penalty + 15;
+                        }
+                    }
+                }
+                if counter_penalty > 40 { counter_penalty = 40; }
+
+                raw_score = int(0.6 * support_points + 0.4 * logical_points) - counter_penalty;
+                if raw_score < 0 { raw_score = 0; }
+                n["nodeScore"] = raw_score;
             } elif ntype == "EVIDENCE" {
                 n["nodeScore"] = int(self.evidence_quality(n) * 100);
             } elif ntype == "COUNTERARGUMENT" {

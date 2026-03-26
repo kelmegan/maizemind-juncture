@@ -532,19 +532,18 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
     sel_type = selectedNode["type"] if selectedNode and "type" in selectedNode else "CLAIM";
     sel_content = selectedNode["content"] if selectedNode and "content" in selectedNode else "";
-    sel_confidence = selectedNode["confidence"] if selectedNode and "confidence" in selectedNode else 0.5;
-    sel_conf_val = sel_confidence if sel_confidence else 0.5;
-    sel_str_color = "#16a34a" if sel_conf_val >= 0.7 else ("#ca8a04" if sel_conf_val >= 0.5 else "#dc2626");
-    sel_str_bg = "rgba(34,197,94,0.1)" if sel_conf_val >= 0.7 else ("rgba(250,204,21,0.15)" if sel_conf_val >= 0.5 else "rgba(239,68,68,0.1)");
+
+    sel_node_score = selectedNode["nodeScore"] if selectedNode and "nodeScore" in selectedNode else -1;
+    sel_has_node_score = sel_node_score >= 0;
+
+    sel_str_color = "#16a34a" if sel_node_score >= 70 else ("#ca8a04" if sel_node_score >= 50 else "#dc2626");
+    sel_str_bg = "rgba(34,197,94,0.1)" if sel_node_score >= 70 else ("rgba(250,204,21,0.15)" if sel_node_score >= 50 else "rgba(239,68,68,0.1)");
 
     typeColorMap = {
         "THESIS": "#7c3aed", "CLAIM": "#9f7aea", "EVIDENCE": "#10b981",
         "COUNTERARGUMENT": "#ef4444"
     };
     sel_type_color = typeColorMap[sel_type] if sel_type in typeColorMap else "#9f7aea";
-
-    sel_node_score = selectedNode["nodeScore"] if selectedNode and "nodeScore" in selectedNode else -1;
-    sel_has_node_score = sel_node_score >= 0;
 
     sel_is_evidence = sel_type == "EVIDENCE";
     sel_ev_category = "";
