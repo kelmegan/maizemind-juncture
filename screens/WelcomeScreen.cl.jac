@@ -90,7 +90,7 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
     }
 
     async def handleContinueAsGuest() -> None {
-        navigate("generate");
+        navigate("generate", {"isGuest": True});
     }
 
     def handleTabChange(v: str) -> None {
