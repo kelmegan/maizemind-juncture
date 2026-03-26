@@ -23,25 +23,40 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         scoreDelta: int = 0,
         showScoreDelta: bool = False,
         showConfirmDelete: bool = False,
-        suggestedCounterargs: list = [],
-        _acceptedTexts: list = [];
+        suggestedCounterargs: list = [];
 
     async def loadContext() -> None {
         pushUpdate();
     }
 
-    can with entry {
-        if "graphData" in screen_data { currentGraph = screen_data["graphData"]; }
-        if "scoreData" in screen_data { currentScore = screen_data["scoreData"]; }
-        if "issuesData" in screen_data { currentIssues = screen_data["issuesData"]; }
-        if "nextActionsData" in screen_data { currentNextActions = screen_data["nextActionsData"]; }
-        if "suggestedCounterarguments" in screen_data { suggestedCounterargs = screen_data["suggestedCounterarguments"]; }
+    async def loadGraphData() -> None {
+        graph_id = screen_data["graphId"] if "graphId" in screen_data else "";
+        if "suggestedCounterarguments" in screen_data and screen_data["suggestedCounterarguments"] {
+            suggestedCounterargs = screen_data["suggestedCounterarguments"];
+        }
+        if graph_id {
+            try {
+                result = await root spawn GetGraphWithScoring(graphId=graph_id);
+                data = result["reports"][0] if result["reports"] else {};
+                if "graph" in data { currentGraph = data["graph"]; }
+                if "score" in data { currentScore = data["score"]; }
+                if "issues" in data { currentIssues = data["issues"]; }
+                if "nextActions" in data { currentNextActions = data["nextActions"]; }
+            } except Exception as e {
+                print(f"ReviewScreen load error: {e}");
+            }
+        }
         pushUpdate();
+    }
+
+    can with entry {
+        loadGraphData();
     }
 
     def pushUpdate() -> None {
         if onDataUpdate and currentGraph {
-            onDataUpdate(currentGraph, currentScore, currentIssues, currentNextActions);
+            graph_id = currentGraph["id"] if "id" in currentGraph else "";
+            onDataUpdate(graph_id, suggestedCounterargs);
         }
     }
 
@@ -73,11 +88,9 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     }
 
     def handleExport() -> None {
+        if not currentGraph { return; }
         navigate("export", {
-            "graphData": currentGraph,
-            "scoreData": currentScore,
-            "issuesData": currentIssues,
-            "nextActionsData": currentNextActions
+            "graphId": currentGraph["id"] if "id" in currentGraph else ""
         });
     }
 
@@ -423,10 +436,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         ca_target = ca["target_node"] if "target_node" in ca else "";
         if not ca_text or not ca_target { return; }
 
-        newAccepted: list = list(_acceptedTexts);
-        newAccepted.append(ca_text);
-        _acceptedTexts = newAccepted;
-
         isSaving = True;
         _acGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _acPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
@@ -722,19 +731,25 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _na = _na + 1;
     }
 
-    # Filter out accepted counterargs to get visible suggestions
+    # Filter out counterargs already present in the graph as real nodes —
+    # derived from currentGraph so it survives navigation without any local tracking state
     visibleCounterargs: list = [];
     _vci = 0;
+    _graph_nodes_for_filter = currentGraph["nodes"] if "nodes" in currentGraph else [];
     while _vci < len(suggestedCounterargs) {
         _vc = suggestedCounterargs[_vci];
         _vc_text = _vc["text"] if "text" in _vc else "";
-        _is_accepted = False;
-        _aci = 0;
-        while _aci < len(_acceptedTexts) {
-            if _acceptedTexts[_aci] == _vc_text { _is_accepted = True; break; }
-            _aci = _aci + 1;
+        _already_in_graph = False;
+        _gni = 0;
+        while _gni < len(_graph_nodes_for_filter) {
+            _gn = _graph_nodes_for_filter[_gni];
+            if ("type" in _gn and _gn["type"] == "COUNTERARGUMENT") and ("content" in _gn and _gn["content"] == _vc_text) {
+                _already_in_graph = True;
+                break;
+            }
+            _gni = _gni + 1;
         }
-        if not _is_accepted { visibleCounterargs.append(_vc); }
+        if not _already_in_graph { visibleCounterargs.append(_vc); }
         _vci = _vci + 1;
     }
 

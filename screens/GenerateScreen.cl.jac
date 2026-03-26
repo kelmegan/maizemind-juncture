@@ -86,10 +86,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
             generateStatus = "";
             hasExistingGraph = True;
             navigate("review", {
-                "graphData": graphData,
-                "scoreData": scoreData,
-                "issuesData": issuesData,
-                "nextActionsData": nextActionsData,
+                "graphId": graphData["id"],
                 "suggestedCounterarguments": counterargSuggestions
             });
         } except Exception as e {
