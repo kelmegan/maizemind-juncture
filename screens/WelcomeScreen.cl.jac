@@ -20,6 +20,18 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
     async def handleSignup() -> None {
         error = "";
         if email == "" or password == "" { error = "Please fill in all fields"; return; }
+
+        at_idx = email.find("@");
+        if at_idx <= 0 or at_idx == len(email) - 1 {
+            error = "Please enter a valid email address.";
+            return;
+        }
+        domain = email[at_idx + 1:];
+        if "." not in domain or domain.startswith(".") or domain.endswith(".") {
+            error = "Please enter a valid email address.";
+            return;
+        }
+
         loading = True;
 
         try {
