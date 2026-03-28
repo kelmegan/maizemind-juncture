@@ -1,13 +1,19 @@
 """MaizeMind - Review Screen with inline editing workshop, ghost nodes, and score delta."""
 
+import from "@jac/runtime" { useNavigate, useLocation }
+import from react { useContext }
+import from ..screens.AppContext { getAppContext }
 import from ..components.ArgumentGraphView { ArgumentGraphView }
 import from ..components.Button { Button }
 import from ..components.Header { Header }
 
 def:pub ReviewScreen(props: any) -> JsxElement {
-    navigate = props.navigate;
-    screen_data = props.screenData if props.screenData else {};
-    onDataUpdate = props.onDataUpdate if props.onDataUpdate else None;
+    nav = useNavigate();
+    location = useLocation();
+    _AppCtx = getAppContext();
+    ctx = useContext(_AppCtx);
+
+    loc_state = location.state if location.state else {};
 
     has currentGraph: dict = None,
         currentScore: dict = None,
@@ -23,28 +29,26 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         scoreDelta: int = 0,
         showScoreDelta: bool = False,
         showConfirmDelete: bool = False,
+        addedAsEvidence: bool = False,
         suggestedCounterargs: list = [];
 
-    async def loadContext() -> None {
-        pushUpdate();
-    }
-
     async def loadGraphData() -> None {
-        graph_id = screen_data["graphId"] if "graphId" in screen_data else "";
-        if graph_id {
-            try {
-                result = await root spawn GetGraphWithScoring(graphId=graph_id);
-                data = result["reports"][0] if result["reports"] else {};
-                if "graph" in data { currentGraph = data["graph"]; }
-                if "score" in data { currentScore = data["score"]; }
-                if "issues" in data { currentIssues = data["issues"]; }
-                if "nextActions" in data { currentNextActions = data["nextActions"]; }
-            } except Exception as e {
-                print(f"ReviewScreen load error: {e}");
-            }
-            if "suggestedCounterarguments" in screen_data and screen_data["suggestedCounterarguments"] {
-                suggestedCounterargs = screen_data["suggestedCounterarguments"];
-            }
+        graph_id = loc_state["graphId"] if "graphId" in loc_state else ctx.cachedGraphId;
+        if not graph_id { return; }
+        try {
+            result = await root spawn GetGraphWithScoring(graphId=graph_id);
+            data = result["reports"][0] if result["reports"] else {};
+            if "graph" in data { currentGraph = data["graph"]; }
+            if "score" in data { currentScore = data["score"]; }
+            if "issues" in data { currentIssues = data["issues"]; }
+            if "nextActions" in data { currentNextActions = data["nextActions"]; }
+        } except Exception as e {
+            print(f"ReviewScreen load error: {e}");
+        }
+        if "suggestedCounterarguments" in loc_state and loc_state["suggestedCounterarguments"] {
+            suggestedCounterargs = loc_state["suggestedCounterarguments"];
+        } elif ctx.cachedCounterargSuggestions {
+            suggestedCounterargs = ctx.cachedCounterargSuggestions;
         }
         pushUpdate();
     }
@@ -54,9 +58,9 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     }
 
     def pushUpdate() -> None {
-        if onDataUpdate and currentGraph {
+        if currentGraph {
             graph_id = currentGraph["id"] if "id" in currentGraph else "";
-            onDataUpdate(graph_id, suggestedCounterargs);
+            ctx.setGraphCache(graph_id, suggestedCounterargs);
         }
     }
 
@@ -67,6 +71,20 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         editInputValue = "";
         showConfirmDelete = False;
         showScoreDelta = False;
+        node_more_info = node_data["moreInfo"] if node_data and "moreInfo" in node_data else "";
+        if node_more_info and currentGraph {
+            _graph_nodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
+            _already = False;
+            for _gn in _graph_nodes {
+                if _gn["type"] == "EVIDENCE" and "content" in _gn and _gn["content"] == node_more_info {
+                    _already = True;
+                    break;
+                }
+            }
+            addedAsEvidence = _already;
+        } else {
+            addedAsEvidence = False;
+        }
     }
 
     def closePanel() -> None {
@@ -85,17 +103,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 focusBranch = selectedNode["id"];
             }
         }
-    }
-
-    def handleExport() -> None {
-        if not currentGraph { return; }
-        navigate("export", {
-            "graphId": currentGraph["id"] if "id" in currentGraph else ""
-        });
-    }
-
-    def handleBack() -> None {
-        navigate("generate");
     }
 
     def handleIssueClick(nodeId: str) -> None {
@@ -265,6 +272,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             selectedNode = _afFound;
         } except Exception { }
         isSaving = False;
+        addedAsEvidence = True;
         pushUpdate();
     }
 
@@ -302,6 +310,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             selectedNode = _aeFound;
         } except Exception { }
         isSaving = False;
+        addedAsEvidence = True;
         pushUpdate();
     }
 
@@ -475,7 +484,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
             if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            # Re-select same node
             _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
             _ebNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
             _ebFound = None;
@@ -497,8 +505,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             </div>
         );
     }
-
-    # --- Pre-compute all values before JSX ---
 
     overall = currentScore["overall"] if "overall" in currentScore else 0;
     scoreColor = "#16a34a" if overall >= 70 else ("#ca8a04" if overall >= 50 else "#dc2626");
@@ -522,7 +528,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     coherence_bar_color = "#10b981" if coherence_val >= 70 else ("#f59e0b" if coherence_val >= 50 else "#ef4444");
     counter_bar_color = "#10b981" if counter_val >= 70 else ("#f59e0b" if counter_val >= 50 else "#ef4444");
 
-    # Legend and type colors — all UMich blue, no purple
     typeLegend = [
         {"key": "THESIS",          "color": "#3b82f6", "bg": "#E8F0FC", "label": "Thesis"},
         {"key": "CLAIM",           "color": "#9f7aea", "bg": "#e8e0fc", "label": "Claim"},
@@ -539,10 +544,9 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     sel_str_color = "#16a34a" if sel_node_score >= 70 else ("#ca8a04" if sel_node_score >= 50 else "#dc2626");
     sel_str_bg = "rgba(34,197,94,0.1)" if sel_node_score >= 70 else ("rgba(250,204,21,0.15)" if sel_node_score >= 50 else "rgba(239,68,68,0.1)");
 
-    # Type color map — matches ArgumentNodeComponent header colors exactly
     typeColorMap = {
-        "THESIS":          "#3b82f6",
-        "CLAIM":           "#9f7aea",
+        "THESIS":          "#0057B7",
+        "CLAIM":           "#3b82f6",
         "EVIDENCE":        "#10b981",
         "COUNTERARGUMENT": "#ef4444"
     };
@@ -839,7 +843,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     return (
         <div className="rs-wrapper">
 
-            <Header navigate={navigate} screen="review" title="Review Map" />
+            <Header screen="review" title="Review Map" onExport={lambda -> None {
+                nav("/export", {"state": {
+                    "graph": currentGraph,
+                    "score": currentScore,
+                    "issues": currentIssues,
+                    "nextActions": currentNextActions
+                }});
+            }} />
 
             <div className="rs-legend-bar">
                 <div className="rs-legend-section">
@@ -1062,7 +1073,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                             disabled={isSaving}>
                                             📊 Add as Evidence
                                         </button>
-                                    ) if sel_has_more_info and not sel_is_evidence else None}
+                                    ) if sel_has_more_info and not sel_is_evidence and not addedAsEvidence else None}
                                     {(
                                         <div className="rs-analysis-empty">No additional analysis available</div>
                                     ) if not sel_has_more_info and not sel_has_source else None}

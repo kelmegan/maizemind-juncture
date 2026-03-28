@@ -1,8 +1,10 @@
 """Export Screen"""
 
+import from "@jac/runtime" { useNavigate, useLocation }
+import from react { useContext }
 import from "lucide-react" { Download, FileText, AlertTriangle, CheckCircle2, Copy }
 import from "jspdf" { jsPDF }
-
+import from ..screens.AppContext { getAppContext }
 import from ..components.Alert { Alert }
 import from ..components.Badge { Badge }
 import from ..components.Button { Button }
@@ -10,10 +12,12 @@ import from ..components.Card { Card }
 import from ..components.Header { Header }
 
 def:pub ExportScreen(props: any) -> JsxElement {
-    navigate = props.navigate;
-    screen_data = props.screenData if props.screenData else {};
-    isLoggedIn = props.isLoggedIn if props.isLoggedIn else False;
-    userId = props.userId if props.userId else "";
+    nav = useNavigate();
+    location = useLocation();
+    _AppCtx = getAppContext();
+    ctx = useContext(_AppCtx);
+
+    loc_state = location.state if location.state else {};
 
     has currentGraph: dict = None,
     currentScore: dict = None,
@@ -24,7 +28,14 @@ def:pub ExportScreen(props: any) -> JsxElement {
     saved: bool = False;
 
     async def loadGraphData() -> None {
-        graph_id = screen_data["graphId"] if "graphId" in screen_data else "";
+        if "graph" in loc_state and loc_state["graph"] {
+            currentGraph = loc_state["graph"];
+            currentScore = loc_state["score"] if "score" in loc_state else None;
+            currentIssues = loc_state["issues"] if "issues" in loc_state else [];
+            currentNextActions = loc_state["nextActions"] if "nextActions" in loc_state else [];
+            return;
+        }
+        graph_id = loc_state["graphId"] if "graphId" in loc_state else ctx.cachedGraphId;
         if graph_id {
             try {
                 result = await root spawn GetGraphWithScoring(graphId=graph_id);
@@ -131,12 +142,8 @@ def:pub ExportScreen(props: any) -> JsxElement {
         show_flags = currentScore["overall"] < 75;
         outline = generateOutlineText(show_flags);
 
-        # Reflect.construct is required because JAC bans the `new` keyword.
-        # jsPDF() with no args defaults to portrait, mm units, A4 page size.
         doc = Reflect.construct(jsPDF, []);
 
-        # jsPDF.splitTextToSize wraps long lines to fit within the page width.
-        # A4 usable width is ~190mm (210mm - 10mm margin each side).
         margin = 10;
         page_width = doc.internal.pageSize.getWidth();
         usable_width = page_width - (margin * 2);
@@ -148,10 +155,8 @@ def:pub ExportScreen(props: any) -> JsxElement {
         line_height = 5;
 
         for raw_line in outline.split(chr(10)) {
-            # Wrap the line if it's too wide, then write each wrapped segment.
             wrapped = doc.splitTextToSize(raw_line, usable_width);
             for segment in wrapped {
-                # Add a new page if we've run out of vertical space.
                 if y + line_height > doc.internal.pageSize.getHeight() - margin {
                     doc.addPage();
                     y = margin;
@@ -168,18 +173,16 @@ def:pub ExportScreen(props: any) -> JsxElement {
 
     def handleFixTopIssues() -> None {
         if not currentGraph { return; }
-        navigate("review", {
-            "graphId": currentGraph["id"] if "id" in currentGraph else ""
-        });
+        nav("/review", {"state": {"graphId": currentGraph["id"] if "id" in currentGraph else ""}});
     }
 
     async def handleSaveSession() -> None {
-        if not userId or not isLoggedIn or saved {
+        if not ctx.userId or not ctx.isLoggedIn or saved {
             return;
         }
         graphId = currentGraph["id"] if currentGraph and "id" in currentGraph else "";
         await root spawn CreateSession(
-            userId=userId,
+            userId=ctx.userId,
             graphId=graphId,
             notes="",
             score=currentScore
@@ -191,11 +194,10 @@ def:pub ExportScreen(props: any) -> JsxElement {
         return (
             <div className="export-loading">
                 <p>No data available. Please generate an argument map first.</p>
-                <Button label="Go to Generate" onClick={lambda -> None { navigate("generate"); }} />
+                <Button label="Go to Generate" onClick={lambda -> None { nav("/generate"); }} />
             </div>
         );
     }
-
 
     show_warning = currentScore["overall"] < 75;
     unsupported_claims = currentScore["unsupportedClaims"] if "unsupportedClaims" in currentScore else 0;
@@ -215,7 +217,7 @@ def:pub ExportScreen(props: any) -> JsxElement {
 
     return (
         <div className="export-page">
-            <Header navigate={navigate} screen="export" title="Export" backTo="review" />
+            <Header screen="export" title="Export" backTo="/review" />
 
             {(
                 <Alert className="export-alert-success">
@@ -289,9 +291,9 @@ def:pub ExportScreen(props: any) -> JsxElement {
                         {<Button
                             label={(<><FileText className="export-btn-icon-sm" />{("Saved!" if saved else "Save to History")}</>)}
                             onClick={handleSaveSession}
-                            disabled={saved or not userId}
+                            disabled={saved or not ctx.userId}
                             className="export-save-btn"
-                        /> if isLoggedIn else None}
+                        /> if ctx.isLoggedIn else None}
                     </div>
                 </Card>
             </div>

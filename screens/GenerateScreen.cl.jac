@@ -1,18 +1,20 @@
 """MaizeMind - Generate Screen for creating argument maps from notes."""
 
+import from "@jac/runtime" { useNavigate }
+import from react { useContext }
 import from "lucide-react" { Upload, Sparkles, ArrowRight, FileText, X }
 import from "pdfjs-dist" { getDocument, GlobalWorkerOptions }
 import from "mammoth" { extractRawText }
-
+import from ..screens.AppContext { getAppContext }
 import from ..components.Button { Button }
 import from ..components.Card { Card }
 import from ..components.Header { Header }
 import from ..components.Alert { Alert }
 
 def:pub GenerateScreen(props: any) -> JsxElement {
-    navigate = props.navigate;
-    isLoggedIn = props.isLoggedIn if props.isLoggedIn else False;
-    userId = props.userId if props.userId else "";
+    nav = useNavigate();
+    _AppCtx = getAppContext();
+    ctx = useContext(_AppCtx);
 
     has notes: str = "",
         isGenerating: bool = False,
@@ -33,8 +35,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
     async def handleGenerate() -> None {
         if not notes.trim() { return; }
 
-        # If user already has a graph, confirm first
-        if hasExistingGraph and not showConfirmRegenerate and isLoggedIn {
+        if hasExistingGraph and not showConfirmRegenerate and ctx.isLoggedIn {
             showConfirmRegenerate = True;
             return;
         }
@@ -61,7 +62,6 @@ def:pub GenerateScreen(props: any) -> JsxElement {
 
             data = result["reports"][0] if result["reports"] else {};
 
-            # Check for error
             if "error" in data {
                 generateStatus = f"Error: {data['error']}. Please try again.";
                 isGenerating = False;
@@ -74,7 +74,6 @@ def:pub GenerateScreen(props: any) -> JsxElement {
             nextActionsData = data["nextActions"] if "nextActions" in data else [];
             counterargSuggestions = data["suggested_counterarguments"] if "suggested_counterarguments" in data else [];
 
-            # Check for empty graph (LLM returned nothing)
             nodes_list = graphData["nodes"] if "nodes" in graphData else [];
             if len(nodes_list) == 0 {
                 generateStatus = "The AI returned an empty graph. This sometimes happens. Please try again.";
@@ -85,10 +84,8 @@ def:pub GenerateScreen(props: any) -> JsxElement {
             isGenerating = False;
             generateStatus = "";
             hasExistingGraph = True;
-            navigate("review", {
-                "graphId": graphData["id"],
-                "suggestedCounterarguments": counterargSuggestions
-            });
+            ctx.setGraphCache(graphData["id"], counterargSuggestions);
+            nav("/review", {"state": {"graphId": graphData["id"], "suggestedCounterarguments": counterargSuggestions}});
         } except Exception as e {
             print(f"Generation error: {e}");
             generateStatus = f"Error generating graph. Please try again.";
@@ -158,7 +155,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
     }
 
     def handleOpenPreviousGraph() -> None {
-        navigate("review");
+        nav("/review", {"state": {"graphId": ctx.cachedGraphId, "suggestedCounterarguments": ctx.cachedCounterargSuggestions}});
         showConfirmRegenerate = False;
     }
 
@@ -168,7 +165,7 @@ def:pub GenerateScreen(props: any) -> JsxElement {
 
     return (
         <div className="generate-page">
-            <Header navigate={navigate} screen="generate"/>
+            <Header screen="generate"/>
 
             <div className="generate-content">
                 <div className="generate-hero">
