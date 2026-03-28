@@ -103,7 +103,7 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
     return (
         <div className="entry-page">
             <div className="branding-section">
-                <h1 className="branding-title">Juncture</h1>
+                <h1 className="branding-title">MaizeMind</h1>
                 <p className="tagline">Your paper & presentation copilot</p>
                 <div className="feature-list">
                     <div className="feature-item">

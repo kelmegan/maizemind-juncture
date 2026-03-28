@@ -1,4 +1,4 @@
-"""Juncture - Shared app header component."""
+"""MaizeMind - Shared app header component."""
 
 import from "lucide-react" { ArrowLeft, User, LogOut, Download }
 
@@ -59,7 +59,7 @@ def:pub Header(props: any) -> JsxElement {
                             className="app-header-back-btn"
                         />
                     ) if show_back else None}
-                    <span className="app-header-logo" onClick={handleLogoClick}>Juncture</span>
+                    <span className="app-header-logo" onClick={handleLogoClick}>MaizeMind</span>
                     {(
                         <>
                             <span className="app-header-dot">·</span>

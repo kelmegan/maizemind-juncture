@@ -35,8 +35,9 @@
     --shadow-color-sm: rgba(0, 0, 0, 0.05);
     --shadow-color-md: rgba(0, 0, 0, 0.1);
 
-    --color-node-thesis-bg: #f3e8ff;
-    --color-node-thesis-border: #c084fc;
+    /* Node colors — thesis/claim shifted to UMich blue */
+    --color-node-thesis-bg: #E8F0FC;
+    --color-node-thesis-border: #4D90D9;
     --color-node-claim-bg: #dbeafe;
     --color-node-claim-border: #60a5fa;
     --color-node-evidence-bg: #dcfce7;
@@ -55,7 +56,8 @@
     --color-node-icon-success: #22c55e;
     --color-node-issues-count: #dc2626;
 
-    --color-node-thesis: #8b5cf6;
+    /* UMich royal blue for thesis, standard blue for claim */
+    --color-node-thesis: #0057B7;
     --color-node-claim: #3b82f6;
     --color-node-evidence: #10b981;
     --color-node-assumption: #f59e0b;
@@ -65,13 +67,14 @@
     --color-muted: #f1f5f9;
     --color-switch-background: #cbd5e1;
 
-    --color-accent: #6366f1;
-    --color-accent-dark: #4f46e5;
-    --color-accent-to: #9333ea;
-    --color-accent-subtle: rgba(99, 102, 241, 0.08);
-    --color-accent-border-subtle: rgba(99, 102, 241, 0.2);
-    --color-accent-focus-ring: rgba(99, 102, 241, 0.1);
-    --color-accent-glow: rgba(99, 102, 241, 0.3);
+    /* Primary accent: royal blue scale */
+    --color-accent: #0057B7;
+    --color-accent-dark: #0044AA;
+    --color-accent-to: #1B7FD4;
+    --color-accent-subtle: rgba(0, 87, 183, 0.08);
+    --color-accent-border-subtle: rgba(0, 87, 183, 0.2);
+    --color-accent-focus-ring: rgba(0, 87, 183, 0.1);
+    --color-accent-glow: rgba(0, 87, 183, 0.3);
 
     --color-error: #ef4444;
     --color-error-bg: rgba(239, 68, 68, 0.1);
@@ -85,8 +88,9 @@
     --color-input-bg: #f8f8f9;
     --color-input-border: #e0e0e0;
 
-    --color-body-gradient-from: #f0f1f9;
-    --color-body-gradient-to: #e8ebf5;
+    /* Subtle blue-tinted background instead of purple */
+    --color-body-gradient-from: #EEF3FA;
+    --color-body-gradient-to: #DDE6F4;
 
     --color-score-good: #16a34a;
     --color-score-warning: #ca8a04;
@@ -102,16 +106,17 @@
     --color-graph-ctrl-border: rgba(0, 0, 0, 0.08);
     --color-edge-label-bg: #ffffff;
     --color-edge-label-border: rgba(0, 0, 0, 0.08);
-    --color-node-thesis-dark: #7c3aed;
+    --color-node-thesis-dark: #0044AA;
     --color-cyan: #06b6d4;
     --color-overlay-dark: rgba(0, 0, 0, 0.3);
 
     --color-assumption-bg: rgba(245, 158, 11, 0.08);
     --color-assumption-border: rgba(245, 158, 11, 0.15);
-    --color-edit-panel-bg: rgba(139, 92, 246, 0.06);
-    --color-edit-panel-border: rgba(139, 92, 246, 0.15);
-    --color-info-panel-bg: rgba(99, 102, 241, 0.06);
-    --color-info-panel-border: rgba(99, 102, 241, 0.12);
+    /* Edit panel uses UMich blue instead of purple */
+    --color-edit-panel-bg: rgba(0, 87, 183, 0.06);
+    --color-edit-panel-border: rgba(0, 87, 183, 0.15);
+    --color-info-panel-bg: rgba(0, 87, 183, 0.06);
+    --color-info-panel-border: rgba(0, 87, 183, 0.12);
     --color-cyan-bg: rgba(6, 182, 212, 0.06);
     --color-cyan-border: rgba(6, 182, 212, 0.12);
     --color-counter-card-bg: rgba(239, 68, 68, 0.05);
@@ -137,9 +142,10 @@
     --color-achievement-blue-from: #eff6ff;
     --color-achievement-blue-to: #dbeafe;
     --color-achievement-blue-border: #93c5fd;
-    --color-achievement-purple-from: #faf5ff;
-    --color-achievement-purple-to: #f3e8ff;
-    --color-achievement-purple-border: #d8b4fe;
+    /* Achievement "purple" slot now uses UMich blue tones */
+    --color-achievement-purple-from: #EFF6FF;
+    --color-achievement-purple-to: #DBEAFE;
+    --color-achievement-purple-border: #93C5FD;
 
     --color-success-bg: #f0fdf4;
     --color-success-border: #bbf7d0;
@@ -187,22 +193,23 @@
     --color-destructive-foreground: #0f172a;
     --color-destructive-hover: #ef4444;
 
-    --color-surface: #0f0f17;
-    --color-canvas: #0f0f17;
-    --color-overlay-white: rgba(19, 19, 31, 0.92);
+    --color-surface: #050D1A;
+    --color-canvas: #050D1A;
+    --color-overlay-white: rgba(9, 21, 37, 0.92);
     --color-overlay-dark: rgba(0, 0, 0, 0.5);
 
     --color-foreground: #f1f5f9;
     --color-muted: rgba(255, 255, 255, 0.06);
     --color-switch-background: #334155;
 
-    --color-accent: #818cf8;
-    --color-accent-dark: #6366f1;
-    --color-accent-to: #a855f7;
-    --color-accent-subtle: rgba(129, 140, 248, 0.1);
-    --color-accent-border-subtle: rgba(129, 140, 248, 0.25);
-    --color-accent-focus-ring: rgba(129, 140, 248, 0.15);
-    --color-accent-glow: rgba(129, 140, 248, 0.3);
+    /* Dark mode accent: lighter royal blue */
+    --color-accent: #4D90D9;
+    --color-accent-dark: #0057B7;
+    --color-accent-to: #2B9FE8;
+    --color-accent-subtle: rgba(77, 144, 217, 0.1);
+    --color-accent-border-subtle: rgba(77, 144, 217, 0.25);
+    --color-accent-focus-ring: rgba(77, 144, 217, 0.15);
+    --color-accent-glow: rgba(77, 144, 217, 0.3);
 
     --color-error: #f87171;
     --color-error-bg: rgba(248, 113, 113, 0.1);
@@ -213,8 +220,8 @@
     --color-input-bg: rgba(255, 255, 255, 0.04);
     --color-input-border: rgba(255, 255, 255, 0.1);
 
-    --color-body-gradient-from: #0f0f17;
-    --color-body-gradient-to: #13131f;
+    --color-body-gradient-from: #050D1A;
+    --color-body-gradient-to: #091525;
 
     --color-gray-light: rgba(255, 255, 255, 0.04);
     --color-gray-medium: rgba(255, 255, 255, 0.08);
@@ -223,10 +230,10 @@
     --color-hint: #64748b;
     --color-link: #60a5fa;
     --color-surface-subtle: rgba(255, 255, 255, 0.04);
-    --color-graph-bg: #0f0f17;
+    --color-graph-bg: #050D1A;
     --color-graph-ctrl-bg: rgba(255, 255, 255, 0.06);
     --color-graph-ctrl-border: rgba(255, 255, 255, 0.1);
-    --color-edge-label-bg: #13131f;
+    --color-edge-label-bg: #091525;
     --color-edge-label-border: rgba(255, 255, 255, 0.07);
     --color-cyan: #22d3ee;
 
@@ -236,17 +243,18 @@
     --color-tips-bg: rgba(254, 252, 232, 0.04);
     --color-tips-border: rgba(253, 230, 138, 0.15);
 
-    --color-node-thesis: #a78bfa;
-    --color-node-thesis-dark: #7c3aed;
-    --color-node-claim: #818cf8;
+    /* Dark mode node thesis: medium royal blue */
+    --color-node-thesis: #4D90D9;
+    --color-node-thesis-dark: #0044AA;
+    --color-node-claim: #60A5FA;
     --color-node-evidence: #34d399;
     --color-node-assumption: #fbbf24;
     --color-node-counter: #f87171;
 
-    --color-node-thesis-bg: #1e1636;
-    --color-node-thesis-border: #a78bfa;
-    --color-node-claim-bg: #1c1430;
-    --color-node-claim-border: #818cf8;
+    --color-node-thesis-bg: #0A1929;
+    --color-node-thesis-border: #4D90D9;
+    --color-node-claim-bg: #0D1B36;
+    --color-node-claim-border: #60A5FA;
     --color-node-evidence-bg: #0d2818;
     --color-node-evidence-border: #34d399;
     --color-node-assumption-bg: #1f1a05;
@@ -276,10 +284,10 @@
 
     --color-assumption-bg: rgba(251, 191, 36, 0.08);
     --color-assumption-border: rgba(251, 191, 36, 0.18);
-    --color-edit-panel-bg: rgba(129, 140, 248, 0.08);
-    --color-edit-panel-border: rgba(129, 140, 248, 0.2);
-    --color-info-panel-bg: rgba(99, 102, 241, 0.08);
-    --color-info-panel-border: rgba(99, 102, 241, 0.2);
+    --color-edit-panel-bg: rgba(77, 144, 217, 0.08);
+    --color-edit-panel-border: rgba(77, 144, 217, 0.2);
+    --color-info-panel-bg: rgba(77, 144, 217, 0.08);
+    --color-info-panel-border: rgba(77, 144, 217, 0.2);
     --color-cyan-bg: rgba(34, 211, 238, 0.08);
     --color-cyan-border: rgba(34, 211, 238, 0.18);
     --color-counter-card-bg: rgba(248, 113, 113, 0.06);
@@ -305,9 +313,10 @@
     --color-achievement-blue-from: rgba(239, 246, 255, 0.04);
     --color-achievement-blue-to: rgba(219, 234, 254, 0.04);
     --color-achievement-blue-border: rgba(147, 197, 253, 0.2);
-    --color-achievement-purple-from: rgba(250, 245, 255, 0.04);
-    --color-achievement-purple-to: rgba(243, 232, 255, 0.04);
-    --color-achievement-purple-border: rgba(216, 180, 254, 0.2);
+    /* Achievement "purple" slot → UMich blue in dark mode */
+    --color-achievement-purple-from: rgba(239, 246, 255, 0.04);
+    --color-achievement-purple-to: rgba(219, 234, 254, 0.04);
+    --color-achievement-purple-border: rgba(147, 197, 253, 0.2);
 }
 
 body {
@@ -2867,6 +2876,7 @@ body {
     cursor: pointer;
     transition: background 0.15s;
 }
+
 .rs-assumption-action-btn:hover {
     background: #fde68a;
 }
@@ -2874,8 +2884,8 @@ body {
 /* Analysis & Source */
 .rs-analysis-text {
     padding: 10px 12px;
-    background: var(--color-info-panel-bg, #f0f9ff);
-    border: 1px solid var(--color-info-panel-border, #bae6fd);
+    background: var(--color-info-panel-bg, #eff6ff);
+    border: 1px solid var(--color-info-panel-border, #bfdbfe);
     border-radius: 8px;
     font-size: 12px;
     line-height: 1.5;
@@ -2906,9 +2916,11 @@ body {
     transition: background 0.15s;
     width: 100%;
 }
+
 .rs-add-evidence-btn:hover {
     background: #dbeafe;
 }
+
 .rs-add-evidence-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;

@@ -1,4 +1,4 @@
-"""Main entry point for maizemind-juncture."""
+"""Main entry point for maizemind."""
 
 import from walkers.user_walkers { CreateUser, GetUserProfile, GetUserByEmail, UpdateUserProfile, GetCurrentUser }
 import from walkers.session_walkers { CreateSession, GetUserSessions, CalculateUserStats, DeleteSession, GetSessionGraph }

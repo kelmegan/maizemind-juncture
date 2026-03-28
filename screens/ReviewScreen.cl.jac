@@ -1,4 +1,4 @@
-"""Juncture - Review Screen with inline editing workshop, ghost nodes, and score delta."""
+"""MaizeMind - Review Screen with inline editing workshop, ghost nodes, and score delta."""
 
 import from ..components.ArgumentGraphView { ArgumentGraphView }
 import from ..components.Button { Button }
@@ -244,7 +244,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _afNodeId = selectedNode["id"];
         _afPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         try {
-            # Single call: investigate + add evidence in one walker call
             mutResult = await root spawn InvestigateNode(graphId=_afGraphId, nodeId=_afNodeId, addAsEvidence=True);
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
             if "graph" in mutData { currentGraph = mutData["graph"]; }
@@ -523,10 +522,11 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     coherence_bar_color = "#10b981" if coherence_val >= 70 else ("#f59e0b" if coherence_val >= 50 else "#ef4444");
     counter_bar_color = "#10b981" if counter_val >= 70 else ("#f59e0b" if counter_val >= 50 else "#ef4444");
 
+    # Legend and type colors — all UMich blue, no purple
     typeLegend = [
-        {"key": "THESIS", "color": "#7c3aed", "bg": "#ede9fe", "label": "Thesis"},
-        {"key": "CLAIM", "color": "#9f7aea", "bg": "#e8e0fc", "label": "Claim"},
-        {"key": "EVIDENCE", "color": "#10b981", "bg": "#d1fae5", "label": "Evidence"},
+        {"key": "THESIS",          "color": "#3b82f6", "bg": "#E8F0FC", "label": "Thesis"},
+        {"key": "CLAIM",           "color": "#9f7aea", "bg": "#e8e0fc", "label": "Claim"},
+        {"key": "EVIDENCE",        "color": "#10b981", "bg": "#d1fae5", "label": "Evidence"},
         {"key": "COUNTERARGUMENT", "color": "#ef4444", "bg": "#fee2e2", "label": "Counter"}
     ];
 
@@ -539,11 +539,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     sel_str_color = "#16a34a" if sel_node_score >= 70 else ("#ca8a04" if sel_node_score >= 50 else "#dc2626");
     sel_str_bg = "rgba(34,197,94,0.1)" if sel_node_score >= 70 else ("rgba(250,204,21,0.15)" if sel_node_score >= 50 else "rgba(239,68,68,0.1)");
 
+    # Type color map — matches ArgumentNodeComponent header colors exactly
     typeColorMap = {
-        "THESIS": "#7c3aed", "CLAIM": "#9f7aea", "EVIDENCE": "#10b981",
+        "THESIS":          "#3b82f6",
+        "CLAIM":           "#9f7aea",
+        "EVIDENCE":        "#10b981",
         "COUNTERARGUMENT": "#ef4444"
     };
-    sel_type_color = typeColorMap[sel_type] if sel_type in typeColorMap else "#9f7aea";
+    sel_type_color = typeColorMap[sel_type] if sel_type in typeColorMap else "#3b82f6";
 
     sel_is_evidence = sel_type == "EVIDENCE";
     sel_ev_category = "";
@@ -557,7 +560,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         sel_source_url = selectedNode["sourceUrl"] if "sourceUrl" in selectedNode else "";
     }
     sel_has_source = len(sel_source_url) > 0 if sel_source_url else False;
-    # Only "well sourced" if backed by empirical data, expert testimony, or high score
     sel_is_well_sourced = sel_has_source and (sel_ev_category == "empirical_data" or sel_ev_category == "expert_testimony" or sel_node_score >= 70);
     sel_ev_cat_display = sel_ev_category.replace("_", " ") if sel_ev_category else "logical reasoning";
 
@@ -686,7 +688,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _ti = _ti + 1;
     }
 
-    # Build next 3 actions in order (backend-ranked)
     nextActionElements: list = [];
     next_actions_safe: list = list(currentNextActions) if currentNextActions else [];
     if len(next_actions_safe) == 0 {
@@ -730,8 +731,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _na = _na + 1;
     }
 
-    # Filter out counterargs already present in the graph as real nodes —
-    # derived from currentGraph so it survives navigation without any local tracking state
     visibleCounterargs: list = [];
     _vci = 0;
     _graph_nodes_for_filter = currentGraph["nodes"] if "nodes" in currentGraph else [];

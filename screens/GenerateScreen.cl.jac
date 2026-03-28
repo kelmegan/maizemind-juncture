@@ -1,4 +1,4 @@
-"""Juncture - Generate Screen for creating argument maps from notes."""
+"""MaizeMind - Generate Screen for creating argument maps from notes."""
 
 import from "lucide-react" { Upload, Sparkles, ArrowRight, FileText, X }
 import from "pdfjs-dist" { getDocument, GlobalWorkerOptions }

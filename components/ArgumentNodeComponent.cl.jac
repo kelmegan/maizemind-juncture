@@ -7,10 +7,10 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
     isGhost = props.isGhost if props.isGhost else False;
 
     nodeTypeConfig = {
-        "THESIS":           {"fill": "#ede9fe", "stroke": "#7c3aed", "header": "#7c3aed", "text": "#5b21b6", "ht": "#fff", "label": "THESIS"},
+        "THESIS":           {"fill": "#DBEAFE", "stroke": "#3b82f6", "header": "#3b82f6", "text": "#1e40af", "ht": "#ffffff", "label": "THESIS"},
         "CLAIM":            {"fill": "#e8e0fc", "stroke": "#9f7aea", "header": "#9f7aea", "text": "#6d28d9", "ht": "#fff", "label": "CLAIM"},
-        "EVIDENCE":         {"fill": "#d1fae5", "stroke": "#10b981", "header": "#10b981", "text": "#065f46", "ht": "#fff", "label": "EVIDENCE"},
-        "COUNTERARGUMENT":  {"fill": "#fee2e2", "stroke": "#ef4444", "header": "#ef4444", "text": "#991b1b", "ht": "#fff", "label": "COUNTER"}
+        "EVIDENCE":         {"fill": "#d1fae5", "stroke": "#10b981", "header": "#10b981", "text": "#065f46", "ht": "#ffffff", "label": "EVIDENCE"},
+        "COUNTERARGUMENT":  {"fill": "#fee2e2", "stroke": "#ef4444", "header": "#ef4444", "text": "#991b1b", "ht": "#ffffff", "label": "COUNTER"}
     };
 
     # Evidence category short labels

@@ -1,4 +1,4 @@
-"""Juncture - Interactive Argument Graph Viewer Component.
+"""MaizeMind - Interactive Argument Graph Viewer Component.
 Renders nodes/edges as an interactive zoomable graph.
 Handles branch selection, zoom-to-node, and per-branch LLM context.
 

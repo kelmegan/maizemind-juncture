@@ -1,4 +1,4 @@
-"""Juncture - Profile Screen for user settings, history, and statistics."""
+"""MaizeMind - Profile Screen for user settings, history, and statistics."""
 
 import from "lucide-react" { User, UserPlus, LogIn, History, Target, TrendingUp, Award, Settings, X }
 import from "@jac/runtime" { jacLogout }

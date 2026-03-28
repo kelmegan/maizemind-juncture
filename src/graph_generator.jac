@@ -1,4 +1,4 @@
-"""Juncture - Graph Generator Pipeline.
+"""MaizeMind - Graph Generator Pipeline.
 Takes raw user notes/uploads, processes through LLM,
 outputs structured argument map with scoring.
 """

@@ -20,7 +20,7 @@ with entry {
         )
     ];
 
-    print("=== Juncture Graph Generator ===");
+    print("=== MaizeMind Graph Generator ===");
     print("Processing notes...\n");
 
     result = generate_argument_graph(test_notes, test_docs);

@@ -19,7 +19,7 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
 
     EDGE_COLORS = {
         "SUPPORTS": "#10b981", "CONTRADICTS": "#ef4444",
-        "ADDRESSES": "#8b5cf6"
+        "ADDRESSES": "#0057B7"   # UMich royal blue (was purple #8b5cf6)
     };
     EDGE_LABELS = {
         "SUPPORTS": "SUP", "CONTRADICTS": "CON",
@@ -580,7 +580,7 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                         <polygon points="0 0,8 3,0 6" fill="#ef4444" />
                     </marker>
                     <marker id="mk-adr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                        <polygon points="0 0,8 3,0 6" fill="#8b5cf6" />
+                        <polygon points="0 0,8 3,0 6" fill="#0057B7" /> # UMich royal blue (was #8b5cf6)
                     </marker>
                     <filter id="drop-shadow" x="-20%" y="-20%" width="140%" height="140%">
                         <feDropShadow dx="0" dy="2" stdDeviation="4" floodOpacity="0.1" />
