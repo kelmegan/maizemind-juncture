@@ -30,6 +30,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         showScoreDelta: bool = False,
         showConfirmDelete: bool = False,
         addedAsEvidence: bool = False,
+        investigatedAssumptions: list = [],
         suggestedCounterargs: list = [];
 
     async def loadGraphData() -> None {
@@ -242,6 +243,16 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         } except Exception { }
         isSaving = False;
         pushUpdate();
+    }
+
+    def handleInvestigateAssumption(assumption: str) -> None {
+        investigatedAssumptions = investigatedAssumptions + [assumption];
+        addedAsEvidence = False;
+        handleInvestigateNode();
+    }
+
+    def makeInvestigateAssumptionHandler(assumption: str) -> any {
+        return lambda -> None { handleInvestigateAssumption(assumption); };
     }
 
     async def handleAutoFix() -> None {
@@ -529,8 +540,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     counter_bar_color = "#10b981" if counter_val >= 70 else ("#f59e0b" if counter_val >= 50 else "#ef4444");
 
     typeLegend = [
-        {"key": "THESIS",          "color": "#3b82f6", "bg": "#E8F0FC", "label": "Thesis"},
-        {"key": "CLAIM",           "color": "#9f7aea", "bg": "#e8e0fc", "label": "Claim"},
+        {"key": "THESIS",          "color": "#0057B7", "bg": "#E8F0FC", "label": "Thesis"},
+        {"key": "CLAIM",           "color": "#3b82f6", "bg": "#DBEAFE", "label": "Claim"},
         {"key": "EVIDENCE",        "color": "#10b981", "bg": "#d1fae5", "label": "Evidence"},
         {"key": "COUNTERARGUMENT", "color": "#ef4444", "bg": "#fee2e2", "label": "Counter"}
     ];
@@ -644,20 +655,23 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     _ai = 0;
     while _ai < len(sel_assumptions) {
         assumption = sel_assumptions[_ai];
+        investigate_fn = makeInvestigateAssumptionHandler(assumption);
         assumptionElements.append(
             <div key={f"assumption_{str(_ai)}"} className="rs-assumption-step-card">
                 <div className="rs-assumption-step-label">⚠️ Assumed</div>
                 <div className="rs-assumption-step-text">{assumption}</div>
-                <div className="rs-issue-next-step">
-                    <span className="rs-next-step-arrow">→</span>
-                    Provide evidence to support or address this assumption
-                </div>
                 {(
-                    <button className="rs-assumption-action-btn"
-                        onClick={lambda -> None { handleInvestigateNode(); }}>
-                        🔍 Find Evidence →
-                    </button>
-                ) if not sel_is_well_sourced else None}
+                    <div>
+                        <div className="rs-issue-next-step">
+                            <span className="rs-next-step-arrow">→</span>
+                            Provide evidence to support or address this assumption
+                        </div>
+                        <button className="rs-assumption-action-btn"
+                            onClick={investigate_fn}>
+                            🔍 Find Evidence →
+                        </button>
+                    </div>
+                ) if assumption not in investigatedAssumptions else None}
             </div>
         );
         _ai = _ai + 1;
