@@ -362,7 +362,13 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                                             <label className="profile-label">Accessibility Mode</label>
                                             <p className="profile-pref-description">Enhanced contrast and larger text</p>
                                         </div>
-                                        <Switch checked={accessibilityMode} onCheckedChange={handleAccessibilityChange} />
+                                        <Switch
+                                            checked={ctx.accessibilityMode}
+                                            onCheckedChange={lambda v: bool -> None {
+                                                ctx.toggleAccessibility();
+                                                handleAccessibilityChange(v);
+                                            }}
+                                        />
                                     </div>
                                 </div>
                             </Card>

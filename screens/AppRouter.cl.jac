@@ -12,6 +12,7 @@ def:pub AppRouter -> JsxElement {
     has isDark: bool = False,
         isLoading: bool = True,
         isLoggedIn: bool = False,
+        accessibilityMode: bool = False,
         currentUserId: str = "",
         currentUserEmail: str = "",
         cachedGraphId: str = "",
@@ -29,6 +30,7 @@ def:pub AppRouter -> JsxElement {
                     currentUserId = data["id"] if "id" in data else "";
                     currentUserEmail = data["email"] if "email" in data else "";
                     if "theme" in data { isDark = data["theme"] == "dark"; }
+                    if "accessibilityMode" in data { accessibilityMode = data["accessibilityMode"]; }
                 }
             } except Exception as e {
                 print(f"loadContext error: {e}");
@@ -53,6 +55,7 @@ def:pub AppRouter -> JsxElement {
         currentUserId = "";
         currentUserEmail = "";
         isDark = False;
+        accessibilityMode = False;
         cachedGraphId = "";
         cachedCounterargSuggestions = [];
         localStorage.removeItem("maizemind_graph_id");
@@ -60,6 +63,10 @@ def:pub AppRouter -> JsxElement {
 
     def toggleTheme() -> None {
         isDark = not isDark;
+    }
+
+    def toggleAccessibility() -> None {
+        accessibilityMode = not accessibilityMode;
     }
 
     def setGraphCache(graphId: str, counterargs: list = []) -> None {
@@ -87,10 +94,12 @@ def:pub AppRouter -> JsxElement {
         "setAuth": setAuth,
         "logout": logout,
         "toggleTheme": toggleTheme,
+        "accessibilityMode": accessibilityMode,
+        "toggleAccessibility": toggleAccessibility,
         "setGraphCache": setGraphCache
     };
 
-    return <div className={"app-root" + (" dark" if isDark else "")}>
+    return <div className={"app-root" + (" dark" if isDark else "") + (" accessibility" if accessibilityMode else "")}>
         <_AppCtx.Provider value={ctx_value}>
             <Router>
                 <Routes>

@@ -109,6 +109,7 @@
     --color-node-thesis-dark: #0044AA;
     --color-cyan: #06b6d4;
     --color-overlay-dark: rgba(0, 0, 0, 0.3);
+    --color-issues-next-steps: #374151;
 
     --color-assumption-bg: rgba(245, 158, 11, 0.08);
     --color-assumption-border: rgba(245, 158, 11, 0.15);
@@ -317,6 +318,71 @@
     --color-achievement-purple-from: rgba(239, 246, 255, 0.04);
     --color-achievement-purple-to: rgba(219, 234, 254, 0.04);
     --color-achievement-purple-border: rgba(147, 197, 253, 0.2);
+    --color-issues-next-steps: #94a3b8;
+}
+
+.accessibility {
+    font-size: 18px;
+    line-height: 1.7;
+
+    --radius: 18px;
+    --radius-sm: 12px;
+
+    --color-border: #b0b8c8;
+
+    --color-muted-foreground: #4a5568;
+    --color-text-light: #4a5568;
+}
+
+.accessibility .profile-label,
+.accessibility .form-label,
+.accessibility .notes-label {
+    font-size: 16px;
+}
+
+.accessibility .profile-input,
+.accessibility .profile-select,
+.accessibility .auth-input,
+.accessibility .notes-textarea {
+    font-size: 16px;
+    padding: 12px 16px;
+}
+
+.accessibility .button {
+    font-size: 16px;
+    padding: 12px 20px;
+}
+
+.accessibility .badge {
+    font-size: 14px;
+    padding: 4px 14px;
+}
+
+.accessibility .tabs-trigger {
+    font-size: 16px;
+    padding: 6px 12px;
+}
+
+.accessibility .card-header {
+    padding: 28px 28px 0 28px;
+}
+
+.accessibility .card-content {
+    padding: 28px;
+}
+
+.accessibility .profile-goal-item {
+    padding: 16px;
+}
+
+.accessibility .profile-pref-row {
+    padding: 8px 0;
+}
+
+.accessibility .node-card {
+    width: 260px;
+    min-height: 96px;
+    padding: 14px 16px;
 }
 
 body {
@@ -2827,13 +2893,13 @@ body {
     gap: 6px;
     margin-top: 4px;
     font-size: 11px;
-    color: #374151;
+    color: var(--color-issues-next-steps);
     line-height: 1.4;
 }
 
 .rs-next-step-arrow {
     font-weight: 700;
-    color: #6b7280;
+    color: var(--color-issues-next-steps);
     flex-shrink: 0;
 }
 
