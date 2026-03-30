@@ -2156,8 +2156,8 @@ body {
 
 .graph-zoom-controls {
     position: absolute;
-    top: 12px;
-    right: 12px;
+    bottom: 12px;
+    left: 12px;
     display: flex;
     flex-direction: column;
     gap: 4px;

@@ -29,7 +29,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         scoreDelta: int = 0,
         showScoreDelta: bool = False,
         showConfirmDelete: bool = False,
-        addedAsEvidence: bool = False,
+        addedAsEvidenceMap: dict = {},
         investigatedAssumptions: list = [],
         suggestedCounterargs: list = [];
 
@@ -72,19 +72,24 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         editInputValue = "";
         showConfirmDelete = False;
         showScoreDelta = False;
-        node_more_info = node_data["moreInfo"] if node_data and "moreInfo" in node_data else "";
-        if node_more_info and currentGraph {
-            _graph_nodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
-            _already = False;
-            for _gn in _graph_nodes {
-                if _gn["type"] == "EVIDENCE" and "content" in _gn and _gn["content"] == node_more_info {
-                    _already = True;
-                    break;
-                }
-            }
-            addedAsEvidence = _already;
+        node_id = node_data["id"] if node_data and "id" in node_data else "";
+        if node_id in addedAsEvidenceMap {
+            addedAsEvidenceMap[node_id] = True;   # trust the map — skip the graph search
         } else {
-            addedAsEvidence = False;
+            node_more_info = node_data["moreInfo"] if node_data and "moreInfo" in node_data else "";
+            if node_more_info and currentGraph {
+                _graph_nodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
+                _already = False;
+                for _gn in _graph_nodes {
+                    if _gn["type"] == "EVIDENCE" and "content" in _gn and _gn["content"] == node_more_info {
+                        _already = True;
+                        break;
+                    }
+                }
+                if _already { addedAsEvidenceMap[node_id] = True; }
+            } else {
+                addedAsEvidenceMap[node_id] = False;
+            }
         }
     }
 
@@ -247,7 +252,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
     def handleInvestigateAssumption(assumption: str) -> None {
         investigatedAssumptions = investigatedAssumptions + [assumption];
-        addedAsEvidence = False;
         handleInvestigateNode();
     }
 
@@ -283,7 +287,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             selectedNode = _afFound;
         } except Exception { }
         isSaving = False;
-        addedAsEvidence = True;
+        addedAsEvidenceMap[_aeNodeId] = True;
         pushUpdate();
     }
 
@@ -321,7 +325,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             selectedNode = _aeFound;
         } except Exception { }
         isSaving = False;
-        addedAsEvidence = True;
+        addedAsEvidenceMap[_aeNodeId] = True;
         pushUpdate();
     }
 
@@ -556,8 +560,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     sel_str_bg = "rgba(34,197,94,0.1)" if sel_node_score >= 70 else ("rgba(250,204,21,0.15)" if sel_node_score >= 50 else "rgba(239,68,68,0.1)");
 
     typeColorMap = {
-        "THESIS":          "#0057B7",
-        "CLAIM":           "#3b82f6",
+        "THESIS":          "#3b82f6",
+        "CLAIM":           "#9f7aea",
         "EVIDENCE":        "#10b981",
         "COUNTERARGUMENT": "#ef4444"
     };
@@ -1087,7 +1091,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                             disabled={isSaving}>
                                             📊 Add as Evidence
                                         </button>
-                                    ) if sel_has_more_info and not sel_is_evidence and not addedAsEvidence else None}
+                                    ) if sel_has_more_info and not sel_is_evidence and selectedNode and selectedNode["id"] and selectedNode["id"] not in addedAsEvidenceMap else None}
                                     {(
                                         <div className="rs-analysis-empty">No additional analysis available</div>
                                     ) if not sel_has_more_info and not sel_has_source else None}
