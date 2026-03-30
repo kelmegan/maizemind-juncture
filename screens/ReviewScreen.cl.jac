@@ -540,8 +540,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     counter_bar_color = "#10b981" if counter_val >= 70 else ("#f59e0b" if counter_val >= 50 else "#ef4444");
 
     typeLegend = [
-        {"key": "THESIS",          "color": "#0057B7", "bg": "#E8F0FC", "label": "Thesis"},
-        {"key": "CLAIM",           "color": "#3b82f6", "bg": "#DBEAFE", "label": "Claim"},
+        {"key": "THESIS",          "color": "#3b82f6", "bg": "#DBEAFE", "label": "Thesis"},
+        {"key": "CLAIM",           "color": "#9f7aea", "bg": "#e8e0fc", "label": "Claim"},
         {"key": "EVIDENCE",        "color": "#10b981", "bg": "#d1fae5", "label": "Evidence"},
         {"key": "COUNTERARGUMENT", "color": "#ef4444", "bg": "#fee2e2", "label": "Counter"}
     ];
