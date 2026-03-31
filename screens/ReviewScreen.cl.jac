@@ -580,7 +580,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         sel_source_url = selectedNode["sourceUrl"] if "sourceUrl" in selectedNode else "";
     }
     sel_has_source = len(sel_source_url) > 0 if sel_source_url else False;
-    sel_is_well_sourced = sel_has_source;
+    sel_is_well_sourced = sel_has_source and sel_is_evidence;
     sel_ev_cat_display = sel_ev_category.replace("_", " ") if sel_ev_category else "logical reasoning";
 
     sel_more_info = "";
@@ -880,9 +880,9 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     saving_overlay_display = "flex" if isSaving else "none";
 
     show_respond = sel_type != "";
-    show_add_counter = sel_type == "CLAIM" or sel_type == "THESIS";
+    show_add_counter = sel_type == "CLAIM" or sel_type == "THESIS" or sel_type == "COUNTERARGUMENT";
     show_address = sel_type == "COUNTERARGUMENT";
-    show_expand = sel_type == "CLAIM" or sel_type == "THESIS";
+    show_expand = sel_type == "CLAIM" or sel_type == "THESIS" or sel_type == "COUNTERARGUMENT";
     show_source_input = editMode == "evidence" or editMode == "respond";
     has_investigate_results = len(investigateResults) > 0;
 

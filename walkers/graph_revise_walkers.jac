@@ -112,7 +112,17 @@ walker:pub AddEvidenceToNode {
                         break;
                     }
                 }
-                _ev_context = f"This evidence is used to support the thesis: '{_ev_thesis}'";
+                # Find parent node content for richer context
+                _ev_parent_content = "";
+                _ev_parent_type = "";
+                for _epn in graph_node.nodes {
+                    if _epn["id"] == self.nodeId {
+                        _ev_parent_content = _epn.get("content", "");
+                        _ev_parent_type = _epn.get("type", "");
+                        break;
+                    }
+                }
+                _ev_context = f"This evidence was submitted by the user to support the {_ev_parent_type} node: '{_ev_parent_content}'. The overall thesis is: '{_ev_thesis}'. Evaluate whether this evidence is relevant, logically sound, and actually supports the parent node. Flag ad hominem attacks, logical fallacies, unsupported accusations, and off-topic content as LOW confidence (0.1-0.2). Be critical.";
                 raw_eval = evaluate_single_evidence(
                     evidence_text=ev_content,
                     thesis_text=_ev_thesis,
@@ -590,7 +600,7 @@ walker:pub AddAddressEdge {
                     break;
                 }
             }
-            _addr_context = f"This evidence addresses the counterargument: '{_addr_counter_text}' in support of the thesis: '{_addr_thesis}'";
+            _addr_context = f"This evidence was submitted by the user to address the counterargument: '{_addr_counter_text}' in support of the thesis: '{_addr_thesis}'. Evaluate whether this response is relevant, logically sound, and actually addresses the counterargument. Flag ad hominem attacks, logical fallacies, unsupported accusations, and off-topic content as LOW confidence (0.1-0.2). Be critical.";
             raw_eval = evaluate_single_evidence(
                 evidence_text=self.addressContent,
                 thesis_text=_addr_thesis,

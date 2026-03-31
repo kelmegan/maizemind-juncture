@@ -1090,14 +1090,25 @@ walker:pub GetGraphWithScoring {
             } elif ntype == "EVIDENCE" {
                 n["nodeScore"] = int(self.evidence_quality(n) * 100);
             } elif ntype == "COUNTERARGUMENT" {
-                addressed = False;
+                # Find all addressing evidence and compute quality-weighted score
+                address_quality_sum = 0.0;
+                address_count = 0;
                 for e in edges {
                     if e.get("type", "") == "ADDRESSES" and e.get("target", "") == nid {
-                        addressed = True;
-                        break;
+                        addr_node = self.get_node(nodes, e.get("source", ""));
+                        if addr_node {
+                            address_count = address_count + 1;
+                            address_quality_sum = address_quality_sum + self.evidence_quality(addr_node);
+                        }
                     }
                 }
-                n["nodeScore"] = 75 if addressed else 55;
+                if address_count > 0 {
+                    avg_addr_quality = address_quality_sum / address_count;
+                    # Scale: bad evidence (0.0-0.3) → 40-55, decent (0.3-0.6) → 55-70, good (0.6+) → 70-85
+                    n["nodeScore"] = int(40 + avg_addr_quality * 45);
+                } else {
+                    n["nodeScore"] = 55;
+                }
             }
         }
     }
