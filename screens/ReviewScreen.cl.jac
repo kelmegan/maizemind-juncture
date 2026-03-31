@@ -743,7 +743,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                     <div className="rs-next-action-text">
                         {next_issue["action"] if "action" in next_issue else "Fix this issue"}
                         {(
-                            <span className="rs-next-action-lift">{"+" + str(next_lift) + " est"}</span>
+                            <span className="rs-next-action-lift">{"+" + str(next_lift) + " pts"}</span>
                         ) if next_lift > 0 else None}
                     </div>
                     <button onClick={next_click_fn} className="rs-next-action-btn">Go to node →</button>
