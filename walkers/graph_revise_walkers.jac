@@ -12,7 +12,8 @@ walker:pub AddEvidenceToNode {
     has graphId: str,
         nodeId: str,
         evidenceContent: str,
-        sourceUrl: str = "";
+        sourceUrl: str = "",
+        evaluate: bool = False;
 
     can run with Root entry {
         try {
@@ -100,6 +101,86 @@ walker:pub AddEvidenceToNode {
         updated_edges.append(new_edge)
         graph_node.edges = updated_edges
         graph_node.updatedAt = str(int(time.time()));
+
+        # If evaluate=True, run LLM evaluation on the new evidence node
+        if self.evaluate {
+            try {
+                _ev_thesis = "";
+                for _etn in graph_node.nodes {
+                    if _etn["type"] == "THESIS" {
+                        _ev_thesis = _etn.get("content", "");
+                        break;
+                    }
+                }
+                # Find parent node content for richer context
+                _ev_parent_content = "";
+                _ev_parent_type = "";
+                for _epn in graph_node.nodes {
+                    if _epn["id"] == self.nodeId {
+                        _ev_parent_content = _epn.get("content", "");
+                        _ev_parent_type = _epn.get("type", "");
+                        break;
+                    }
+                }
+                _ev_context = f"This evidence was submitted by the user to support the {_ev_parent_type} node: '{_ev_parent_content}'. The overall thesis is: '{_ev_thesis}'. Evaluate whether this evidence is relevant, logically sound, and actually supports the parent node. Flag ad hominem attacks, logical fallacies, unsupported accusations, and off-topic content as LOW confidence (0.1-0.2). Be critical.";
+                raw_eval = evaluate_single_evidence(
+                    evidence_text=ev_content,
+                    thesis_text=_ev_thesis,
+                    context_description=_ev_context
+                );
+                _eval_str = extract_llm_text(raw_eval).strip();
+                if _eval_str.startswith("```") {
+                    _ef_lines = _eval_str.split("\n");
+                    _ef_lines = _ef_lines[1:];
+                    if _ef_lines and _ef_lines[-1].strip().startswith("```") {
+                        _ef_lines = _ef_lines[:-1];
+                    }
+                    _eval_str = "\n".join(_ef_lines).strip();
+                }
+                _eval_parsed = json.loads(_eval_str);
+
+                _eval_cat = _eval_parsed.get("evidence_category", ev_category);
+                _eval_assumptions: list = _eval_parsed.get("assumptions", []);
+                _eval_conf = 0.5;
+                try { _eval_conf = float(_eval_parsed.get("confidence", 0.5)); }
+                except Exception { _eval_conf = 0.5; }
+
+                if not isinstance(_eval_assumptions, list) { _eval_assumptions = []; }
+
+                _capped: list = [];
+                for _ea in _eval_assumptions {
+                    _ea_s = str(_ea).strip();
+                    if len(_ea_s) > 1 { _capped.append(_ea_s[0].upper() + _ea_s[1:]); }
+                    elif len(_ea_s) == 1 { _capped.append(_ea_s[0].upper()); }
+                    else { _capped.append(_ea_s); }
+                }
+
+                _cat_weights: dict[str, float] = {
+                    "empirical_data": 0.9, "expert_testimony": 0.8,
+                    "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
+                };
+                _base_q = _cat_weights.get(_eval_cat, 0.6);
+                _quality = _base_q - len(_capped) * 0.15;
+                if _quality < 0.1 { _quality = 0.1; }
+                _eval_score = int(_quality * 100);
+
+                _upd_nodes: list = [];
+                for _un in graph_node.nodes {
+                    if _un["id"] == evidence_id {
+                        _un["evidence_category"] = _eval_cat;
+                        _un["assumptions"] = _capped;
+                        _un["confidence"] = _eval_conf;
+                        _un["isWeak"] = _eval_conf < 0.5;
+                        _un["nodeScore"] = _eval_score;
+                    }
+                    _upd_nodes.append(_un);
+                }
+                graph_node.nodes = _upd_nodes;
+                print(f"  Evaluated evidence: category={_eval_cat}, score={_eval_score}, assumptions={len(_capped)}");
+            } except Exception as eval_err {
+                print(f"  Evidence evaluation failed (non-fatal): {eval_err}");
+            }
+        }
 
         # Call scoring methods directly on the walker instance
         scorer = GetGraphWithScoring(graphId=self.graphId);
@@ -502,6 +583,72 @@ walker:pub AddAddressEdge {
         updated_edges.append(address_edge)
         graph_node.edges = updated_edges
         graph_node.updatedAt = str(int(time.time()));
+
+        # LLM evaluation of the address evidence
+        try {
+            _addr_thesis = "";
+            for _atn in graph_node.nodes {
+                if _atn["type"] == "THESIS" {
+                    _addr_thesis = _atn.get("content", "");
+                    break;
+                }
+            }
+            _addr_counter_text = "";
+            for _acn in graph_node.nodes {
+                if _acn["id"] == self.counterargNodeId {
+                    _addr_counter_text = _acn.get("content", "");
+                    break;
+                }
+            }
+            _addr_context = f"This evidence was submitted by the user to address the counterargument: '{_addr_counter_text}' in support of the thesis: '{_addr_thesis}'. Evaluate whether this response is relevant, logically sound, and actually addresses the counterargument. Flag ad hominem attacks, logical fallacies, unsupported accusations, and off-topic content as LOW confidence (0.1-0.2). Be critical.";
+            raw_eval = evaluate_single_evidence(
+                evidence_text=self.addressContent,
+                thesis_text=_addr_thesis,
+                context_description=_addr_context
+            );
+            _eval_str = extract_llm_text(raw_eval).strip();
+            if _eval_str.startswith("```") {
+                _ef_lines = _eval_str.split("\n");
+                _ef_lines = _ef_lines[1:];
+                if _ef_lines and _ef_lines[-1].strip().startswith("```") {
+                    _ef_lines = _ef_lines[:-1];
+                }
+                _eval_str = "\n".join(_ef_lines).strip();
+            }
+            _eval_parsed = json.loads(_eval_str);
+
+            _eval_cat = _eval_parsed.get("evidence_category", "logical_reasoning");
+            _eval_assumptions: list = _eval_parsed.get("assumptions", []);
+            _eval_conf = 0.5;
+            try { _eval_conf = float(_eval_parsed.get("confidence", 0.5)); }
+            except Exception { _eval_conf = 0.5; }
+
+            if not isinstance(_eval_assumptions, list) { _eval_assumptions = []; }
+
+            _capped: list = [];
+            for _ea in _eval_assumptions {
+                _ea_s = str(_ea).strip();
+                if len(_ea_s) > 1 { _capped.append(_ea_s[0].upper() + _ea_s[1:]); }
+                elif len(_ea_s) == 1 { _capped.append(_ea_s[0].upper()); }
+                else { _capped.append(_ea_s); }
+            }
+
+            # Update the evidence node in-place
+            _upd_nodes: list = [];
+            for _un in graph_node.nodes {
+                if _un["id"] == evidence_id {
+                    _un["evidence_category"] = _eval_cat;
+                    _un["assumptions"] = _capped;
+                    _un["confidence"] = _eval_conf;
+                    _un["isWeak"] = _eval_conf < 0.5;
+                }
+                _upd_nodes.append(_un);
+            }
+            graph_node.nodes = _upd_nodes;
+            print(f"  Address evaluated: category={_eval_cat}, confidence={_eval_conf}, assumptions={len(_capped)}");
+        } except Exception as eval_err {
+            print(f"  Address evaluation failed (non-fatal): {eval_err}");
+        }
 
         # Call scoring methods directly on the walker instance
         scorer = GetGraphWithScoring(graphId=self.graphId);
@@ -947,7 +1094,8 @@ walker:pub ClarifyNode {
 walker:pub InvestigateNode {
     has graphId: str,
         nodeId: str,
-        addAsEvidence: bool = False;
+        addAsEvidence: bool = False,
+        selectedResultIndex: int = -1;
 
     can run with Root entry {
         try {
@@ -1017,12 +1165,29 @@ walker:pub InvestigateNode {
             return;
         }
 
-        # Filter out the existing source article if node was already investigated
-        if existing_source {
+        # Collect ALL sourceUrls already used in this graph
+        _existing_urls: list = [];
+        for _eun in graph_node.nodes {
+            _eu_url = _eun.get("sourceUrl", "");
+            if _eu_url and _eu_url not in _existing_urls {
+                _existing_urls.append(_eu_url);
+            }
+        }
+
+        # Filter out articles whose Wikipedia URL is already used in the graph
+        if _existing_urls {
             filtered_results: list = [];
             for sr in search_results {
                 sr_title_slug = sr.get("title", "").replace(" ", "_");
-                if sr_title_slug not in existing_source {
+                sr_wiki_url = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(sr_title_slug)}";
+                _is_dup = False;
+                for _eu in _existing_urls {
+                    if sr_title_slug in _eu or _eu == sr_wiki_url {
+                        _is_dup = True;
+                        break;
+                    }
+                }
+                if not _is_dup {
                     filtered_results.append(sr);
                 }
             }
@@ -1032,47 +1197,87 @@ walker:pub InvestigateNode {
                     "already_sourced": True,
                     "moreInfo": target_node.get("moreInfo", ""),
                     "sourceUrl": existing_source,
-                    "message": "This node is already well-sourced. No additional Wikipedia articles found."
+                    "message": "All relevant Wikipedia sources are already used in your graph."
                 };
                 return;
             }
             search_results = filtered_results;
-            print(f"  Filtered out existing source, {len(search_results)} candidates remain");
+            print(f"  Filtered out {len(_existing_urls)} existing sources, {len(search_results)} candidates remain");
         }
 
-        # Step 2: Ask LLM to pick the best result
-        results_text = "";
-        _ri = 0;
-        while _ri < len(search_results) {
-            sr = search_results[_ri];
-            sr_title = sr.get("title", "");
-            sr_snippet = sr.get("snippet", "").replace("<span class=\"searchmatch\">", "").replace("</span>", "");
-            results_text = results_text + f"{_ri}. {sr_title}: {sr_snippet}\n";
-            _ri = _ri + 1;
+        # Take top 3 results
+        top_results: list = [];
+        _tri = 0;
+        while _tri < len(search_results) and _tri < 3 {
+            top_results.append(search_results[_tri]);
+            _tri = _tri + 1;
         }
-        print(f"  Wikipedia candidates:\n{results_text}");
 
-        raw_pick = pick_best_wiki_result(
-            node_text=node_content,
-            search_results_text=results_text
-        );
-        pick_str = extract_llm_text(raw_pick).strip();
-        # Parse the digit from LLM response
-        pick_idx = 0;
-        for ch in pick_str {
-            if ch.isdigit() {
-                pick_idx = int(ch);
-                break;
+        # ── Phase 1: Return 3 results for user to pick ──
+        if self.selectedResultIndex < 0 {
+            wiki_results: list = [];
+            _wri = 0;
+            while _wri < len(top_results) {
+                sr = top_results[_wri];
+                sr_title = sr.get("title", "");
+                sr_snippet = sr.get("snippet", "").replace("<span class=\"searchmatch\">", "").replace("</span>", "");
+
+                # Fetch extract summary for each result
+                enc_title = urllib.parse.quote(sr_title);
+                ext_url = f"https://en.wikipedia.org/w/api.php?action=query&titles={enc_title}&prop=extracts&exintro=1&explaintext=1&format=json";
+                ext_req = urllib.request.Request(ext_url, headers={"User-Agent": "MaizeMind/1.0"});
+                ext_resp = urllib.request.urlopen(ext_req, timeout=10);
+                ext_data = json.loads(ext_resp.read().decode("utf-8"));
+
+                ext_pages = ext_data.get("query", {}).get("pages", {});
+                ext_summary = "";
+                for pid in ext_pages {
+                    ext_summary = ext_pages[pid].get("extract", "");
+                    break;
+                }
+
+                # Truncate to ~300 chars at sentence boundary
+                if len(ext_summary) > 300 {
+                    cut = ext_summary[:300];
+                    last_period = cut.rfind(".");
+                    if last_period > 100 {
+                        ext_summary = cut[:last_period + 1];
+                    } else {
+                        ext_summary = cut + "...";
+                    }
+                }
+
+                wiki_title = sr_title.replace(" ", "_");
+                wiki_url = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(wiki_title)}";
+
+                wiki_results.append({
+                    "title": sr_title,
+                    "summary": ext_summary,
+                    "url": wiki_url,
+                    "snippet": sr_snippet
+                });
+                _wri = _wri + 1;
             }
+
+            print(f"  Returning {len(wiki_results)} Wikipedia results for user selection");
+            report {
+                "success": True,
+                "phase": "results",
+                "wikiResults": wiki_results
+            };
+            return;
         }
-        if pick_idx < 0 or pick_idx >= len(search_results) {
+
+        # ── Phase 2: User picked a result — apply it ──
+        pick_idx = self.selectedResultIndex;
+        if pick_idx < 0 or pick_idx >= len(top_results) {
             pick_idx = 0;
         }
 
-        article_title = search_results[pick_idx]["title"];
-        print(f"  LLM picked: '{article_title}' (index {pick_idx})");
+        article_title = top_results[pick_idx]["title"];
+        print(f"  User picked: '{article_title}' (index {pick_idx})");
 
-        # Step 3: Get extract for best result
+        # Fetch full extract for selected result
         encoded_title = urllib.parse.quote(article_title);
         extract_url = f"https://en.wikipedia.org/w/api.php?action=query&titles={encoded_title}&prop=extracts&exintro=1&explaintext=1&format=json";
         extract_req = urllib.request.Request(extract_url, headers={"User-Agent": "MaizeMind/1.0"});
@@ -1168,23 +1373,23 @@ walker:pub InvestigateNode {
                 "sourceUrl": source_url,
                 "moreInfo": summary
             };
-            updated_nodes = list(graph_node.nodes)
-            updated_nodes.append(ev_node)
-            graph_node.nodes = updated_nodes
+            updated_nodes = list(graph_node.nodes);
+            updated_nodes.append(ev_node);
+            graph_node.nodes = updated_nodes;
             nw_edge = {
                 "id": f"edge_{ev_id}",
                 "source": ev_id,
                 "target": self.nodeId,
                 "type": "SUPPORTS"
             };
-            updated_edges = list(graph_node.edges)
-            updated_edges.append(nw_edge)
-            graph_node.edges = updated_edges
+            updated_edges = list(graph_node.edges);
+            updated_edges.append(nw_edge);
+            graph_node.edges = updated_edges;
             graph_node.updatedAt = str(int(time.time()));
-            print(f"  AutoFix: added evidence node {ev_id}");
+            print(f"  Added evidence node {ev_id} from Wikipedia source");
         }
 
-        # Call scoring methods directly on the walker instance
+        # Return full scored result
         scorer = GetGraphWithScoring(graphId=self.graphId);
         scored_data = scorer.score_graph(graph_node);
 
