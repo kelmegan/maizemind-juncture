@@ -1104,8 +1104,7 @@ walker:pub GetGraphWithScoring {
                 }
                 if address_count > 0 {
                     avg_addr_quality = address_quality_sum / address_count;
-                    # Scale: bad evidence (0.0-0.3) → 40-55, decent (0.3-0.6) → 55-70, good (0.6+) → 70-85
-                    n["nodeScore"] = int(40 + avg_addr_quality * 45);
+                    n["nodeScore"] = int(avg_addr_quality * 100);
                 } else {
                     n["nodeScore"] = 55;
                 }
