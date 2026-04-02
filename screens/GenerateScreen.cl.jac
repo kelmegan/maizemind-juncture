@@ -97,10 +97,6 @@ def:pub GenerateScreen(props: any) -> JsxElement {
         showConfirmRegenerate = False;
     }
 
-    def loadExampleNotes() -> None {
-        notes = "Remote work increases productivity and employee satisfaction. Employees save time without commuting - the average commute is 54 minutes daily. Flexible schedules improve work-life balance. Remote work reduces office distractions. However, remote workers report feeling isolated which could impact morale. Companies also save money on office space costs.";
-    }
-
     def handleDivClick() -> None {
         document.getElementById("file-input").click();
     }
@@ -272,13 +268,6 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                             </div>
                         }
                     </div>
-                </Card>
-
-                <Card
-                    title="Quick Start Example"
-                    className="quickstart-card"
-                >
-                    <Button label="Load example notes" variant="ghost" onClick={loadExampleNotes} />
                 </Card>
             </div>
         </div>

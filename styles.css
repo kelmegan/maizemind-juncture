@@ -1194,11 +1194,6 @@ body {
     width: 100%;
 }
 
-.quickstart-card {
-    background-color: var(--color-accent-subtle);
-    border-color: var(--color-accent-border-subtle);
-}
-
 .card-title-icon {
     display: inline-flex;
     align-items: center;
