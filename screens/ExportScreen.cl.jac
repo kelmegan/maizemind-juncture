@@ -1,8 +1,10 @@
 """Export Screen"""
 
+import from "@jac/runtime" { useNavigate, useLocation }
+import from react { useContext }
 import from "lucide-react" { Download, FileText, AlertTriangle, CheckCircle2, Copy }
 import from "jspdf" { jsPDF }
-
+import from ..screens.AppContext { getAppContext }
 import from ..components.Alert { Alert }
 import from ..components.Badge { Badge }
 import from ..components.Button { Button }
@@ -10,10 +12,12 @@ import from ..components.Card { Card }
 import from ..components.Header { Header }
 
 def:pub ExportScreen(props: any) -> JsxElement {
-    navigate = props.navigate;
-    screen_data = props.screenData if props.screenData else {};
-    isLoggedIn = props.isLoggedIn if props.isLoggedIn else False;
-    userId = props.userId if props.userId else "";
+    nav = useNavigate();
+    location = useLocation();
+    _AppCtx = getAppContext();
+    ctx = useContext(_AppCtx);
+
+    loc_state = location.state if location.state else {};
 
     has currentGraph: dict = None,
     currentScore: dict = None,
@@ -24,7 +28,14 @@ def:pub ExportScreen(props: any) -> JsxElement {
     saved: bool = False;
 
     async def loadGraphData() -> None {
-        graph_id = screen_data["graphId"] if "graphId" in screen_data else "";
+        if "graph" in loc_state and loc_state["graph"] {
+            currentGraph = loc_state["graph"];
+            currentScore = loc_state["score"] if "score" in loc_state else None;
+            currentIssues = loc_state["issues"] if "issues" in loc_state else [];
+            currentNextActions = loc_state["nextActions"] if "nextActions" in loc_state else [];
+            return;
+        }
+        graph_id = loc_state["graphId"] if "graphId" in loc_state else ctx.cachedGraphId;
         if graph_id {
             try {
                 result = await root spawn GetGraphWithScoring(graphId=graph_id);
@@ -44,78 +55,266 @@ def:pub ExportScreen(props: any) -> JsxElement {
     }
 
     def generateOutlineText(includeFlags: bool) -> str {
-        if not currentGraph {
-            return "";
-        }
+        if not currentGraph { return ""; }
         nodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
         edges = currentGraph["edges"] if "edges" in currentGraph else [];
-
         NL = chr(10);
 
-        thesis_node = None;
-        claim_nodes = [];
-        evidence_nodes = {};
-
-        for node in nodes {
-            if node["type"] == "THESIS" { thesis_node = node; }
-            elif node["type"] == "CLAIM" { claim_nodes.append(node); }
-            elif node["type"] == "EVIDENCE" { evidence_nodes[node["id"]] = node; }
+        node_map: dict = {};
+        ni = 0;
+        while ni < len(nodes) {
+            node_map[nodes[ni]["id"]] = nodes[ni];
+            ni = ni + 1;
         }
 
-        outline = "ARGUMENT OUTLINE" + NL;
-        outline += "==================================================" + NL + NL;
+        def node_score_str(n: dict) -> str {
+            if "nodeScore" in n { return f" [score: {n['nodeScore']}]"; }
+            return "";
+        }
 
-        if thesis_node {
-            outline += "THESIS:" + NL;
-            thesis_supporting = [];
-            for edge in edges {
-                if edge["target"] == thesis_node["id"] and edge["type"] == "SUPPORTS" {
-                    if edge["source"] in evidence_nodes {
-                        thesis_supporting.append(evidence_nodes[edge["source"]]);
+        def get_supporters_of_type(target_id: str, ntype: str) -> str {
+            out = "";
+            ei = 0;
+            while ei < len(edges) {
+                e = edges[ei];
+                if e["type"] == "SUPPORTS" and e["target"] == target_id {
+                    src_id = e["source"] if "source" in e else "";
+                    if src_id in node_map and node_map[src_id]["type"] == ntype {
+                        out += src_id + ",";
                     }
                 }
+                ei = ei + 1;
             }
-            thesis_suffix = " (Needs evidence)" if includeFlags and len(thesis_supporting) == 0 else "";
-            outline += thesis_node["content"] + thesis_suffix + NL + NL;
+            return out;
         }
 
-        if len(claim_nodes) > 0 {
-            outline += "MAIN CLAIMS:" + NL;
-            i = 1;
-            for claim in claim_nodes {
-                supporting = [];
-                for edge in edges {
-                    if edge["target"] == claim["id"] and edge["type"] == "SUPPORTS" {
-                        if edge["source"] in evidence_nodes {
-                            supporting.append(evidence_nodes[edge["source"]]);
+        def get_contradictors_of_type(target_id: str, ntype: str) -> str {
+            out = "";
+            ei = 0;
+            while ei < len(edges) {
+                e = edges[ei];
+                if e["type"] == "CONTRADICTS" and e["target"] == target_id {
+                    src_id = e["source"] if "source" in e else "";
+                    if src_id in node_map and node_map[src_id]["type"] == ntype {
+                        out += src_id + ",";
+                    }
+                }
+                ei = ei + 1;
+            }
+            return out;
+        }
+
+        def get_addressers_of_type(target_id: str, ntype: str) -> str {
+            out = "";
+            ei = 0;
+            while ei < len(edges) {
+                e = edges[ei];
+                if e["type"] == "ADDRESSES" and e["target"] == target_id {
+                    src_id = e["source"] if "source" in e else "";
+                    if src_id in node_map and node_map[src_id]["type"] == ntype {
+                        out += src_id + ",";
+                    }
+                }
+                ei = ei + 1;
+            }
+            return out;
+        }
+
+        def format_evidence_block(nid: str, indent: str) -> str {
+            block = "";
+            supporter_ids = get_supporters_of_type(nid, "EVIDENCE");
+            if len(supporter_ids) > 0 {
+                block += indent + "  Supporting Evidence:" + NL;
+                parts = supporter_ids.split(",");
+                pi = 0;
+                while pi < len(parts) {
+                    part = str(parts[pi]);
+                    if part and part in node_map {
+                        ev = node_map[part];
+                        ev_cat = ev["evidence_category"] if "evidence_category" in ev else "";
+                        cat_tag = f" ({ev_cat.replace('_', ' ')})" if ev_cat else "";
+                        ev_src = ev["sourceUrl"] if "sourceUrl" in ev else "";
+                        block += indent + "    - " + ev["content"] + cat_tag + node_score_str(ev) + NL;
+                        if ev_src { block += indent + "      Source: " + ev_src + NL; }
+                    }
+                    pi = pi + 1;
+                }
+            } elif includeFlags {
+                block += indent + "  ~ No supporting evidence" + NL;
+            }
+            return block;
+        }
+
+        def format_counter_block(nid: str, indent: str) -> str {
+            block = "";
+            counter_ids = get_contradictors_of_type(nid, "COUNTERARGUMENT");
+            if len(counter_ids) > 0 {
+                block += indent + "  Counterarguments:" + NL;
+                parts = counter_ids.split(",");
+                pi = 0;
+                while pi < len(parts) {
+                    part = str(parts[pi]);
+                    if part and part in node_map {
+                        ca = node_map[part];
+                        block += indent + "    [X] " + ca["content"] + NL;
+                        addr_claim_ids = get_addressers_of_type(part, "CLAIM");
+                        addr_ev_ids = get_addressers_of_type(part, "EVIDENCE");
+                        addr_ids = addr_claim_ids + addr_ev_ids;
+                        addr_parts = addr_ids.split(",");
+                        api = 0;
+                        while api < len(addr_parts) {
+                            ap = str(addr_parts[api]);
+                            if ap and ap in node_map {
+                                block += indent + "      -> Response: " + node_map[ap]["content"] + NL;
+                            }
+                            api = api + 1;
                         }
                     }
+                    pi = pi + 1;
                 }
-                claim_suffix = " (Needs evidence)" if includeFlags and len(supporting) == 0 else "";
-                outline += str(i) + ". " + claim["content"] + claim_suffix + NL;
+            }
+            return block;
+        }
 
-                if len(supporting) > 0 {
-                    outline += "   Supporting Evidence:" + NL;
-                    for ev in supporting {
-                        outline += "   - " + ev["content"] + NL;
+        def format_node_block(nid: str, indent: str, index: str) -> str {
+            if nid not in node_map { return ""; }
+            n = node_map[nid];
+            content = n["content"] if "content" in n else "";
+            assumptions = n["assumptions"] if "assumptions" in n else [];
+            source = n["sourceUrl"] if "sourceUrl" in n else "";
+            block = indent + index + content + node_score_str(n) + NL;
+            ai = 0;
+            while ai < len(assumptions) {
+                block += indent + "  ~ Assumes: " + str(assumptions[ai]) + NL;
+                ai = ai + 1;
+            }
+            if source { block += indent + "  Source: " + source + NL; }
+            block += format_evidence_block(nid, indent);
+            block += format_counter_block(nid, indent);
+            return block;
+        }
+
+        thesis_id = "";
+        ni = 0;
+        while ni < len(nodes) {
+            if nodes[ni]["type"] == "THESIS" { thesis_id = nodes[ni]["id"]; break; }
+            ni = ni + 1;
+        }
+
+        out = "ARGUMENT OUTLINE" + NL;
+        out += "==================================================" + NL + NL;
+
+        if thesis_id and thesis_id in node_map {
+            thesis = node_map[thesis_id];
+            out += "THESIS" + node_score_str(thesis) + NL;
+            out += thesis["content"] + NL + NL;
+
+            thesis_ev_ids = get_supporters_of_type(thesis_id, "EVIDENCE");
+            if len(thesis_ev_ids) > 0 {
+                out += "  Direct Evidence:" + NL;
+                parts = thesis_ev_ids.split(",");
+                pi = 0;
+                while pi < len(parts) {
+                    part = str(parts[pi]);
+                    if part and part in node_map {
+                        out += "  - " + node_map[part]["content"] + node_score_str(node_map[part]) + NL;
+                    }
+                    pi = pi + 1;
+                }
+                out += NL;
+            }
+
+            thesis_claim_ids_str = get_supporters_of_type(thesis_id, "CLAIM");
+
+            all_claim_ids_str = thesis_claim_ids_str;
+            ni = 0;
+            while ni < len(nodes) {
+                if nodes[ni]["type"] == "CLAIM" {
+                    cid = nodes[ni]["id"];
+                    if all_claim_ids_str.indexOf(cid + ",") == -1 {
+                        all_claim_ids_str += cid + ",";
                     }
                 }
+                ni = ni + 1;
+            }
 
-                outline += NL;
-                i += 1;
+            if len(all_claim_ids_str) > 0 {
+                out += "SUPPORTING CLAIMS:" + NL + NL;
+                claim_parts = all_claim_ids_str.split(",");
+                ci = 0;
+                seen_claims = "";
+                while ci < len(claim_parts) {
+                    cid = str(claim_parts[ci]);
+                    if cid and cid in node_map and seen_claims.indexOf(cid + ",") == -1 {
+                        seen_claims += cid + ",";
+                        out += format_node_block(cid, "", f"{ci + 1}. ");
+                        sub_ids = get_supporters_of_type(cid, "CLAIM");
+                        if len(sub_ids) > 0 {
+                            out += "   Sub-Claims:" + NL;
+                            sub_parts = sub_ids.split(",");
+                            si = 0;
+                            while si < len(sub_parts) {
+                                sp = str(sub_parts[si]);
+                                if sp and sp in node_map {
+                                    out += format_node_block(sp, "   ", f"{chr(97 + si)}. ");
+                                }
+                                si = si + 1;
+                            }
+                        }
+                        out += NL;
+                    }
+                    ci = ci + 1;
+                }
+            }
+
+            thesis_counter_ids = get_contradictors_of_type(thesis_id, "COUNTERARGUMENT");
+            if len(thesis_counter_ids) > 0 {
+                out += "COUNTERARGUMENTS TO THESIS:" + NL + NL;
+                parts = thesis_counter_ids.split(",");
+                pi = 0;
+                while pi < len(parts) {
+                    part = str(parts[pi]);
+                    if part and part in node_map {
+                        out += "  [X] " + node_map[part]["content"] + NL;
+                        resp_claim_ids = get_addressers_of_type(part, "CLAIM");
+                        resp_ev_ids = get_addressers_of_type(part, "EVIDENCE");
+                        resp_ids = resp_claim_ids + resp_ev_ids;
+                        resp_parts = resp_ids.split(",");
+                        ri = 0;
+                        while ri < len(resp_parts) {
+                            rp = str(resp_parts[ri]);
+                            if rp and rp in node_map {
+                                out += "    -> Response: " + node_map[rp]["content"] + NL;
+                            }
+                            ri = ri + 1;
+                        }
+                        out += NL;
+                    }
+                    pi = pi + 1;
+                }
             }
         }
 
-        outline += "==================================================" + NL;
-        outline += "Reasoning Score: " + str(currentScore["overall"]) + "/100" + NL;
+        out += "==================================================" + NL;
+        if currentScore {
+            overall = currentScore["overall"] if "overall" in currentScore else 0;
+            support = currentScore["support"] if "support" in currentScore else 0;
+            premise = currentScore["premise"] if "premise" in currentScore else 0;
+            coherence = currentScore["coherence"] if "coherence" in currentScore else 0;
+            counter = currentScore["counterargument"] if "counterargument" in currentScore else 0;
+            out += f"Overall Score:              {overall}/100" + NL;
+            out += f"Support Quality (30%):      {support}%" + NL;
+            out += f"Logical Soundness (25%):    {premise}%" + NL;
+            out += f"Coherence (20%):            {coherence}%" + NL;
+            out += f"Counterarg. Handling (25%): {counter}%" + NL;
+        }
 
-        return outline;
+        return out;
     }
 
     def handleCopyOutline() -> None {
         show_flags = currentScore["overall"] < 75;
         outline_text = generateOutlineText(show_flags);
-
         navigator.clipboard.writeText(outline_text)
             .then(lambda _: any -> None {
                 copyStatus = "success";
@@ -130,28 +329,17 @@ def:pub ExportScreen(props: any) -> JsxElement {
     def handleExportPDF() -> None {
         show_flags = currentScore["overall"] < 75;
         outline = generateOutlineText(show_flags);
-
-        # Reflect.construct is required because JAC bans the `new` keyword.
-        # jsPDF() with no args defaults to portrait, mm units, A4 page size.
         doc = Reflect.construct(jsPDF, []);
-
-        # jsPDF.splitTextToSize wraps long lines to fit within the page width.
-        # A4 usable width is ~190mm (210mm - 10mm margin each side).
         margin = 10;
         page_width = doc.internal.pageSize.getWidth();
         usable_width = page_width - (margin * 2);
-
         doc.setFont("courier", "normal");
         doc.setFontSize(10);
-
         y = margin;
         line_height = 5;
-
         for raw_line in outline.split(chr(10)) {
-            # Wrap the line if it's too wide, then write each wrapped segment.
             wrapped = doc.splitTextToSize(raw_line, usable_width);
             for segment in wrapped {
-                # Add a new page if we've run out of vertical space.
                 if y + line_height > doc.internal.pageSize.getHeight() - margin {
                     doc.addPage();
                     y = margin;
@@ -160,7 +348,6 @@ def:pub ExportScreen(props: any) -> JsxElement {
                 y += line_height;
             }
         }
-
         doc.save("argument-outline.pdf");
         copyStatus = "pdf-success";
         setTimeout(lambda -> None { copyStatus = ""; }, 3000);
@@ -168,18 +355,14 @@ def:pub ExportScreen(props: any) -> JsxElement {
 
     def handleFixTopIssues() -> None {
         if not currentGraph { return; }
-        navigate("review", {
-            "graphId": currentGraph["id"] if "id" in currentGraph else ""
-        });
+        nav("/review", {"state": {"graphId": currentGraph["id"] if "id" in currentGraph else ""}});
     }
 
     async def handleSaveSession() -> None {
-        if not userId or not isLoggedIn or saved {
-            return;
-        }
+        if not ctx.userId or not ctx.isLoggedIn or saved { return; }
         graphId = currentGraph["id"] if currentGraph and "id" in currentGraph else "";
         await root spawn CreateSession(
-            userId=userId,
+            userId=ctx.userId,
             graphId=graphId,
             notes="",
             score=currentScore
@@ -191,31 +374,23 @@ def:pub ExportScreen(props: any) -> JsxElement {
         return (
             <div className="export-loading">
                 <p>No data available. Please generate an argument map first.</p>
-                <Button label="Go to Generate" onClick={lambda -> None { navigate("generate"); }} />
+                <Button label="Go to Generate" onClick={lambda -> None { nav("/generate"); }} />
             </div>
         );
     }
-
 
     show_warning = currentScore["overall"] < 75;
     unsupported_claims = currentScore["unsupportedClaims"] if "unsupportedClaims" in currentScore else 0;
     fix_count = unsupported_claims;
     if fix_count > 3 { fix_count = 3; }
-    if fix_count < 1 {
-        fix_count = min(3, len(currentIssues));
-    }
+    if fix_count < 1 { fix_count = min(3, len(currentIssues)); }
     if fix_count < 1 { fix_count = 1; }
 
-    outline_lines = [];
-    i = 0;
-    for line in generateOutlineText(show_warning).split(chr(10)) {
-        outline_lines.append(<div key={str(i)}>{line}</div>);
-        i += 1;
-    }
+    outline_text = generateOutlineText(show_warning);
 
     return (
         <div className="export-page">
-            <Header navigate={navigate} screen="export" title="Export" backTo="review" />
+            <Header screen="export" title="Export" backTo="/review" />
 
             {(
                 <Alert className="export-alert-success">
@@ -275,9 +450,9 @@ def:pub ExportScreen(props: any) -> JsxElement {
                 )}
 
                 <Card title="Outline Preview">
-                    <div className="export-preview">
-                        {outline_lines}
-                    </div>
+                    <pre className="export-preview">
+                        {outline_text}
+                    </pre>
                 </Card>
 
                 <Card title="Export Options">
@@ -289,9 +464,9 @@ def:pub ExportScreen(props: any) -> JsxElement {
                         {<Button
                             label={(<><FileText className="export-btn-icon-sm" />{("Saved!" if saved else "Save to History")}</>)}
                             onClick={handleSaveSession}
-                            disabled={saved or not userId}
+                            disabled={saved or not ctx.userId}
                             className="export-save-btn"
-                        /> if isLoggedIn else None}
+                        /> if ctx.isLoggedIn else None}
                     </div>
                 </Card>
             </div>

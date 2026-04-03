@@ -1,14 +1,17 @@
 """Welcome Screen"""
 
-import from "@jac/runtime" { jacSignup, jacLogin }
+import from "@jac/runtime" { jacSignup, jacLogin, useNavigate }
+import from react { useContext }
 import from "lucide-react" { Brain, Lightbulb, TrendingUp }
-
+import from ..screens.AppContext { getAppContext }
 import from ..components.Button { Button }
 import from ..components.Card { Card }
 import from ..components.Tabs { Tabs, TabsContent, TabsList, TabsTrigger }
 
 def:pub WelcomeScreen(props: any) -> JsxElement {
-    navigate = props.navigate;
+    nav = useNavigate();
+    _AppCtx = getAppContext();
+    ctx = useContext(_AppCtx);
 
     has isSignup: bool = False,
         name: str = "",
@@ -79,7 +82,8 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
         email = "";
         password = "";
         name = "";
-        navigate("generate", {"userId": userId, "userEmail": saved_email});
+        ctx.setAuth(userId, saved_email, False);
+        nav("/generate");
     }
 
     async def handleLogin() -> None {
@@ -94,15 +98,25 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
             return;
         }
 
-        loading = False;
         saved_email = email;
         email = "";
         password = "";
-        navigate("generate", {"userEmail": saved_email});
+
+        try {
+            result = await root spawn GetUserByEmail(email=saved_email);
+            user_data = result["reports"][0] if result["reports"] else {};
+            if user_data and "id" in user_data {
+                is_dark = "theme" in user_data and user_data["theme"] == "dark";
+                ctx.setAuth(user_data["id"], saved_email, is_dark);
+            }
+        } except Exception {}
+
+        loading = False;
+        nav("/generate");
     }
 
     async def handleContinueAsGuest() -> None {
-        navigate("generate", {"isGuest": True});
+        nav("/generate");
     }
 
     def handleTabChange(v: str) -> None {

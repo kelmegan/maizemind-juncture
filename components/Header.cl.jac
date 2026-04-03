@@ -1,11 +1,17 @@
 """MaizeMind - Shared app header component."""
 
+import from "@jac/runtime" { jacLogout, useNavigate, useLocation }
+import from react { useContext }
 import from "lucide-react" { ArrowLeft, User, LogOut, Download }
-
+import from ..screens.AppContext { getAppContext }
 import from ..components.Button { Button }
 
 def:pub Header(props: any) -> JsxElement {
-    navigate = props.navigate;
+    nav = useNavigate();
+    location = useLocation();
+    _AppCtx = getAppContext();
+    ctx = useContext(_AppCtx);
+
     screen = props.screen if props.screen else "generate";
     title = props.title if props.title else None;
     backTo = props.backTo if props.backTo else None;
@@ -13,33 +19,40 @@ def:pub Header(props: any) -> JsxElement {
     isGuest = props.isGuest if props.isGuest else None;
     onLogout = props.onLogout if props.onLogout else None;
 
-
     def handleLogoClick() -> None {
-        navigate("generate");
+        nav("/generate");
     }
 
     def handleBack() -> None {
         if onBack {
             onBack();
         } else {
-            navigate(backTo);
+            nav(backTo);
         }
     }
 
     def handleProfile() -> None {
-        navigate("profile", {"from": screen});
+        nav("/profile", {"state": {"from": location.pathname}});
     }
 
     def handleLogout() -> None {
         if onLogout {
             onLogout();
         } else {
-            navigate("welcome");
+            try { jacLogout(); } except Exception as e { print(f"Logout error: {e}"); }
+            ctx.logout();
+            nav("/");
         }
     }
 
+    onExport = props.onExport if props.onExport else None;
+
     def handleExport() -> None {
-        navigate("export");
+        if onExport {
+            onExport();
+        } else {
+            nav("/export", {"state": {"graphId": ctx.cachedGraphId}});
+        }
     }
 
     show_back = backTo != None or onBack != None;

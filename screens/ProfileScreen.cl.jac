@@ -1,8 +1,9 @@
 """MaizeMind - Profile Screen for user settings, history, and statistics."""
 
+import from "@jac/runtime" { jacLogout, useNavigate, useLocation }
+import from react { useContext }
 import from "lucide-react" { User, UserPlus, LogIn, History, Target, TrendingUp, Award, Settings, X }
-import from "@jac/runtime" { jacLogout }
-
+import from ..screens.AppContext { getAppContext }
 import from ..components.Badge { Badge }
 import from ..components.Button { Button }
 import from ..components.Card { Card }
@@ -11,13 +12,13 @@ import from ..components.Tabs { Tabs, TabsContent, TabsList, TabsTrigger }
 import from ..components.Header { Header }
 
 def:pub ProfileScreen(props: any) -> JsxElement {
-    navigate = props.navigate;
-    screen_data = props.screenData if props.screenData else {};
-    back_to = screen_data["from"] if "from" in screen_data else "generate";
-    toggleTheme = props.toggleTheme if props.toggleTheme else None;
-    isDark = props.isDark if props.isDark else False;
-    isLoggedIn = props.isLoggedIn if props.isLoggedIn else False;
-    props_email = props.userEmail if props.userEmail else "";
+    nav = useNavigate();
+    location = useLocation();
+    _AppCtx = getAppContext();
+    ctx = useContext(_AppCtx);
+
+    loc_state = location.state if location.state else {};
+    back_to = loc_state["from"] if "from" in loc_state else "/generate";
 
     has userId: str = "",
         isGuest: bool = False,
@@ -37,14 +38,14 @@ def:pub ProfileScreen(props: any) -> JsxElement {
         local_userId = "";
         local_stats = None;
 
-        if not isLoggedIn or not props_email {
+        if not ctx.isLoggedIn or not ctx.userEmail {
             isGuest = True;
             loading = False;
             return;
         }
 
         try {
-            result = await root spawn GetUserByEmail(email=props_email);
+            result = await root spawn GetUserByEmail(email=ctx.userEmail);
             data = result["reports"][0] if result["reports"] else {};
 
             if not data or "id" not in data {
@@ -133,9 +134,7 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                 print(f"GetSessionGraph error: {data['error']}");
                 return;
             }
-            navigate("review", {
-                "graphId": data["graphId"]
-            });
+            nav("/review", {"state": {"graphId": data["graphId"]}});
         } except Exception as e {
             print(f"Error opening session: {e}");
         }
@@ -147,7 +146,8 @@ def:pub ProfileScreen(props: any) -> JsxElement {
         } except Exception as e {
             print(f"Logout error: {e}");
         }
-        navigate("welcome");
+        ctx.logout();
+        nav("/");
     }
 
     def toggleGoal(goal: str) -> None {
@@ -159,7 +159,7 @@ def:pub ProfileScreen(props: any) -> JsxElement {
     }
 
     def navigateToGenerate() -> None {
-        navigate("generate");
+        nav("/generate");
     }
 
     def handleTabChange(v: str) -> None {
@@ -200,7 +200,7 @@ def:pub ProfileScreen(props: any) -> JsxElement {
     if isGuest {
         return (
             <div className="profile-page">
-                <Header navigate={navigate} screen="profile" title="Profile" backTo={back_to} isGuest={isGuest} onLogout={handleLogout}/>
+                <Header screen="profile" title="Profile" backTo={back_to} isGuest={isGuest} onLogout={handleLogout}/>
                 <div className="guest-wall-outer">
                     <div className="guest-wall-card">
                         <div className="guest-wall-icon-ring">
@@ -214,13 +214,13 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                         <div className="guest-wall-actions">
                             <Button
                                 label={(<><UserPlus className="guest-wall-btn-icon" />Create Account</>)}
-                                onClick={lambda -> None { navigate("welcome"); }}
+                                onClick={lambda -> None { nav("/"); }}
                                 className="guest-wall-signup-btn"
                             />
                             <Button
                                 label={(<><LogIn className="guest-wall-btn-icon" />Sign In</>)}
                                 variant="outline"
-                                onClick={lambda -> None { navigate("welcome"); }}
+                                onClick={lambda -> None { nav("/"); }}
                                 className="guest-wall-login-btn"
                             />
                         </div>
@@ -258,7 +258,7 @@ def:pub ProfileScreen(props: any) -> JsxElement {
 
     return (
         <div className="profile-page">
-            <Header navigate={navigate} screen="profile" title="Profile" backTo={back_to} isGuest={isGuest} onLogout={handleLogout}/>
+            <Header screen="profile" title="Profile" backTo={back_to} isGuest={isGuest} onLogout={handleLogout}/>
 
             <div className="profile-content">
                 <Tabs value={activeTab} onValueChange={handleTabChange} className="profile-tabs">
@@ -348,10 +348,10 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                                             <p className="profile-pref-description">Toggle color scheme</p>
                                         </div>
                                         <Switch
-                                            checked={isDark}
+                                            checked={ctx.isDark}
                                             onCheckedChange={lambda v: bool -> None {
-                                                new_theme = "light" if isDark else "dark";
-                                                if toggleTheme { toggleTheme(); }
+                                                new_theme = "light" if ctx.isDark else "dark";
+                                                ctx.toggleTheme();
                                                 handleSaveTheme(new_theme);
                                             }}
                                         />
@@ -362,7 +362,13 @@ def:pub ProfileScreen(props: any) -> JsxElement {
                                             <label className="profile-label">Accessibility Mode</label>
                                             <p className="profile-pref-description">Enhanced contrast and larger text</p>
                                         </div>
-                                        <Switch checked={accessibilityMode} onCheckedChange={handleAccessibilityChange} />
+                                        <Switch
+                                            checked={ctx.accessibilityMode}
+                                            onCheckedChange={lambda v: bool -> None {
+                                                ctx.toggleAccessibility();
+                                                handleAccessibilityChange(v);
+                                            }}
+                                        />
                                     </div>
                                 </div>
                             </Card>

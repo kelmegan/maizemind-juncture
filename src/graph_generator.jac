@@ -138,17 +138,23 @@ def:pub clarify_node_content(
 ) -> str
 by llm(temperature=0.3);
 
-"""Extract Wikipedia search keywords for THIS SPECIFIC NODE — not the general thesis topic.
-Focus on the unique subject matter of the node_text. The thesis is background context only.
-Return ONLY a short search phrase (2-6 words) for the most relevant Wikipedia article about THIS node's specific topic.
-CRITICAL: Each node should get a DIFFERENT, SPECIFIC article. Do NOT return the same generic topic for every node.
+"""Extract Wikipedia search keywords for THIS SPECIFIC NODE's subject matter.
+The thesis provides background context ONLY — do NOT search for the thesis topic itself.
+Return ONLY a short search phrase (2-6 words) for the most relevant Wikipedia article about the CONCEPT, THEORY, or CLAIM in this node.
+CRITICAL RULES:
+- Focus on the ACADEMIC CONCEPT or FACTUAL CLAIM in node_text, not people's names unless the person IS the topic
+- If node mentions a theory (e.g. "primitive normativity"), search for THAT THEORY
+- If node mentions a psychological/scientific concept, search for THAT CONCEPT
+- Each node should get a DIFFERENT, SPECIFIC article
+- Stay on-topic: the search phrase must be directly relevant to what the node is actually about
 Examples:
+- Node: "Ginsburg's primitive normativity idea" + Thesis about babies → "primitive normativity infant cognition"
+- Node: "Piaget's stages of cognitive development" + Any thesis → "Piaget cognitive development stages"
 - Node: "I saw the ice wall" + Thesis: "The earth is flat" → "flat Earth ice wall Antarctica"
 - Node: "NASA faked space imagery" + Thesis: "The earth is flat" → "NASA conspiracy theories"
-- Node: "The Bedford Level experiment showed water is flat" + Thesis: "The earth is flat" → "Bedford Level experiment"
-- Node: "Ships disappear bottom-first over the horizon" + Thesis: "The earth is round" → "horizon ship hull down effect"
-- Node: "Gravity pulls objects toward center of mass" + Thesis: "The earth is round" → "gravity spherical Earth"
-- Node: "Vaccines cause autism" + Thesis: "Vaccines are dangerous" → "MMR vaccine autism controversy"
+- Node: "The Bedford Level experiment showed water is flat" → "Bedford Level experiment"
+- Node: "Ships disappear bottom-first over the horizon" → "horizon ship hull down effect"
+- Node: "Vaccines cause autism" → "MMR vaccine autism controversy"
 Do NOT return JSON. Return ONLY the search phrase, nothing else."""
 def:pub extract_search_keywords(
     node_text: str,
