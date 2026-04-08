@@ -65,19 +65,25 @@ obj GraphSummary {
 # Optimized: 2 lean LLM calls with minimal output
 # ============================================================
 
-"""You MUST extract a complete argument graph from the user's notes. Return ONLY valid JSON, no explanation.
-Format: {"nodes":[{"id":"n1","kind":"thesis|claim|evidence|counterarg","text":"...","evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["Does X hold in this context?"]},...],
-"edges":[{"from_id":"n2","to_id":"n1","kind":"supports|contradicts|addresses","reasoning_type":"deductive|inductive|causal|correlational|analogical","weight":0.8},...]}
+"""Extract a compact argument graph from the user's notes. Return ONLY valid JSON, with no explanation.
+Format: {"nodes":[{"id":"n1","kind":"thesis|claim|evidence|counterarg","text":"...","evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["Short question only if clearly necessary"]},...],
+"edges":[{"from_id":"n2","to_id":"n1","kind":"supports|contradicts|addresses"},...]}
 STRICT RULES:
-1. EXACTLY 1 thesis node. Identify the user's main argument.
-2. Extract ALL claims and evidence from the notes — do NOT skip or summarize. Create a node for every distinct point.
-3. Max 8 nodes. If more than 8 points exist, keep the strongest.
-4. Every claim MUST connect to the thesis or another claim via edges. Every evidence MUST connect to what it supports.
-5. Discard meta-commentary ('I won't change my mind', 'this is my essay') — only real claims/evidence become nodes.
-6. evidence_category is REQUIRED for evidence nodes. empirical_data=published studies ONLY. Personal observations=anecdotal.
-7. assumptions: list as questions (e.g. 'Does this sample size generalize?').
-8. Edge weight 0.0-1.0 based on how strongly the source supports/contradicts the target.
-You MUST return valid JSON. Do NOT wrap in markdown fences."""
+1. EXACTLY 1 thesis node.
+2. Prefer 4-6 total nodes. Keep only the strongest claims, evidence, and counterarguments.
+3. SUPPORTS direction must go from supporting node -> supported node.
+   - evidence -> claim
+   - claim -> thesis or broader claim
+4. CONTRADICTS direction must go from counterargument -> claim or thesis.
+5. ADDRESSES direction must go from response/rebuttal -> counterargument.
+6. The thesis should almost never be the source of a SUPPORTS edge.
+7. Every evidence node must support a claim. Every major claim should connect to the thesis or another claim.
+8. Discard meta-commentary. Keep node text under 22 words when possible.
+9. Include evidence_category ONLY for evidence nodes.
+10. Include assumptions ONLY when a hidden assumption is obvious. Max 1 short question per node.
+11. Omit optional fields when empty. Do not include extra fields.
+12. If unsure about an edge, omit it rather than reversing it.
+Return valid JSON only. No markdown fences."""
 def parse_notes_and_edges(
     notes: str,
     documents: list[Document]
@@ -121,24 +127,14 @@ def:pub clarify_node_content(
 ) -> str
 by llm(temperature=0.3);
 
-"""Extract Wikipedia search keywords for THIS SPECIFIC NODE's subject matter.
-The thesis provides background context ONLY — do NOT search for the thesis topic itself.
-Return ONLY a short search phrase (2-6 words) for the most relevant Wikipedia article about the CONCEPT, THEORY, or CLAIM in this node.
-CRITICAL RULES:
-- Focus on the ACADEMIC CONCEPT or FACTUAL CLAIM in node_text, not people's names unless the person IS the topic
-- If node mentions a theory (e.g. "primitive normativity"), search for THAT THEORY
-- If node mentions a psychological/scientific concept, search for THAT CONCEPT
-- Each node should get a DIFFERENT, SPECIFIC article
-- Stay on-topic: the search phrase must be directly relevant to what the node is actually about
-Examples:
-- Node: "Ginsburg's primitive normativity idea" + Thesis about babies → "primitive normativity infant cognition"
-- Node: "Piaget's stages of cognitive development" + Any thesis → "Piaget cognitive development stages"
-- Node: "I saw the ice wall" + Thesis: "The earth is flat" → "flat Earth ice wall Antarctica"
-- Node: "NASA faked space imagery" + Thesis: "The earth is flat" → "NASA conspiracy theories"
-- Node: "The Bedford Level experiment showed water is flat" → "Bedford Level experiment"
-- Node: "Ships disappear bottom-first over the horizon" → "horizon ship hull down effect"
-- Node: "Vaccines cause autism" → "MMR vaccine autism controversy"
-Do NOT return JSON. Return ONLY the search phrase, nothing else."""
+"""Return one short Wikipedia search phrase (2-6 words) for the concept or factual claim in this node.
+Use the thesis only as background context, not as the search topic.
+Rules:
+1. Focus on the specific concept, experiment, effect, theory, or controversy in node_text.
+2. Prefer the core topic over broad thesis words.
+3. Use a person's name only when the person is the best article target.
+4. Keep it specific enough that different nodes would usually produce different searches.
+Return only the search phrase. No JSON, no explanation."""
 def:pub extract_search_keywords(
     node_text: str,
     node_type: str,
@@ -156,22 +152,16 @@ def:pub pick_best_wiki_result(
 ) -> str
 by llm(temperature=0.0);
 
-"""Given a claim in an argument, generate 2-3 sub-claims or supporting evidence points that break it down.
+"""Break this node into 2-3 plausible supporting branches.
 Return JSON: {"branches":[{"content":"<sub-claim or evidence text, max 25 words>","type":"claim|evidence","confidence":0.3}]}
 Rules:
-- Each branch should be a distinct talking point people actually use in this debate.
-- Be specific, not generic. Max 3 branches.
-- TYPE RULES (critical):
-  - "evidence" = measurable observations, published data, specific experiments, direct quotes from sources
-  - "claim" = assertions, theories, accusations, conspiracy theories, opinions, interpretations
-  - If it's an ACCUSATION or ALLEGATION (e.g. "X faked Y", "X conspired to Z"), it is ALWAYS a "claim", never "evidence"
-  - When in doubt, use "claim" — only use "evidence" for concrete, verifiable facts
-- confidence: 0.0-1.0 = how factually defensible is this point? Be HONEST.
-  - Conspiracy theories, unfounded claims = 0.1-0.2
-  - Common misconceptions with some basis = 0.2-0.4
-  - Debatable but reasonable positions = 0.4-0.7
-  - Well-established facts with evidence = 0.7-0.9
-- The goal is to map out what people argue, while honestly scoring quality."""
+1. Max 3 branches.
+2. Each branch should be a distinct talking point someone might actually use.
+3. Use "evidence" only for concrete observations, studies, experiments, or direct source-backed facts.
+4. Use "claim" for assertions, interpretations, accusations, allegations, or theories.
+5. When unsure, use "claim".
+6. confidence should reflect factual defensibility: low for speculation, higher for well-supported facts.
+Return valid JSON only."""
 def:pub expand_branch(
     node_text: str,
     node_type: str,
