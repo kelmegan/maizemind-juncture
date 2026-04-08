@@ -84,12 +84,22 @@ def parse_notes_and_edges(
 ) -> str
 by llm(temperature=0.2);
 
-"""Given argument graph nodes and edges as JSON, return:
-{"top_issues":["issue1","issue2","issue3"],
-"strength_nodes":["n1"],
-"improvement_nodes":["n3","n4"],
-"counterarguments":[{"target_node":"n2","text":"A specific counterargument","severity":"high|medium|low"}]}
-List the 3 most critical weaknesses. Suggest 1-3 specific counterarguments someone could raise against the weakest claims. Be brief."""
+"""Rewrite compact graph diagnostics into brief critique JSON.
+Input 1 is nodes_json: [{"id":"n1","kind":"claim","text":"..."}, ...]
+Input 2 is issue_hints_json: [{"node_id":"n2","type":"unsupported_claim|orphan_node","severity":"high|medium","explanation":"..."}, ...]
+Input 3 is graph_meta_json: {"claim_ids":["n1","n2"],"counterarg_ids":["n7"],"strength_nodes":["n3"]}
+Return:
+{"top_issues":["[n2] Unsupported claim: no direct support yet", "..."],
+"strength_nodes":["n3"],
+"improvement_nodes":["n2","n4"],
+"counterarguments":[{"target_node":"n2","text":"A short specific counterargument","severity":"high|medium|low"}]}
+Rules:
+- Prefer the provided issue_hints over inventing new issues.
+- top_issues should describe weaknesses, not just repeat node text.
+- Keep top_issues to 3 items max.
+- improvement_nodes should be node ids that most need revision.
+- counterarguments should target weak claims or the thesis only, max 2.
+- Return valid JSON only."""
 def analyze_and_summarize_llm(
     all_nodes_json: str,
     all_edges_json: str,
@@ -348,6 +358,51 @@ def safe_parse_json(raw: object) -> list {
     } except Exception {
         return [];
     }
+}
+
+"Count incoming edges by label for a node."
+def incoming_count(edges: list[GraphEdge], node_id: str, label: str) -> int {
+    count = 0;
+    for e in edges {
+        if e.to_id == node_id and e.label == label {
+            count = count + 1;
+        }
+    }
+    return count;
+}
+
+"Check whether a node participates in any edge."
+def has_any_connection(edges: list[GraphEdge], node_id: str) -> bool {
+    for e in edges {
+        if e.from_id == node_id or e.to_id == node_id {
+            return True;
+        }
+    }
+    return False;
+}
+
+"Minimal rule-based hints to guide critique generation."
+def build_issue_hints(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[dict[str, object]] {
+    hints: list[dict[str, object]] = [];
+    for n in nodes {
+        if n.label in ["thesis", "claim"] and incoming_count(edges, n.id, "supports") == 0 {
+            hints.append({
+                "node_id": n.id,
+                "type": "unsupported_claim",
+                "severity": "high" if n.label == "thesis" else "medium",
+                "explanation": "This point has no direct support yet."
+            });
+        }
+        if n.label != "thesis" and not has_any_connection(edges, n.id) {
+            hints.append({
+                "node_id": n.id,
+                "type": "orphan_node",
+                "severity": "medium",
+                "explanation": "This node is disconnected from the rest of the graph."
+            });
+        }
+    }
+    return hints;
 }
 
 "Convert a raw dict from LLM into a GraphNode."
@@ -739,19 +794,19 @@ def generate_argument_graph(
     new_edges = normalize_edges(new_edges);
     all_edges = existing_edges + new_edges;
 
-    # Build JSON representations for next call
+    # Build JSON representations for critique call
     nj = json.dumps([{"id": n.id, "kind": n.label, "text": n.text, "parent_id": n.parent_id} for n in all_nodes]);
-    ej = json.dumps([{"from_id": e.from_id, "to_id": e.to_id, "kind": e.label, "weight": e.weight} for e in all_edges]);
+    issue_hints = build_issue_hints(all_nodes, all_edges);
+    graph_meta = {
+        "claim_ids": [n.id for n in all_nodes if n.label in ["claim", "thesis"]],
+        "counterarg_ids": [n.id for n in all_nodes if n.label == "counterarg"],
+        "strength_nodes": [n.id for n in all_nodes if n.label == "evidence"]
+    };
 
     # Step 2: Brief analysis + summary (single LLM call)
     t1 = time.time();
     print(f"  [Step 2/3] Analyzing graph and generating summary...");
-    doc_list: list[dict[str, str]] = [];
-    for doc in documents {
-        doc_list.append({"title": doc.title, "content": doc.content});
-    }
-
-    raw_result = analyze_and_summarize_llm(nj, ej, json.dumps(doc_list));
+    raw_result = analyze_and_summarize_llm(nj, json.dumps(issue_hints), json.dumps(graph_meta));
     print(f"  [Step 2/3] Done in {time.time() - t1:.1f}s");
     parsed_result = safe_parse_json(raw_result);
 
