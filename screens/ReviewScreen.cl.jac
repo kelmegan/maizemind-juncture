@@ -210,7 +210,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         investigateLoading = False;
     }
 
-    async def handlePickInvestigateResult(resultIndex: int) -> None {
+    async def handlePickInvestigateResult(resultIndex: int, pickedTitle: str, pickedUrl: str) -> None {
         if not selectedNode or not currentGraph { return; }
         isSaving = True;
         _pirGraphId = currentGraph["id"] if "id" in currentGraph else "";
@@ -219,7 +219,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         try {
             mutResult = await root spawn InvestigateNode(
                 graphId=_pirGraphId, nodeId=_pirNodeId,
-                selectedResultIndex=resultIndex, addAsEvidence=True
+                selectedResultIndex=resultIndex, addAsEvidence=True,
+                selectedTitle=pickedTitle, selectedUrl=pickedUrl
             );
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
             if "graph" in mutData { currentGraph = mutData["graph"]; }
@@ -245,8 +246,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         pushUpdate();
     }
 
-    def makePickResultHandler(idx: int) -> any {
-        return lambda -> None { handlePickInvestigateResult(idx); };
+    def makePickResultHandler(idx: int, title: str, url: str) -> any {
+        return lambda -> None { handlePickInvestigateResult(idx, title, url); };
     }
 
     def handleInvestigateAssumption(assumption: str) -> None {
@@ -820,7 +821,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _ir_title = _ir["title"] if "title" in _ir else "";
         _ir_summary = _ir["summary"] if "summary" in _ir else "";
         _ir_url = _ir["url"] if "url" in _ir else "";
-        _ir_pick_fn = makePickResultHandler(_iri);
+        _ir_pick_fn = makePickResultHandler(_iri, _ir_title, _ir_url);
         investigateResultElements.append(
             <div key={f"inv_{str(_iri)}"} className="rs-investigate-card">
                 <div className="rs-investigate-title">{_ir_title}</div>

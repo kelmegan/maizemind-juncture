@@ -30,7 +30,7 @@ walker:pub AddEvidenceToNode {
             return;
         }
 
-        evidence_id = f"node_evidence_{int(time.time())}";
+        evidence_id = f"node_evidence_{time.time_ns()}";
 
         # Capitalize first letter of evidence content
         ev_content = self.evidenceContent.strip();
@@ -38,6 +38,20 @@ walker:pub AddEvidenceToNode {
             ev_content = ev_content[0].upper() + ev_content[1:];
         } elif len(ev_content) == 1 {
             ev_content = ev_content[0].upper();
+        }
+
+        # Dedup: reject if an EVIDENCE child with matching content already supports target
+        for _dup_edge in graph_node.edges {
+            if _dup_edge.get("target") == self.nodeId and _dup_edge.get("type") == "SUPPORTS" {
+                for _dup_n in graph_node.nodes {
+                    if _dup_n["id"] == _dup_edge.get("source") and _dup_n.get("type") == "EVIDENCE" {
+                        if _dup_n.get("content", "") == ev_content {
+                            report {"error": "This evidence is already attached to the node.", "duplicate": True};
+                            return;
+                        }
+                    }
+                }
+            }
         }
 
         # Fast keyword-based categorization (no LLM call = instant)
@@ -424,7 +438,7 @@ walker:pub AddCounterargumentNode {
             return;
         }
 
-        counter_id = f"node_counter_{int(time.time())}";
+        counter_id = f"node_counter_{time.time_ns()}";
 
         # Capitalize first letter of counterargument content
         ca_content = self.counterargContent.strip();
@@ -524,7 +538,7 @@ walker:pub AddAddressEdge {
             return;
         }
 
-        evidence_id = f"node_address_{int(time.time())}";
+        evidence_id = f"node_address_{time.time_ns()}";
 
         # Compute position between the defended node and counterarg
         defend_x = 0.0;
@@ -896,7 +910,7 @@ walker:pub GenerateCounter {
             ca_text = ca_text[0].upper();
         }
 
-        counter_id = f"node_counter_{int(time.time())}";
+        counter_id = f"node_counter_{time.time_ns()}";
 
         # Position to the right of target
         target_pos_x = 0.0;
@@ -1095,7 +1109,9 @@ walker:pub InvestigateNode {
     has graphId: str,
         nodeId: str,
         addAsEvidence: bool = False,
-        selectedResultIndex: int = -1;
+        selectedResultIndex: int = -1,
+        selectedTitle: str = "",
+        selectedUrl: str = "";
 
     can run with Root entry {
         try {
@@ -1137,6 +1153,159 @@ walker:pub InvestigateNode {
                 thesis_text = n.get("content", "");
                 break;
             }
+        }
+
+        # Phase 2 fast path: if client passed selectedTitle, skip search entirely
+        if self.selectedResultIndex >= 0 and self.selectedTitle {
+            article_title_direct = self.selectedTitle;
+            print(f"  User picked (direct): '{article_title_direct}'");
+
+            encoded_title_d = urllib.parse.quote(article_title_direct);
+            extract_url_d = f"https://en.wikipedia.org/w/api.php?action=query&titles={encoded_title_d}&prop=extracts&exintro=1&explaintext=1&format=json";
+            extract_req_d = urllib.request.Request(extract_url_d, headers={"User-Agent": "MaizeMind/1.0"});
+            extract_resp_d = urllib.request.urlopen(extract_req_d, timeout=10);
+            extract_data_d = json.loads(extract_resp_d.read().decode("utf-8"));
+
+            pages_d = extract_data_d.get("query", {}).get("pages", {});
+            summary_d = "";
+            for page_id_d in pages_d {
+                summary_d = pages_d[page_id_d].get("extract", "");
+                break;
+            }
+
+            if len(summary_d) > 500 {
+                cut_d = summary_d[:500];
+                last_period_d = cut_d.rfind(".");
+                if last_period_d > 200 {
+                    summary_d = cut_d[:last_period_d + 1];
+                } else {
+                    summary_d = cut_d + "...";
+                }
+            }
+
+            if self.selectedUrl {
+                source_url_d = self.selectedUrl;
+            } else {
+                wiki_title_d = article_title_direct.replace(" ", "_");
+                source_url_d = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(wiki_title_d)}";
+            }
+
+            updated_node_d = {
+                "id": target_node["id"],
+                "type": target_node["type"],
+                "content": target_node.get("content", ""),
+                "position": target_node.get("position", {"x": 0, "y": 0}),
+                "confidence": target_node.get("confidence", 0.5),
+                "isWeak": target_node.get("isWeak", False),
+                "issues": target_node.get("issues", []),
+                "llmIssueTypes": target_node.get("llmIssueTypes", []),
+                "evidence_category": target_node.get("evidence_category", ""),
+                "assumptions": target_node.get("assumptions", []),
+                "nodeScore": target_node.get("nodeScore", 50),
+                "moreInfo": summary_d,
+                "sourceUrl": source_url_d,
+                "acknowledged": target_node.get("acknowledged", False)
+            };
+
+            new_nodes_d: list = [];
+            for n_d in graph_node.nodes {
+                if n_d["id"] == self.nodeId {
+                    new_nodes_d.append(updated_node_d);
+                } else {
+                    new_nodes_d.append(n_d);
+                }
+            }
+            graph_node.nodes = new_nodes_d;
+            graph_node.updatedAt = str(time.time_ns());
+
+            if self.addAsEvidence and summary_d {
+                # Dedup: skip if an EVIDENCE child with same content already SUPPORTS target
+                _existing_ev_contents: list = [];
+                for _ee in graph_node.edges {
+                    if _ee.get("target") == self.nodeId and _ee.get("type") == "SUPPORTS" {
+                        for _en in graph_node.nodes {
+                            if _en["id"] == _ee.get("source") and _en.get("type") == "EVIDENCE" {
+                                _existing_ev_contents.append(_en.get("content", ""));
+                            }
+                        }
+                    }
+                }
+
+                ev_content_d = summary_d;
+                first_dot_d = summary_d.find(".");
+                if first_dot_d > 10 and first_dot_d < 200 {
+                    ev_content_d = summary_d[:first_dot_d + 1];
+                } elif len(summary_d) > 120 {
+                    ev_content_d = summary_d[:120] + "...";
+                }
+
+                _is_dup_ev = False;
+                for _exc in _existing_ev_contents {
+                    if _exc == ev_content_d {
+                        _is_dup_ev = True;
+                        break;
+                    }
+                }
+
+                if not _is_dup_ev {
+                    ev_id_d = f"node_evidence_{time.time_ns()}";
+                    cat_result_d = categorize_evidence_fast(summary_d);
+                    ev_category_d = cat_result_d.get("evidence_category", "logical_reasoning");
+                    ev_assumptions_d: list = cat_result_d.get("assumptions", []);
+                    ev_confidence_d = cat_result_d.get("confidence", 0.6);
+                    ev_node_score_d = cat_result_d.get("nodeScore", 50);
+
+                    t_pos_d = target_node.get("position", {"x": 0, "y": 0});
+                    ev_x_d = float(t_pos_d.get("x", 0));
+                    ev_y_d = float(t_pos_d.get("y", 0)) + 130.0;
+
+                    ev_node_d = {
+                        "id": ev_id_d,
+                        "type": "EVIDENCE",
+                        "content": ev_content_d,
+                        "confidence": ev_confidence_d,
+                        "isWeak": ev_confidence_d < 0.5,
+                        "issues": [],
+                        "llmIssueTypes": [],
+                        "position": {"x": ev_x_d, "y": ev_y_d},
+                        "evidence_category": ev_category_d,
+                        "assumptions": ev_assumptions_d,
+                        "nodeScore": ev_node_score_d,
+                        "sourceUrl": source_url_d,
+                        "moreInfo": summary_d
+                    };
+                    updated_nodes_d = list(graph_node.nodes);
+                    updated_nodes_d.append(ev_node_d);
+                    graph_node.nodes = updated_nodes_d;
+                    nw_edge_d = {
+                        "id": f"edge_{ev_id_d}",
+                        "source": ev_id_d,
+                        "target": self.nodeId,
+                        "type": "SUPPORTS"
+                    };
+                    updated_edges_d = list(graph_node.edges);
+                    updated_edges_d.append(nw_edge_d);
+                    graph_node.edges = updated_edges_d;
+                    graph_node.updatedAt = str(time.time_ns());
+                    print(f"  Added evidence node {ev_id_d} from Wikipedia source");
+                } else {
+                    print(f"  Skipped duplicate evidence (already a child of target node)");
+                }
+            }
+
+            scorer_d = GetGraphWithScoring(graphId=self.graphId);
+            scored_data_d = scorer_d.score_graph(graph_node);
+
+            report {
+                "success": True,
+                "moreInfo": summary_d,
+                "sourceUrl": source_url_d,
+                "graph": scored_data_d.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
+                "score": scored_data_d.get("score", {}),
+                "issues": scored_data_d.get("issues", []),
+                "nextActions": scored_data_d.get("nextActions", [])
+            };
+            return;
         }
 
         # Use LLM to extract smart search keywords
@@ -1337,7 +1506,7 @@ walker:pub InvestigateNode {
 
         # If addAsEvidence, also create an evidence node with the Wikipedia content
         if self.addAsEvidence and summary {
-            ev_id = f"node_evidence_{int(time.time())}";
+            ev_id = f"node_evidence_{time.time_ns()}";
             cat_result = categorize_evidence_fast(summary);
             ev_category = cat_result.get("evidence_category", "logical_reasoning");
             ev_assumptions: list = cat_result.get("assumptions", []);
