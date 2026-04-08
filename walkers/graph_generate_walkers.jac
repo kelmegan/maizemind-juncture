@@ -1,7 +1,7 @@
 """Walkers for generating and scoring argument graphs."""
 
 import from graph.argument_graph_nodes { ArgumentGraph }
-import from src.graph_generator { Document, generate_argument_graph, calculate_frontend_score }
+import from src.graph_generator { Document, generate_argument_graph }
 
 walker:pub GenerateArgumentGraph {
     has notes: str,
@@ -221,7 +221,7 @@ walker:pub GenerateArgumentGraph {
     }
 
     def capitalize_text(text: str) -> str {
-        # Sentence-case the first letter of each sentence.
+        """Sentence-case: capitalize first letter of each sentence."""
         result = text;
         if len(text) > 0 {
             sentences = text.split(". ");
@@ -413,7 +413,7 @@ walker:pub GetGraphWithScoring {
     }
 
     def find_weak_nodes(nodes: list, edges: list) -> list {
-        # Find weak node IDs via evidence quality and upward propagation.
+        """Find all weak node IDs via evidence quality + upward propagation."""
         weak_ids: list[str] = [];
 
         # Evidence with low quality
@@ -502,7 +502,7 @@ walker:pub GetGraphWithScoring {
     }
 
     def has_assumption(nodes: list, edges: list, claim_id: str) -> bool {
-        # Check whether a claim is backed by evidence carrying assumption metadata.
+        """Check if a claim has assumptions — looks at supporting evidence nodes' assumptions lists."""
         for e in edges {
             if e.get("type", "") == "SUPPORTS" and e.get("target", "") == claim_id {
                 src_node = self.get_node(nodes, e.get("source", ""));
@@ -622,7 +622,163 @@ walker:pub GetGraphWithScoring {
     }
 
     def calculate_score(nodes: list, edges: list) -> dict {
-        return calculate_frontend_score(nodes, edges);
+        claims = self.get_claims(nodes);
+        total_claims = len(claims);
+        total_nodes = len(nodes);
+
+        thesis_ids = self.get_thesis_ids(nodes, edges);
+        contradictions = [e for e in edges if e.get("type", "") == "CONTRADICTS"];
+        total_contradictions = len(contradictions);
+        unresolved_contradictions = 0;
+        for ce in contradictions {
+            if self.contradiction_unresolved(nodes, edges, ce) {
+                unresolved_contradictions = unresolved_contradictions + 1;
+            }
+        }
+
+        if total_claims == 0 or total_nodes == 0 {
+            return {
+                "overall": 0,
+                "support": 0,
+                "premise": 0,
+                "coherence": 0,
+                "counterargument": 0,
+                "consistency": 0,
+                "unsupportedClaims": 0,
+                "claimsNeedingPremise": 0,
+                "unresolvedContradictions": unresolved_contradictions,
+                "weakInferenceClaims": 0,
+                "vagueClaims": 0,
+                "orphanNodes": 0,
+                "disconnectedClaims": 0,
+                "thesisSupported": False,
+                "passesBar": False
+            };
+        }
+
+        # 1) Support Quality (30%)
+        support_sum = 0.0;
+        unsupported_claims = 0;
+        thesis_supported = True;
+        if len(thesis_ids) == 0 {
+            thesis_supported = False;
+        }
+        for c in claims {
+            cid = c.get("id", "");
+            c_support = self.claim_support_score(nodes, edges, cid);
+            support_sum = support_sum + c_support;
+            if c_support < 0.10 {
+                unsupported_claims = unsupported_claims + 1;
+            }
+            if cid in thesis_ids and c_support < 0.25 {
+                thesis_supported = False;
+            }
+        }
+        support_quality = self.clamp01(support_sum / max(1, total_claims));
+
+        # 2) Logical Soundness (25%)
+        logical_penalty = 0.0;
+        claims_needing_premise = 0;
+        weak_inference_claims = 0;
+        vague_claims = 0;
+        for c in claims {
+            cid = c.get("id", "");
+            if self.has_issue_type(c, "missing_premise") and not self.has_assumption(nodes, edges, cid) {
+                claims_needing_premise = claims_needing_premise + 1;
+                logical_penalty = logical_penalty + 1.0;
+            }
+            if self.has_issue_type(c, "weak_inference") {
+                weak_inference_claims = weak_inference_claims + 1;
+                logical_penalty = logical_penalty + 0.7;
+            }
+            if self.has_issue_type(c, "vague_language") {
+                vague_claims = vague_claims + 1;
+                logical_penalty = logical_penalty + 0.4;
+            }
+        }
+        max_logical_penalty = float(max(1, total_claims)) * 1.6;
+        logical_soundness = self.clamp01(1.0 - (logical_penalty / max_logical_penalty));
+
+        # 3) Coherence (20%)
+        orphan_nodes = 0;
+        for n in nodes {
+            nid = n.get("id", "");
+            if self.node_degree(edges, nid) == 0 {
+                orphan_nodes = orphan_nodes + 1;
+            }
+        }
+
+        disconnected_claims = 0;
+        for c in claims {
+            cid = c.get("id", "");
+            if not self.claim_connected_to_thesis(nodes, edges, cid, thesis_ids) {
+                disconnected_claims = disconnected_claims + 1;
+            }
+        }
+
+        orphan_ratio = orphan_nodes / max(1, total_nodes);
+        disconnected_ratio = disconnected_claims / max(1, total_claims);
+        coherence = self.clamp01(1.0 - (0.7 * orphan_ratio + 0.3 * disconnected_ratio));
+
+        # 4) Counterargument Handling (25%)
+        counterarg_nodes = [n for n in nodes if n.get("type", "") == "COUNTERARGUMENT"];
+        counterarg_handling = 0.50;
+        if total_contradictions > 0 {
+            counterarg_handling = self.clamp01(1.0 - (unresolved_contradictions / max(1, total_contradictions)));
+        } else {
+            addressed_counter_count = 0;
+            for cn in counterarg_nodes {
+                cid = cn.get("id", "");
+                for e in edges {
+                    if e.get("type", "") == "ADDRESSES" and e.get("target", "") == cid {
+                        addressed_counter_count = addressed_counter_count + 1;
+                        break;
+                    }
+                }
+            }
+            if len(counterarg_nodes) > 0 and addressed_counter_count > 0 {
+                counterarg_handling = 0.90;
+            } elif len(counterarg_nodes) > 0 {
+                counterarg_handling = 0.75;
+            }
+        }
+
+        overall = int(100 * (
+            0.30 * support_quality +
+            0.25 * logical_soundness +
+            0.20 * coherence +
+            0.25 * counterarg_handling
+        ));
+
+        if not thesis_supported {
+            overall = overall - 10;
+        }
+        if overall < 0 { overall = 0; }
+        if overall > 100 { overall = 100; }
+
+        passes_bar = (
+            overall >= 75 and
+            thesis_supported and
+            unresolved_contradictions <= 1
+        );
+
+        return {
+            "overall": overall,
+            "support": int(support_quality * 100),
+            "premise": int(logical_soundness * 100),
+            "coherence": int(coherence * 100),
+            "counterargument": int(counterarg_handling * 100),
+            "consistency": int(counterarg_handling * 100),
+            "unsupportedClaims": unsupported_claims,
+            "claimsNeedingPremise": claims_needing_premise,
+            "unresolvedContradictions": unresolved_contradictions,
+            "weakInferenceClaims": weak_inference_claims,
+            "vagueClaims": vague_claims,
+            "orphanNodes": orphan_nodes,
+            "disconnectedClaims": disconnected_claims,
+            "thesisSupported": thesis_supported,
+            "passesBar": passes_bar
+        };
     }
 
     def identify_issues(nodes: list, edges: list, score: dict) -> list {

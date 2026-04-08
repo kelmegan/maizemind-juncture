@@ -65,48 +65,31 @@ obj GraphSummary {
 # Optimized: 2 lean LLM calls with minimal output
 # ============================================================
 
-"""Extract a compact argument graph from the user's notes. Return ONLY valid JSON, with no explanation.
-Format: {"nodes":[{"id":"n1","kind":"thesis|claim|evidence|counterarg","text":"...","evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["Short question only if clearly necessary"]},...],
-"edges":[{"from_id":"n2","to_id":"n1","kind":"supports|contradicts|addresses"},...]}
+"""You MUST extract a complete argument graph from the user's notes. Return ONLY valid JSON, no explanation.
+Format: {"nodes":[{"id":"n1","kind":"thesis|claim|evidence|counterarg","text":"...","evidence_category":"empirical_data|expert_testimony|anecdotal|logical_reasoning|analogy","assumptions":["Does X hold in this context?"]},...],
+"edges":[{"from_id":"n2","to_id":"n1","kind":"supports|contradicts|addresses","reasoning_type":"deductive|inductive|causal|correlational|analogical","weight":0.8},...]}
 STRICT RULES:
-1. EXACTLY 1 thesis node.
-2. Prefer 4-6 total nodes. Keep only the strongest claims, evidence, and counterarguments.
-3. SUPPORTS direction must go from supporting node -> supported node.
-   - evidence -> claim
-   - claim -> thesis or broader claim
-4. CONTRADICTS direction must go from counterargument -> claim or thesis.
-5. ADDRESSES direction must go from response/rebuttal -> counterargument.
-6. The thesis should almost never be the source of a SUPPORTS edge.
-7. Every evidence node must support a claim. Every major claim should connect to the thesis or another claim.
-8. Discard meta-commentary. Keep node text under 22 words when possible.
-9. Include evidence_category ONLY for evidence nodes.
-10. Include assumptions ONLY when a hidden assumption is obvious. Max 1 short question per node.
-11. Omit optional fields when empty. Do not include extra fields.
-12. If unsure about an edge, omit it rather than reversing it.
-Return valid JSON only. No markdown fences."""
+1. EXACTLY 1 thesis node. Identify the user's main argument.
+2. Extract ALL claims and evidence from the notes — do NOT skip or summarize. Create a node for every distinct point.
+3. Max 8 nodes. If more than 8 points exist, keep the strongest.
+4. Every claim MUST connect to the thesis or another claim via edges. Every evidence MUST connect to what it supports.
+5. Discard meta-commentary ('I won't change my mind', 'this is my essay') — only real claims/evidence become nodes.
+6. evidence_category is REQUIRED for evidence nodes. empirical_data=published studies ONLY. Personal observations=anecdotal.
+7. assumptions: list as questions (e.g. 'Does this sample size generalize?').
+8. Edge weight 0.0-1.0 based on how strongly the source supports/contradicts the target.
+You MUST return valid JSON. Do NOT wrap in markdown fences."""
 def parse_notes_and_edges(
     notes: str,
     documents: list[Document]
 ) -> str
 by llm(temperature=0.2);
 
-"""Rewrite compact rule-based graph diagnostics into brief critique JSON.
-Input 1 is nodes_json: [{"id":"n1","kind":"claim","text":"..."}, ...]
-Input 2 is issue_hints_json: [{"node_id":"n2","type":"unsupported_claim","severity":"high","explanation":"...","suggested_action":"..."}, ...]
-Input 3 is graph_meta_json: {"strength_nodes":["n4"],"claim_ids":["n1","n2"],"counterarg_ids":["n7"]}
-Return:
-{"top_issues":["[n2] Unsupported claim: no direct evidence yet", "..."],
-"strength_nodes":["n4"],
-"improvement_nodes":["n2","n3"],
-"counterarguments":[{"target_node":"n2","text":"A short specific counterargument","severity":"high|medium|low"}]}
-RULES:
-- Do NOT restate the claim text as an issue.
-- top_issues must describe weaknesses like unsupported claim, weak evidence, missing assumption, unresolved counterargument, or disconnected claim.
-- Prefer the provided issue_hints over inventing new issues.
-- Keep top_issues to 3 items max.
-- improvement_nodes must be node ids that most need revision.
-- counterarguments should target the weakest claims or thesis only, max 2, and be under 18 words each.
-- Return valid JSON only."""
+"""Given argument graph nodes and edges as JSON, return:
+{"top_issues":["issue1","issue2","issue3"],
+"strength_nodes":["n1"],
+"improvement_nodes":["n3","n4"],
+"counterarguments":[{"target_node":"n2","text":"A specific counterargument","severity":"high|medium|low"}]}
+List the 3 most critical weaknesses. Suggest 1-3 specific counterarguments someone could raise against the weakest claims. Be brief."""
 def analyze_and_summarize_llm(
     all_nodes_json: str,
     all_edges_json: str,
@@ -347,36 +330,6 @@ def:pub extract_llm_text(raw: object) -> str {
     return str(raw);
 }
 
-"Short preview for debug logs."
-def debug_preview(text: str, limit: int = 240) -> str {
-    preview = text.replace("\n", "\\n");
-    if len(preview) > limit {
-        return preview[:limit] + "...";
-    }
-    return preview;
-}
-
-"Best-effort extraction of a JSON object or array from mixed model output."
-def extract_json_candidate(cleaned: str) -> str {
-    if not cleaned {
-        return "";
-    }
-
-    first_obj = cleaned.find("{");
-    last_obj = cleaned.rfind("}");
-    if first_obj != -1 and last_obj != -1 and last_obj > first_obj {
-        return cleaned[first_obj:last_obj + 1];
-    }
-
-    first_arr = cleaned.find("[");
-    last_arr = cleaned.rfind("]");
-    if first_arr != -1 and last_arr != -1 and last_arr > first_arr {
-        return cleaned[first_arr:last_arr + 1];
-    }
-
-    return cleaned;
-}
-
 "Parse JSON string from LLM, handling markdown fences."
 def safe_parse_json(raw: object) -> list {
     cleaned = extract_llm_text(raw).strip();
@@ -390,18 +343,9 @@ def safe_parse_json(raw: object) -> list {
         }
         cleaned = "\n".join(lines).strip();
     }
-
-    candidate = extract_json_candidate(cleaned);
-
     try {
-        parsed = json.loads(candidate);
-        parsed_kind = "dict" if isinstance(parsed, dict) else ("list" if isinstance(parsed, list) else str(type(parsed)));
-        print(f"  [Parser] JSON parse success: type={parsed_kind} raw_len={len(cleaned)} candidate_len={len(candidate)}");
-        return parsed;
-    } except Exception as e {
-        print(f"  [Parser] JSON parse failed: {e}");
-        print(f"  [Parser] Raw preview: {debug_preview(cleaned)}");
-        print(f"  [Parser] Candidate preview: {debug_preview(candidate)}");
+        return json.loads(cleaned);
+    } except Exception {
         return [];
     }
 }
@@ -595,832 +539,6 @@ def normalize_edges(edges: list[GraphEdge]) -> list[GraphEdge] {
     return edges;
 }
 
-"Get normalized node label for a given id."
-def get_node_label(nodes: list[GraphNode], node_id: str) -> str {
-    for n in nodes {
-        if n.id == node_id {
-            return n.label.lower().strip();
-        }
-    }
-    return "";
-}
-
-"Get a node by id."
-def get_node(nodes: list[GraphNode], node_id: str) -> GraphNode {
-    for n in nodes {
-        if n.id == node_id {
-            return n;
-        }
-    }
-    return GraphNode(id=node_id);
-}
-
-"More specific nodes should support broader nodes. Lower rank means more specific."
-def support_rank(label: str) -> int {
-    lowered = label.lower().strip();
-    if lowered == "evidence" { return 0; }
-    if lowered == "claim" { return 1; }
-    if lowered == "counterarg" { return 1; }
-    if lowered == "thesis" { return 2; }
-    return 1;
-}
-
-"Repair common LLM edge-direction mistakes and remove invalid edges."
-def repair_edge_directions(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[GraphEdge] {
-    fixed: list[GraphEdge] = [];
-    for e in edges {
-        src = e.from_id.strip();
-        tgt = e.to_id.strip();
-        if not src or not tgt or src == tgt {
-            continue;
-        }
-
-        src_label = get_node_label(nodes, src);
-        tgt_label = get_node_label(nodes, tgt);
-        if not src_label or not tgt_label {
-            continue;
-        }
-
-        if e.label == "supports" {
-            src_rank = support_rank(src_label);
-            tgt_rank = support_rank(tgt_label);
-            if src_rank > tgt_rank {
-                old_src = e.from_id;
-                e.from_id = e.to_id;
-                e.to_id = old_src;
-                src_label = get_node_label(nodes, e.from_id);
-                tgt_label = get_node_label(nodes, e.to_id);
-            }
-            if src_label == "thesis" and tgt_label != "thesis" {
-                old_src2 = e.from_id;
-                e.from_id = e.to_id;
-                e.to_id = old_src2;
-            }
-        } elif e.label == "contradicts" {
-            if tgt_label == "counterarg" and src_label != "counterarg" {
-                old_src3 = e.from_id;
-                e.from_id = e.to_id;
-                e.to_id = old_src3;
-            }
-        } elif e.label == "addresses" {
-            if src_label == "counterarg" and tgt_label != "counterarg" {
-                old_src4 = e.from_id;
-                e.from_id = e.to_id;
-                e.to_id = old_src4;
-            }
-        }
-
-        if e.weight < 0.0 { e.weight = 0.0; }
-        if e.weight > 1.0 { e.weight = 1.0; }
-        fixed.append(e);
-    }
-    return fixed;
-}
-
-"Remove duplicate edges after normalization and repair."
-def dedupe_edges(edges: list[GraphEdge]) -> list[GraphEdge] {
-    kept: list[GraphEdge] = [];
-    seen: list[str] = [];
-    for e in edges {
-        key = f"{e.from_id}|{e.to_id}|{e.label}";
-        if key in seen {
-            continue;
-        }
-        seen.append(key);
-        kept.append(e);
-    }
-    return kept;
-}
-
-"Compact text for prompt payloads."
-def compact_text(text: str, limit: int = 120) -> str {
-    trimmed = text.strip().replace("\n", " ");
-    if len(trimmed) <= limit {
-        return trimmed;
-    }
-    return trimmed[:limit - 3] + "...";
-}
-
-"Count incoming edges by label."
-def incoming_count(edges: list[GraphEdge], node_id: str, label: str) -> int {
-    count = 0;
-    for e in edges {
-        if e.to_id == node_id and e.label == label {
-            count = count + 1;
-        }
-    }
-    return count;
-}
-
-"Count incoming evidence supports."
-def incoming_evidence_support_count(nodes: list[GraphNode], edges: list[GraphEdge], node_id: str) -> int {
-    count = 0;
-    for e in edges {
-        if e.to_id == node_id and e.label == "supports" {
-            if get_node_label(nodes, e.from_id) == "evidence" {
-                count = count + 1;
-            }
-        }
-    }
-    return count;
-}
-
-"Check whether a claim is attached to thesis or another claim."
-def has_outgoing_support_link(nodes: list[GraphNode], edges: list[GraphEdge], node_id: str) -> bool {
-    for e in edges {
-        if e.from_id == node_id and e.label == "supports" {
-            target_label = get_node_label(nodes, e.to_id);
-            if target_label in ["claim", "thesis"] {
-                return True;
-            }
-        }
-    }
-    return False;
-}
-
-"Get the primary thesis node id, or empty string if absent."
-def get_primary_thesis_id(nodes: list[GraphNode]) -> str {
-    for n in nodes {
-        if n.label == "thesis" {
-            return n.id;
-        }
-    }
-    return "";
-}
-
-"Backfill missing claim-to-thesis links so major claims stay on the thesis path."
-def ensure_claim_paths(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[GraphEdge] {
-    thesis_id = get_primary_thesis_id(nodes);
-    if not thesis_id {
-        return edges;
-    }
-
-    added_edges = 0;
-    for n in nodes {
-        if n.label != "claim" {
-            continue;
-        }
-        if n.id == thesis_id {
-            continue;
-        }
-        if has_outgoing_support_link(nodes, edges, n.id) {
-            continue;
-        }
-
-        link = GraphEdge(from_id=n.id, to_id=thesis_id);
-        link.label = "supports";
-        link.weight = 0.55;
-        link.reasoning_type = "inductive";
-        edges.append(link);
-        added_edges = added_edges + 1;
-    }
-
-    if added_edges > 0 {
-        print(f"  [Step 1/3] Backfilled {added_edges} claim-to-thesis SUPPORTS edges");
-    }
-    return edges;
-}
-
-"Rule-based hints to guide critique generation."
-def build_issue_hints(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[dict[str, object]] {
-    hints: list[dict[str, object]] = [];
-    for n in nodes {
-        if n.label in ["thesis", "claim"] {
-            evidence_supports = incoming_evidence_support_count(nodes, edges, n.id);
-            total_supports = incoming_count(edges, n.id, "supports");
-            contradiction_count = incoming_count(edges, n.id, "contradicts");
-
-            if evidence_supports == 0 {
-                hints.append({
-                    "node_id": n.id,
-                    "type": "unsupported_claim",
-                    "severity": "high" if n.label == "thesis" else "medium",
-                    "explanation": "This point has no direct evidence supporting it yet.",
-                    "suggested_action": "Add evidence that directly supports this point."
-                });
-            } elif evidence_supports == 1 {
-                hints.append({
-                    "node_id": n.id,
-                    "type": "weak_evidence",
-                    "severity": "medium",
-                    "explanation": "This point relies on only one supporting evidence node.",
-                    "suggested_action": "Add another source or a stronger piece of evidence."
-                });
-            }
-
-            if not has_outgoing_support_link(nodes, edges, n.id) and n.label == "claim" {
-                hints.append({
-                    "node_id": n.id,
-                    "type": "disconnected_claim",
-                    "severity": "medium",
-                    "explanation": "This claim is not clearly linked back to the thesis path.",
-                    "suggested_action": "Connect this claim to the thesis or parent claim."
-                });
-            }
-
-            if contradiction_count > 0 {
-                hints.append({
-                    "node_id": n.id,
-                    "type": "countered_claim",
-                    "severity": "medium",
-                    "explanation": "A counterargument targets this point and may need a response.",
-                    "suggested_action": "Address the counterargument or qualify the claim."
-                });
-            }
-
-            if total_supports > 0 and evidence_supports == 0 {
-                hints.append({
-                    "node_id": n.id,
-                    "type": "missing_assumption",
-                    "severity": "medium",
-                    "explanation": "This point is supported by reasoning or sub-claims but lacks explicit factual grounding.",
-                    "suggested_action": "Add evidence or state the missing assumption explicitly."
-                });
-            }
-        } elif n.label == "counterarg" {
-            addressed = incoming_count(edges, n.id, "addresses");
-            if addressed == 0 {
-                hints.append({
-                    "node_id": n.id,
-                    "type": "unresolved_counterargument",
-                    "severity": "high",
-                    "explanation": "This counterargument is present but not answered anywhere in the graph.",
-                    "suggested_action": "Add a rebuttal or acknowledge the limitation."
-                });
-            }
-        }
-    }
-    return hints;
-}
-
-"Choose strong nodes for summary payload."
-def build_strength_nodes(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[str] {
-    strong_ids: list[str] = [];
-    for n in nodes {
-        if n.label == "evidence" and n.evidence_category in ["empirical_data", "expert_testimony"] {
-            strong_ids.append(n.id);
-        }
-    }
-    if strong_ids {
-        return strong_ids[:3];
-    }
-    for n in nodes {
-        if n.label in ["claim", "thesis"] and incoming_evidence_support_count(nodes, edges, n.id) >= 2 {
-            strong_ids.append(n.id);
-        }
-    }
-    return strong_ids[:3];
-}
-
-"Fallback human-readable issue string."
-def issue_text_from_hint(hint: dict[str, object]) -> str {
-    node_id = str(hint.get("node_id", ""));
-    issue_type = str(hint.get("type", "")).replace("_", " ");
-    explanation = str(hint.get("explanation", ""));
-    if node_id and explanation {
-        return f"[{node_id}] {issue_type}: {explanation}";
-    }
-    return explanation;
-}
-
-"Detect weak issue strings that only repeat node text."
-def issue_looks_generic(issue_text: str, nodes: list[GraphNode]) -> bool {
-    cleaned = issue_text.lower().strip();
-    if not cleaned {
-        return True;
-    }
-    for n in nodes {
-        node_text = n.text.lower().strip();
-        if cleaned == node_text {
-            return True;
-        }
-        if len(cleaned) > 40 and cleaned in node_text {
-            return True;
-        }
-    }
-    if "unsupported" not in cleaned and "weak" not in cleaned and "missing" not in cleaned and "counter" not in cleaned and "disconnected" not in cleaned and "evidence" not in cleaned {
-        return True;
-    }
-    return False;
-}
-
-"Create a short issue line from local rule-based hints."
-def build_fast_top_issues(issue_hints: list[dict[str, object]]) -> list[str] {
-    issues: list[str] = [];
-    count = 0;
-    for hint in issue_hints {
-        if count >= 3 {
-            break;
-        }
-        text = issue_text_from_hint(hint);
-        if text {
-            issues.append(text);
-            count = count + 1;
-        }
-    }
-    return issues;
-}
-
-"Choose node ids that most need revision."
-def build_improvement_nodes(issue_hints: list[dict[str, object]]) -> list[str] {
-    improvement_ids: list[str] = [];
-    for hint in issue_hints {
-        hint_node_id = str(hint.get("node_id", ""));
-        if hint_node_id and hint_node_id not in improvement_ids {
-            improvement_ids.append(hint_node_id);
-        }
-    }
-    return improvement_ids[:3];
-}
-
-"Find node text by id."
-def find_node_text(nodes: list[GraphNode], node_id: str) -> str {
-    for n in nodes {
-        if n.id == node_id {
-            return n.text;
-        }
-    }
-    return "";
-}
-
-"Heuristic counterargument text for weak claims."
-def heuristic_counter_text(node_text: str, issue_type: str) -> str {
-    lowered = node_text.lower();
-    if "cost" in lowered or "save money" in lowered or "reduce costs" in lowered {
-        return "Migration, storage, and vendor fees can offset the claimed savings.";
-    }
-    if "secure" in lowered or "security" in lowered or "privacy" in lowered or "encryption" in lowered {
-        return "Encryption helps, but breaches and misconfiguration still leave real security risks.";
-    }
-    if "accessible" in lowered or "convenient" in lowered or "anywhere" in lowered {
-        return "Those benefits depend on reliable internet, uptime, and equal user access.";
-    }
-    if "scalable" in lowered or "flexible" in lowered {
-        return "Scalability can add complexity, vendor lock-in, and cost tradeoffs.";
-    }
-    if issue_type == "weak_evidence" {
-        return "The claim may be true in some cases, but the current support is too thin.";
-    }
-    if issue_type == "unsupported_claim" {
-        return "This point may be overstated without direct evidence or a narrower scope.";
-    }
-    return "This claim may overstate the benefit without enough direct support or tradeoff analysis.";
-}
-
-"Build fast local counterargument suggestions without a second LLM call."
-def build_suggested_counterarguments(nodes: list[GraphNode], issue_hints: list[dict[str, object]]) -> list[dict] {
-    suggestions: list[dict] = [];
-    used_targets: list[str] = [];
-    for hint in issue_hints {
-        hint_type = str(hint.get("type", ""));
-        if hint_type not in ["unsupported_claim", "weak_evidence", "countered_claim"] {
-            continue;
-        }
-        target_node = str(hint.get("node_id", ""));
-        if not target_node or target_node in used_targets {
-            continue;
-        }
-        target_text = find_node_text(nodes, target_node);
-        if not target_text {
-            continue;
-        }
-        suggestions.append({
-            "target_node": target_node,
-            "text": heuristic_counter_text(target_text, hint_type),
-            "severity": str(hint.get("severity", "medium"))
-        });
-        used_targets.append(target_node);
-        if len(suggestions) >= 2 {
-            break;
-        }
-    }
-    return suggestions;
-}
-
-"Fast local summary builder used instead of a second LLM pass."
-def build_fast_summary(nodes: list[GraphNode], issue_hints: list[dict[str, object]], strength_ids: list[str]) -> GraphSummary {
-    summary = GraphSummary();
-    summary.top_issues = build_fast_top_issues(issue_hints);
-    summary.strength_nodes = strength_ids[:3];
-    summary.improvement_nodes = build_improvement_nodes(issue_hints);
-    summary.suggested_counterarguments = build_suggested_counterarguments(nodes, issue_hints);
-    return summary;
-}
-
-"Clamp a numeric value into [0, 1] for shared scoring."
-def:pub score_clamp01(val: float) -> float {
-    v = val;
-    if v < 0.0 { v = 0.0; }
-    if v > 1.0 { v = 1.0; }
-    return v;
-}
-
-"Convert a value to float with fallback."
-def:pub score_to_float(val: any, default_val: float = 0.0) -> float {
-    try {
-        return float(val);
-    } except Exception {
-        return default_val;
-    }
-}
-
-"Get a node from frontend-shaped node dicts."
-def:pub score_get_node(nodes: list, node_id: str) -> dict {
-    for n in nodes {
-        if n.get("id", "") == node_id {
-            return n;
-        }
-    }
-    return None;
-}
-
-"Whether a node is marked acknowledged."
-def:pub score_is_acknowledged(node_data: dict) -> bool {
-    if not node_data { return False; }
-    ack = node_data.get("acknowledged", False);
-    if isinstance(ack, str) {
-        return ack.lower() == "true";
-    }
-    return bool(ack);
-}
-
-"Detect issue tags across list or dict issue representations."
-def:pub score_has_issue_type(node_data: dict, issue_type: str) -> bool {
-    if not node_data { return False; }
-    target = issue_type.lower().strip();
-
-    llm_issue_types = node_data.get("llmIssueTypes", []);
-    if isinstance(llm_issue_types, str) and llm_issue_types {
-        llm_issue_types = [s.strip() for s in llm_issue_types.split(",")];
-    }
-    if isinstance(llm_issue_types, list) {
-        for it in llm_issue_types {
-            if str(it).lower().strip() == target {
-                return True;
-            }
-        }
-    }
-
-    node_issues = node_data.get("issues", []);
-    if isinstance(node_issues, str) and node_issues {
-        for s in node_issues.split(",") {
-            if s.lower().strip() == target {
-                return True;
-            }
-        }
-    } elif isinstance(node_issues, list) {
-        for iss in node_issues {
-            if isinstance(iss, dict) {
-                iss_type = iss.get("type", "");
-                if str(iss_type).lower().strip() == target {
-                    return True;
-                }
-            } elif str(iss).lower().strip() == target {
-                return True;
-            }
-        }
-    }
-    return False;
-}
-
-"Shared edge weight normalization."
-def:pub score_edge_weight(edge_data: dict) -> float {
-    w = score_to_float(edge_data.get("weight", 0.5), 0.5);
-    return score_clamp01(w);
-}
-
-"Shared evidence quality used by the UI-facing score."
-def:pub score_evidence_quality(node_data: dict) -> float {
-    if not node_data { return 0.0; }
-    if node_data.get("type", "") != "EVIDENCE" {
-        return 0.0;
-    }
-
-    cat_weights: dict[str, float] = {
-        "empirical_data": 0.92,
-        "expert_testimony": 0.82,
-        "logical_reasoning": 0.65,
-        "analogy": 0.52,
-        "anecdotal": 0.38
-    };
-    ev_cat = str(node_data.get("evidence_category", "logical_reasoning")).lower().strip();
-    base = cat_weights.get(ev_cat, 0.65);
-
-    conf = score_to_float(node_data.get("confidence", 0.5), 0.5);
-    conf = score_clamp01(conf);
-
-    assumptions = node_data.get("assumptions", []);
-    assumption_count = len(assumptions) if isinstance(assumptions, list) else 0;
-    assumption_penalty = min(0.25, assumption_count * 0.05);
-
-    source_url = str(node_data.get("sourceUrl", "")).strip();
-    source_bonus = 0.08 if source_url else 0.0;
-
-    quality = base * 0.55 + conf * 0.45 + source_bonus - assumption_penalty;
-    return score_clamp01(quality);
-}
-
-"Support score for a claim/thesis from evidence nodes."
-def:pub score_claim_support(nodes: list, edges: list, claim_id: str) -> float {
-    total_support = 0.0;
-    evidence_count = 0;
-    for e in edges {
-        if e.get("type", "") == "SUPPORTS" and e.get("target", "") == claim_id {
-            src_node = score_get_node(nodes, e.get("source", ""));
-            if src_node and src_node.get("type", "") == "EVIDENCE" {
-                evidence_count = evidence_count + 1;
-                total_support = total_support + score_edge_weight(e) * score_evidence_quality(src_node);
-            }
-        }
-    }
-    if evidence_count == 0 {
-        return 0.0;
-    }
-    if total_support > 1.0 { total_support = 1.0; }
-    return score_clamp01(total_support);
-}
-
-"Whether a claim has assumption-bearing support."
-def:pub score_has_assumption(nodes: list, edges: list, claim_id: str) -> bool {
-    for e in edges {
-        if e.get("type", "") == "SUPPORTS" and e.get("target", "") == claim_id {
-            src_node = score_get_node(nodes, e.get("source", ""));
-            if src_node and src_node.get("type", "") == "EVIDENCE" {
-                assumptions = src_node.get("assumptions", []);
-                if isinstance(assumptions, list) and len(assumptions) > 0 {
-                    return True;
-                }
-            }
-        }
-    }
-    return False;
-}
-
-"Graph degree for coherence checks."
-def:pub score_node_degree(edges: list, node_id: str) -> int {
-    deg = 0;
-    for e in edges {
-        if e.get("source", "") == node_id or e.get("target", "") == node_id {
-            deg = deg + 1;
-        }
-    }
-    return deg;
-}
-
-"Shared thesis detection for frontend-shaped graph dicts."
-def:pub score_get_thesis_ids(nodes: list, edges: list) -> list {
-    thesis_nodes = [n for n in nodes if n.get("type", "") == "THESIS"];
-    if len(thesis_nodes) > 0 {
-        return [n.get("id", "") for n in thesis_nodes[:2]];
-    }
-
-    claims = [n for n in nodes if n.get("type", "") == "CLAIM"];
-    if len(claims) == 0 {
-        return [];
-    }
-
-    roots: list[str] = [];
-    for c in claims {
-        cid = c.get("id", "");
-        supports_parent_claim = False;
-        for e in edges {
-            if e.get("type", "") == "SUPPORTS" and e.get("source", "") == cid {
-                target_node = score_get_node(nodes, e.get("target", ""));
-                if target_node and target_node.get("type", "") in ["CLAIM", "THESIS"] {
-                    supports_parent_claim = True;
-                    break;
-                }
-            }
-        }
-        if not supports_parent_claim {
-            roots.append(cid);
-        }
-    }
-
-    if len(roots) == 0 {
-        roots = [claims[0].get("id", "")];
-    }
-    return roots[:2];
-}
-
-"Whether a claim is connected into the thesis path."
-def:pub score_claim_connected_to_thesis(nodes: list, edges: list, claim_id: str, thesis_ids: list) -> bool {
-    if claim_id in thesis_ids {
-        return True;
-    }
-    if len(thesis_ids) == 0 {
-        return True;
-    }
-
-    visited: list[str] = [claim_id];
-    queue: list[str] = [claim_id];
-    qi = 0;
-    while qi < len(queue) {
-        cur = queue[qi];
-        if cur in thesis_ids {
-            return True;
-        }
-
-        for e in edges {
-            et = e.get("type", "");
-            if et not in ["SUPPORTS", "ADDRESSES", "CONTRADICTS"] {
-                continue;
-            }
-            nxt = "";
-            if e.get("source", "") == cur {
-                nxt = e.get("target", "");
-            } elif e.get("target", "") == cur {
-                nxt = e.get("source", "");
-            }
-            if nxt and nxt not in visited {
-                visited.append(nxt);
-                queue.append(nxt);
-            }
-        }
-        qi = qi + 1;
-    }
-    return False;
-}
-
-"Whether a contradiction has been addressed."
-def:pub score_contradiction_unresolved(nodes: list, edges: list, contradiction_edge: dict) -> bool {
-    src_id = contradiction_edge.get("source", "");
-    tgt_id = contradiction_edge.get("target", "");
-    src_node = score_get_node(nodes, src_id);
-    tgt_node = score_get_node(nodes, tgt_id);
-
-    if score_is_acknowledged(src_node) or score_is_acknowledged(tgt_node) {
-        return False;
-    }
-
-    for e in edges {
-        if e.get("type", "") == "ADDRESSES" {
-            addr_target = e.get("target", "");
-            if addr_target == src_id or addr_target == tgt_id {
-                return False;
-            }
-        }
-    }
-    return True;
-}
-
-"Shared score calculation used by both generator logs and UI walkers."
-def:pub calculate_frontend_score(nodes: list, edges: list) -> dict {
-    claims = [n for n in nodes if n.get("type", "") in ["CLAIM", "THESIS"]];
-    total_claims = len(claims);
-    total_nodes = len(nodes);
-
-    thesis_ids = score_get_thesis_ids(nodes, edges);
-    contradictions = [e for e in edges if e.get("type", "") == "CONTRADICTS"];
-    total_contradictions = len(contradictions);
-    unresolved_contradictions = 0;
-    for ce in contradictions {
-        if score_contradiction_unresolved(nodes, edges, ce) {
-            unresolved_contradictions = unresolved_contradictions + 1;
-        }
-    }
-
-    if total_claims == 0 or total_nodes == 0 {
-        return {
-            "overall": 0,
-            "support": 0,
-            "premise": 0,
-            "coherence": 0,
-            "counterargument": 0,
-            "consistency": 0,
-            "unsupportedClaims": 0,
-            "claimsNeedingPremise": 0,
-            "unresolvedContradictions": unresolved_contradictions,
-            "weakInferenceClaims": 0,
-            "vagueClaims": 0,
-            "orphanNodes": 0,
-            "disconnectedClaims": 0,
-            "thesisSupported": False,
-            "passesBar": False
-        };
-    }
-
-    support_sum = 0.0;
-    unsupported_claims = 0;
-    thesis_supported = True;
-    if len(thesis_ids) == 0 {
-        thesis_supported = False;
-    }
-    for c in claims {
-        cid = c.get("id", "");
-        c_support = score_claim_support(nodes, edges, cid);
-        support_sum = support_sum + c_support;
-        if c_support < 0.10 {
-            unsupported_claims = unsupported_claims + 1;
-        }
-        if cid in thesis_ids and c_support < 0.25 {
-            thesis_supported = False;
-        }
-    }
-    support_quality = score_clamp01(support_sum / max(1, total_claims));
-
-    logical_penalty = 0.0;
-    claims_needing_premise = 0;
-    weak_inference_claims = 0;
-    vague_claims = 0;
-    for c in claims {
-        cid = c.get("id", "");
-        if score_has_issue_type(c, "missing_premise") and not score_has_assumption(nodes, edges, cid) {
-            claims_needing_premise = claims_needing_premise + 1;
-            logical_penalty = logical_penalty + 1.0;
-        }
-        if score_has_issue_type(c, "weak_inference") {
-            weak_inference_claims = weak_inference_claims + 1;
-            logical_penalty = logical_penalty + 0.7;
-        }
-        if score_has_issue_type(c, "vague_language") {
-            vague_claims = vague_claims + 1;
-            logical_penalty = logical_penalty + 0.4;
-        }
-    }
-    max_logical_penalty = float(max(1, total_claims)) * 1.6;
-    logical_soundness = score_clamp01(1.0 - (logical_penalty / max_logical_penalty));
-
-    orphan_nodes = 0;
-    for n in nodes {
-        nid = n.get("id", "");
-        if score_node_degree(edges, nid) == 0 {
-            orphan_nodes = orphan_nodes + 1;
-        }
-    }
-
-    disconnected_claims = 0;
-    for c in claims {
-        cid = c.get("id", "");
-        if not score_claim_connected_to_thesis(nodes, edges, cid, thesis_ids) {
-            disconnected_claims = disconnected_claims + 1;
-        }
-    }
-
-    orphan_ratio = orphan_nodes / max(1, total_nodes);
-    disconnected_ratio = disconnected_claims / max(1, total_claims);
-    coherence = score_clamp01(1.0 - (0.7 * orphan_ratio + 0.3 * disconnected_ratio));
-
-    counterarg_nodes = [n for n in nodes if n.get("type", "") == "COUNTERARGUMENT"];
-    counterarg_handling = 0.50;
-    if total_contradictions > 0 {
-        counterarg_handling = score_clamp01(1.0 - (unresolved_contradictions / max(1, total_contradictions)));
-    } else {
-        addressed_counter_count = 0;
-        for cn in counterarg_nodes {
-            cid = cn.get("id", "");
-            for e in edges {
-                if e.get("type", "") == "ADDRESSES" and e.get("target", "") == cid {
-                    addressed_counter_count = addressed_counter_count + 1;
-                    break;
-                }
-            }
-        }
-        if len(counterarg_nodes) > 0 and addressed_counter_count > 0 {
-            counterarg_handling = 0.90;
-        } elif len(counterarg_nodes) > 0 {
-            counterarg_handling = 0.75;
-        }
-    }
-
-    overall = int(100 * (
-        0.30 * support_quality +
-        0.25 * logical_soundness +
-        0.20 * coherence +
-        0.25 * counterarg_handling
-    ));
-
-    if not thesis_supported {
-        overall = overall - 10;
-    }
-    if overall < 0 { overall = 0; }
-    if overall > 100 { overall = 100; }
-
-    passes_bar = (
-        overall >= 75 and
-        thesis_supported and
-        unresolved_contradictions <= 1
-    );
-
-    return {
-        "overall": overall,
-        "support": int(support_quality * 100),
-        "premise": int(logical_soundness * 100),
-        "coherence": int(coherence * 100),
-        "counterargument": int(counterarg_handling * 100),
-        "consistency": int(counterarg_handling * 100),
-        "unsupportedClaims": unsupported_claims,
-        "claimsNeedingPremise": claims_needing_premise,
-        "unresolvedContradictions": unresolved_contradictions,
-        "weakInferenceClaims": weak_inference_claims,
-        "vagueClaims": vague_claims,
-        "orphanNodes": orphan_nodes,
-        "disconnectedClaims": disconnected_claims,
-        "thesisSupported": thesis_supported,
-        "passesBar": passes_bar
-    };
-}
-
 
 # ============================================================
 # 5. SCORING - Rule-based, NOT LLM
@@ -1431,36 +549,144 @@ def calculate_score(
     nodes: list[GraphNode],
     edges: list[GraphEdge]
 ) -> ReasoningScore {
-    frontend_nodes: list[dict] = [];
-    for n in nodes {
-        frontend_nodes.append({
-            "id": n.id,
-            "type": n.label.upper(),
-            "confidence": n.confidence,
-            "issues": n.issues,
-            "llmIssueTypes": n.issues,
-            "evidence_category": n.evidence_category,
-            "assumptions": n.assumptions
-        });
+    claims: list[GraphNode] = [n for n in nodes if n.label in ["claim", "thesis"]];
+    total_claims = len(claims);
+
+    if total_claims == 0 {
+        return ReasoningScore();
     }
 
-    frontend_edges: list[dict] = [];
+    # Evidence quality base weights by category
+    category_weights: dict[str, float] = {
+        "empirical_data": 0.9, "expert_testimony": 0.8,
+        "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
+    };
+
+    # Score each evidence node by category and assumptions
+    evidence_nodes = [n for n in nodes if n.label == "evidence"];
+    evidence_scores: dict[str, float] = {};
+    for ev in evidence_nodes {
+        base = category_weights.get(ev.evidence_category, 0.6);
+        # Each unaddressed assumption reduces quality by 15%
+        assumption_count = len(ev.assumptions) if ev.assumptions else 0;
+        penalty = assumption_count * 0.15;
+        quality = base - penalty;
+        if quality < 0.1 { quality = 0.1; }
+        evidence_scores[ev.id] = quality;
+    }
+
+    # --- Support coverage ---
+    supported_ids: list[str] = [];
     for e in edges {
-        frontend_edges.append({
-            "source": e.from_id,
-            "target": e.to_id,
-            "type": e.label.upper(),
-            "weight": e.weight
-        });
+        if e.label == "supports" {
+            supported_ids.append(e.to_id);
+        }
+    }
+    supported_claims = len([c for c in claims if c.id in supported_ids]);
+    support_pct = supported_claims / total_claims;
+
+    thesis_nodes = [n for n in nodes if n.label == "thesis"];
+    thesis_penalty = 0;
+    if thesis_nodes {
+        if thesis_nodes[0].id not in supported_ids {
+            thesis_penalty = 15;
+        }
     }
 
-    unified = calculate_frontend_score(frontend_nodes, frontend_edges);
+    # Penalty: low quality evidence supporting claims
+    weak_evidence_penalty = 0;
+    for c in claims {
+        if c.id in supported_ids {
+            # Get average quality of supporting evidence
+            sup_qualities: list[float] = [];
+            for e in edges {
+                if e.to_id == c.id and e.label == "supports" {
+                    q = evidence_scores.get(e.from_id, 0.5);
+                    sup_qualities.append(q);
+                }
+            }
+            if sup_qualities {
+                avg_q = sum(sup_qualities) / len(sup_qualities);
+                if avg_q < 0.4 {
+                    weak_evidence_penalty = weak_evidence_penalty + 20;
+                } elif avg_q < 0.6 {
+                    weak_evidence_penalty = weak_evidence_penalty + 10;
+                }
+            }
+        }
+    }
+    if weak_evidence_penalty > 40 { weak_evidence_penalty = 40; }
+
+    # Penalty: thin support (only 1 evidence)
+    thin_penalty = 0;
+    for c in claims {
+        sups: list[str] = [];
+        for e in edges {
+            if e.to_id == c.id and e.label == "supports" {
+                sups.append(e.from_id);
+            }
+        }
+        if len(sups) == 1 { thin_penalty = thin_penalty + 10; }
+    }
+    if thin_penalty > 20 { thin_penalty = 20; }
+
+    support_score_val = max(0, int(support_pct * 100) - thesis_penalty - weak_evidence_penalty - thin_penalty);
+
+    # --- Premise coverage ---
+    # Claims with weak evidence quality are "weak premise"
+    claims_missing = len([c for c in claims if "missing_premise" in c.issues]);
+    claims_weak_premise = 0;
+    for c in claims {
+        if "missing_premise" not in c.issues {
+            sup_qualities2: list[float] = [];
+            for e in edges {
+                if e.to_id == c.id and e.label == "supports" {
+                    q2 = evidence_scores.get(e.from_id, 0.5);
+                    sup_qualities2.append(q2);
+                }
+            }
+            if sup_qualities2 {
+                avg_q2 = sum(sup_qualities2) / len(sup_qualities2);
+                if avg_q2 < 0.4 {
+                    claims_weak_premise = claims_weak_premise + 1;
+                }
+            }
+        }
+    }
+    total_premise_issues = claims_missing + claims_weak_premise;
+    premise_score_val = int((1 - total_premise_issues / total_claims) * 100);
+    if premise_score_val < 0 {
+        premise_score_val = 0;
+    }
+
+    # --- Consistency ---
+    counterargs = [n for n in nodes if n.label == "counterarg"];
+    total_contras = len(counterargs);
+    addressed_ids: list[str] = [];
+    for e in edges {
+        if e.label == "addresses" {
+            addressed_ids.append(e.to_id);
+        }
+    }
+
+    if total_contras > 0 {
+        unresolved = len([ca for ca in counterargs if ca.id not in addressed_ids]);
+        consistency_val = int((1 - unresolved / total_contras) * 100);
+    } else {
+        consistency_val = 100;
+    }
+
+    overall = int(0.4 * support_score_val + 0.4 * premise_score_val + 0.2 * consistency_val);
+
+    thesis_ok = len(thesis_nodes) > 0 and thesis_nodes[0].id in supported_ids;
+    unresolved_ct = len([ca for ca in counterargs if ca.id not in addressed_ids]);
+
     return ReasoningScore(
-        overall=int(unified.get("overall", 0)),
-        support_coverage=int(unified.get("support", 0)),
-        premise_coverage=int(unified.get("premise", 0)),
-        consistency=int(unified.get("consistency", 0)),
-        passing=bool(unified.get("passesBar", False))
+        overall=overall,
+        support_coverage=support_score_val,
+        premise_coverage=premise_score_val,
+        consistency=consistency_val,
+        passing=(overall >= 75 and thesis_ok and unresolved_ct <= 1)
     );
 }
 
@@ -1482,7 +708,6 @@ def generate_argument_graph(
     print(f"  [Step 1/3] Parsing notes into graph structure...");
     raw_json = parse_notes_and_edges(raw_text, documents);
     print(f"  [Step 1/3] Done in {time.time() - t0:.1f}s");
-    print(f"  [Step 1/3] Raw LLM preview: {debug_preview(extract_llm_text(raw_json))}");
     parsed = safe_parse_json(raw_json);
 
     # Handle both list and dict responses
@@ -1495,7 +720,6 @@ def generate_argument_graph(
         # Fallback: if LLM returns a list, treat it as nodes
         raw_nodes_list = parsed;
     }
-    print(f"  [Step 1/3] Parsed nodes={len(raw_nodes_list)} edges={len(raw_edges_list)}");
 
     new_nodes: list[GraphNode] = [];
     for rd in raw_nodes_list {
@@ -1513,47 +737,41 @@ def generate_argument_graph(
         }
     }
     new_edges = normalize_edges(new_edges);
-    new_edges = repair_edge_directions(new_nodes, new_edges);
-    new_edges = ensure_claim_paths(new_nodes, new_edges);
-    new_edges = dedupe_edges(new_edges);
     all_edges = existing_edges + new_edges;
 
-    # Step 2: Calculate score and compact issue hints before critique generation
-    print(f"  [Step 2/4] Calculating score (rule-based)...");
-    preview_nodes: list[dict] = [];
-    for n in all_nodes {
-        preview_nodes.append({
-            "id": n.id,
-            "type": n.label.upper(),
-            "confidence": n.confidence,
-            "issues": n.issues,
-            "llmIssueTypes": n.issues,
-            "evidence_category": n.evidence_category,
-            "assumptions": n.assumptions
-        });
-    }
-    preview_edges: list[dict] = [];
-    for e in all_edges {
-        preview_edges.append({
-            "source": e.from_id,
-            "target": e.to_id,
-            "type": e.label.upper(),
-            "weight": e.weight
-        });
-    }
-    score = calculate_frontend_score(preview_nodes, preview_edges);
-    issue_hints = build_issue_hints(all_nodes, all_edges);
-    strength_ids = build_strength_nodes(all_nodes, all_edges);
+    # Build JSON representations for next call
+    nj = json.dumps([{"id": n.id, "kind": n.label, "text": n.text, "parent_id": n.parent_id} for n in all_nodes]);
+    ej = json.dumps([{"from_id": e.from_id, "to_id": e.to_id, "kind": e.label, "weight": e.weight} for e in all_edges]);
 
-    # Step 3: Build summary locally to avoid a second high-latency LLM call
+    # Step 2: Brief analysis + summary (single LLM call)
     t1 = time.time();
-    print(f"  [Step 3/4] Building summary from rule-based diagnostics...");
-    analysis_dicts: list[dict[str, str]] = [];
-    summary = build_fast_summary(all_nodes, issue_hints, strength_ids);
-    print(f"  [Step 3/4] Done in {time.time() - t1:.1f}s");
+    print(f"  [Step 2/3] Analyzing graph and generating summary...");
+    doc_list: list[dict[str, str]] = [];
+    for doc in documents {
+        doc_list.append({"title": doc.title, "content": doc.content});
+    }
 
-    print(f"  [Step 4/4] Finalizing output...");
-    print(f"  [Done] Total pipeline: {time.time() - t0:.1f}s | Nodes: {len(all_nodes)} | Edges: {len(all_edges)} | Score: {score.get('overall', 0)}");
+    raw_result = analyze_and_summarize_llm(nj, ej, json.dumps(doc_list));
+    print(f"  [Step 2/3] Done in {time.time() - t1:.1f}s");
+    parsed_result = safe_parse_json(raw_result);
+
+    analysis_dicts: list[dict[str, str]] = [];
+    summary = GraphSummary();
+
+    if isinstance(parsed_result, dict) {
+        summary.top_issues = parsed_result.get("top_issues", []);
+        summary.strength_nodes = parsed_result.get("strength_nodes", []);
+        summary.improvement_nodes = parsed_result.get("improvement_nodes", []);
+        raw_counters = parsed_result.get("counterarguments", []);
+        if isinstance(raw_counters, list) {
+            summary.suggested_counterarguments = raw_counters;
+        }
+    }
+
+    # Step 3: Calculate score (rule-based, no LLM)
+    print(f"  [Step 3/3] Calculating score (rule-based)...");
+    score = calculate_score(all_nodes, all_edges);
+    print(f"  [Done] Total pipeline: {time.time() - t0:.1f}s | Nodes: {len(all_nodes)} | Edges: {len(all_edges)} | Score: {score.overall}");
 
     # Build output dicts
     node_dicts: list[dict[str, str]] = [];
@@ -1584,15 +802,11 @@ def generate_argument_graph(
         "edges": edge_dicts,
         "analyses": analysis_dicts,
         "reasoning_score": {
-            "overall": str(score.get("overall", 0)),
-            "support": str(score.get("support", 0)),
-            "premise": str(score.get("premise", 0)),
-            "coherence": str(score.get("coherence", 0)),
-            "counterargument": str(score.get("counterargument", 0)),
-            "consistency": str(score.get("consistency", 0)),
-            "support_coverage": str(score.get("support", 0)),
-            "premise_coverage": str(score.get("premise", 0)),
-            "passing": str(score.get("passesBar", False))
+            "overall": str(score.overall),
+            "support_coverage": str(score.support_coverage),
+            "premise_coverage": str(score.premise_coverage),
+            "consistency": str(score.consistency),
+            "passing": str(score.passing)
         },
         "summary": {
             "top_issues": summary.top_issues,

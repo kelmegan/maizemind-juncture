@@ -86,9 +86,9 @@ walker:pub AddEvidenceToNode {
             "sourceUrl": ev_source
         };
 
-        updated_nodes = list(graph_node.nodes);
-        updated_nodes.append(new_evidence);
-        graph_node.nodes = updated_nodes;
+        updated_nodes = list(graph_node.nodes)
+        updated_nodes.append(new_evidence)
+        graph_node.nodes = updated_nodes
 
         new_edge = {
             "id": f"edge_{evidence_id}",
@@ -97,9 +97,9 @@ walker:pub AddEvidenceToNode {
             "type": "SUPPORTS"
         };
 
-        updated_edges = list(graph_node.edges);
-        updated_edges.append(new_edge);
-        graph_node.edges = updated_edges;
+        updated_edges = list(graph_node.edges)
+        updated_edges.append(new_edge)
+        graph_node.edges = updated_edges
         graph_node.updatedAt = str(int(time.time()));
 
         # If evaluate=True, run LLM evaluation on the new evidence node
@@ -244,15 +244,15 @@ walker:pub AddAssumptionToEvidence {
                     "moreInfo": node.get("moreInfo", ""),
                     "acknowledged": node.get("acknowledged", False)
                 };
-                new_nodes: list = [];
+                new_nodes: list = []
                 for n in graph_node.nodes {
                     if n["id"] == self.nodeId {
-                        new_nodes.append(updated_node);
+                        new_nodes.append(updated_node)
                     } else {
-                        new_nodes.append(n);
+                        new_nodes.append(n)
                     }
                 }
-                graph_node.nodes = new_nodes;
+                graph_node.nodes = new_nodes
                 break;
             }
         }
@@ -325,15 +325,15 @@ walker:pub UpdateNodeContent {
                     "moreInfo": node.get("moreInfo", ""),
                     "acknowledged": node.get("acknowledged", False)
                 };
-                new_nodes: list = [];
+                new_nodes: list = []
                 for n in graph_node.nodes {
                     if n["id"] == self.nodeId {
-                        new_nodes.append(updated_node);
+                        new_nodes.append(updated_node)
                     } else {
-                        new_nodes.append(n);
+                        new_nodes.append(n)
                     }
                 }
-                graph_node.nodes = new_nodes;
+                graph_node.nodes = new_nodes
                 break;
             }
         }
@@ -468,9 +468,9 @@ walker:pub AddCounterargumentNode {
             "nodeScore": 50
         };
 
-        updated_nodes = list(graph_node.nodes);
-        updated_nodes.append(new_counter);
-        graph_node.nodes = updated_nodes;
+        updated_nodes = list(graph_node.nodes)
+        updated_nodes.append(new_counter)
+        graph_node.nodes = updated_nodes
 
         new_edge = {
             "id": f"edge_{counter_id}",
@@ -479,9 +479,9 @@ walker:pub AddCounterargumentNode {
             "type": "CONTRADICTS"
         };
 
-        updated_edges = list(graph_node.edges);
-        updated_edges.append(new_edge);
-        graph_node.edges = updated_edges;
+        updated_edges = list(graph_node.edges)
+        updated_edges.append(new_edge)
+        graph_node.edges = updated_edges
         graph_node.updatedAt = str(int(time.time()));
 
         # Call scoring methods directly on the walker instance
@@ -560,9 +560,9 @@ walker:pub AddAddressEdge {
             "nodeScore": 50
         };
 
-        updated_nodes = list(graph_node.nodes);
-        updated_nodes.append(new_evidence);
-        graph_node.nodes = updated_nodes;
+        updated_nodes = list(graph_node.nodes)
+        updated_nodes.append(new_evidence)
+        graph_node.nodes = updated_nodes
 
         support_edge = {
             "id": f"edge_sup_{evidence_id}",
@@ -578,10 +578,10 @@ walker:pub AddAddressEdge {
             "type": "ADDRESSES"
         };
 
-        updated_edges = list(graph_node.edges);
-        updated_edges.append(support_edge);
-        updated_edges.append(address_edge);
-        graph_node.edges = updated_edges;
+        updated_edges = list(graph_node.edges)
+        updated_edges.append(support_edge)
+        updated_edges.append(address_edge)
+        graph_node.edges = updated_edges
         graph_node.updatedAt = str(int(time.time()));
 
         # LLM evaluation of the address evidence
@@ -931,9 +931,9 @@ walker:pub GenerateCounter {
             "nodeScore": 50
         };
 
-        updated_nodes = list(graph_node.nodes);
-        updated_nodes.append(new_counter);
-        graph_node.nodes = updated_nodes;
+        updated_nodes = list(graph_node.nodes)
+        updated_nodes.append(new_counter)
+        graph_node.nodes = updated_nodes
 
         new_edge = {
             "id": f"edge_{counter_id}",
@@ -942,9 +942,9 @@ walker:pub GenerateCounter {
             "type": "CONTRADICTS"
         };
 
-        updated_edges = list(graph_node.edges);
-        updated_edges.append(new_edge);
-        graph_node.edges = updated_edges;
+        updated_edges = list(graph_node.edges)
+        updated_edges.append(new_edge)
+        graph_node.edges = updated_edges
         graph_node.updatedAt = str(int(time.time()));
 
         # Call scoring methods directly on the walker instance
@@ -1556,9 +1556,9 @@ walker:pub ExpandBranch {
                 "nodeScore": b_node_score,
                 "sourceUrl": ""
             };
-            updated_nodes = list(graph_node.nodes);
-            updated_nodes.append(new_node);
-            graph_node.nodes = updated_nodes;
+            updated_nodes = list(graph_node.nodes)
+            updated_nodes.append(new_node)
+            graph_node.nodes = updated_nodes
 
             new_edge = {
                 "id": f"edge_{branch_id}",
@@ -1566,9 +1566,9 @@ walker:pub ExpandBranch {
                 "target": self.nodeId,
                 "type": "SUPPORTS"
             };
-            updated_edges = list(graph_node.edges);
-            updated_edges.append(new_edge);
-            graph_node.edges = updated_edges;
+            updated_edges = list(graph_node.edges)
+            updated_edges.append(new_edge)
+            graph_node.edges = updated_edges
             branch_idx = branch_idx + 1;
         }
 

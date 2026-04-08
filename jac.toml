@@ -5,19 +5,15 @@ description = "Jac client application: maizemind-juncture"
 entry-point = "main.jac"
 
 [dependencies.npm]
-jac-client-node = "1.0.7"
+jac-client-node = "1.0.4"
 lucide-react = "^0.483.0"
 pdfjs-dist = "^4.0.0"
 mammoth = "^1.8.0"
 d3-force = "^3.0.0"
 jspdf = "latest"
-react-error-boundary = "^5.0.0"
-react-hook-form = "^7.55.0"
-"@hookform/resolvers" = "^3.10.0"
-zod = "^3.24.1"
 
 [dependencies.npm.dev]
-"@jac-client/dev-deps" = "2.0.0"
+"@jac-client/dev-deps" = "1.0.0"
 
 [dev-dependencies]
 watchdog = ">=3.0.0"
@@ -29,8 +25,7 @@ base_route_app = "app"
 debug = true
 
 [plugins.byllm.model]
-default_model = "ollama/llama3.1"
-base_url = "http://127.0.0.1:11434"
+default_model = "ollama/minimax-m2.5:cloud"
 verbose = true
 
 [plugins.byllm.call_params]
