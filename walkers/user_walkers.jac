@@ -102,13 +102,41 @@ walker:pub UpdateUserProfile {
 
 
 walker:pub GetCurrentUser {
+    has userId: str = "",
+        email: str = "";
+
     can run with Root entry {
         try {
             user = None;
-            for u in [-->](?:User) {
-                if not u.isGuest {
-                    user = u;
-                    break;
+
+            if self.userId {
+                for u in [-->](?:User) {
+                    if u.id == self.userId or u.email == self.userId {
+                        user = u;
+                        break;
+                    }
+                }
+            }
+            if not user and self.email {
+                for u in [-->](?:User) {
+                    if u.email == self.email {
+                        user = u;
+                        break;
+                    }
+                }
+            }
+            if not user and not self.userId and not self.email {
+                non_guest_users = [];
+                for u in [-->](?:User) {
+                    if not u.isGuest {
+                        non_guest_users.append(u);
+                    }
+                }
+
+                if len(non_guest_users) == 1 {
+                    user = non_guest_users[0];
+                } elif len(non_guest_users) > 1 {
+                    print("GetCurrentUser warning: multiple non-guest users found without an explicit identifier");
                 }
             }
 

@@ -18,12 +18,31 @@ def:pub AppRouter -> JsxElement {
         cachedGraphId: str = "",
         cachedCounterargSuggestions: list = [];
 
+    def clearStoredAuth() -> None {
+        localStorage.removeItem("maizemind_user_id");
+        localStorage.removeItem("maizemind_user_email");
+    }
+
+    def persistAuth(userId: str, userEmail: str) -> None {
+        if userId {
+            localStorage.setItem("maizemind_user_id", userId);
+        }
+        if userEmail {
+            localStorage.setItem("maizemind_user_email", userEmail);
+        }
+    }
+
     async def loadContext() -> None {
         stored_id = localStorage.getItem("maizemind_graph_id");
         if stored_id { cachedGraphId = stored_id; }
+        stored_user_id = localStorage.getItem("maizemind_user_id");
+        stored_user_email = localStorage.getItem("maizemind_user_email");
         if jacIsLoggedIn() {
             try {
-                result = await root spawn GetCurrentUser();
+                result = await root spawn GetCurrentUser(
+                    userId=stored_user_id if stored_user_id else "",
+                    email=stored_user_email if stored_user_email else ""
+                );
                 data = result["reports"][0] if result["reports"] else {};
                 if data and not data["isGuest"] {
                     isLoggedIn = True;
@@ -31,10 +50,16 @@ def:pub AppRouter -> JsxElement {
                     currentUserEmail = data["email"] if "email" in data else "";
                     if "theme" in data { isDark = data["theme"] == "dark"; }
                     if "accessibilityMode" in data { accessibilityMode = data["accessibilityMode"]; }
+                    persistAuth(currentUserId, currentUserEmail);
+                } else {
+                    clearStoredAuth();
                 }
             } except Exception as e {
                 print(f"loadContext error: {e}");
+                clearStoredAuth();
             }
+        } else {
+            clearStoredAuth();
         }
         isLoading = False;
     }
@@ -43,11 +68,13 @@ def:pub AppRouter -> JsxElement {
         loadContext();
     }
 
-    def setAuth(userId: str, userEmail: str, darkMode: bool = False) -> None {
+    def setAuth(userId: str, userEmail: str, darkMode: bool = False, userAccessibilityMode: bool = False) -> None {
         isLoggedIn = True;
         currentUserId = userId;
         currentUserEmail = userEmail;
         isDark = darkMode;
+        accessibilityMode = userAccessibilityMode;
+        persistAuth(userId, userEmail);
     }
 
     def logout() -> None {
@@ -59,6 +86,7 @@ def:pub AppRouter -> JsxElement {
         cachedGraphId = "";
         cachedCounterargSuggestions = [];
         localStorage.removeItem("maizemind_graph_id");
+        clearStoredAuth();
     }
 
     def toggleTheme() -> None {

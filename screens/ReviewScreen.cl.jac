@@ -4,6 +4,7 @@ import from "@jac/runtime" { useNavigate, useLocation }
 import from react { useContext }
 import from ..screens.AppContext { getAppContext }
 import from ..components.ArgumentGraphView { ArgumentGraphView }
+import from ..components.Alert { Alert }
 import from ..components.Button { Button }
 import from ..components.Header { Header }
 
@@ -25,6 +26,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         editInputValue: str = "",
         sourceUrlValue: str = "",
         isSaving: bool = False,
+        actionError: str = "",
         prevScore: int = 0,
         scoreDelta: int = 0,
         showScoreDelta: bool = False,
@@ -38,6 +40,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     async def loadGraphData() -> None {
         graph_id = loc_state["graphId"] if "graphId" in loc_state else ctx.cachedGraphId;
         if not graph_id { return; }
+        actionError = "";
         try {
             result = await root spawn GetGraphWithScoring(graphId=graph_id);
             data = result["reports"][0] if result["reports"] else {};
@@ -103,6 +106,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         editMode = "";
         editInputValue = "";
         showConfirmDelete = False;
+        actionError = "";
     }
 
     def toggleBranch() -> None {
@@ -131,6 +135,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     }
 
     def startEdit(mode: str) -> None {
+        actionError = "";
         showScoreDelta = False;
         showConfirmDelete = False;
         investigateResults = [];
@@ -159,12 +164,19 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     async def handleGenerateCounter() -> None {
         if not selectedNode or not currentGraph { return; }
         isSaving = True;
+        actionError = "";
         _gcGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _gcNodeId = selectedNode["id"];
         _gcPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         try {
             mutResult = await root spawn GenerateCounter(graphId=_gcGraphId, targetNodeId=_gcNodeId);
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
+            if "error" in mutData {
+                print(f"GenerateCounter error: {mutData['error']}");
+                showActionError("We couldn't generate a counterargument right now. Please try again.");
+                isSaving = False;
+                return;
+            }
             if "graph" in mutData { currentGraph = mutData["graph"]; }
             if "score" in mutData {
                 currentScore = mutData["score"];
@@ -182,13 +194,17 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 _gci = _gci + 1;
             }
             selectedNode = _gcFound;
-        } except Exception { }
+        } except Exception as e {
+            print(f"GenerateCounter UI error: {e}");
+            showActionError("We couldn't generate a counterargument right now. Please try again.");
+        }
         isSaving = False;
         pushUpdate();
     }
 
     async def handleInvestigateNode() -> None {
         if not selectedNode or not currentGraph { return; }
+        actionError = "";
         investigateLoading = True;
         investigateResults = [];
         editMode = "";
@@ -206,13 +222,17 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             } elif "wikiResults" in mutData {
                 investigateResults = mutData["wikiResults"];
             }
-        } except Exception { }
+        } except Exception as e {
+            print(f"InvestigateNode UI error: {e}");
+            showActionError("We couldn't investigate this node right now. Please try again.");
+        }
         investigateLoading = False;
     }
 
     async def handlePickInvestigateResult(resultIndex: int) -> None {
         if not selectedNode or not currentGraph { return; }
         isSaving = True;
+        actionError = "";
         _pirGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _pirNodeId = selectedNode["id"];
         _pirPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
@@ -222,6 +242,13 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 selectedResultIndex=resultIndex, addAsEvidence=True
             );
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
+            if "error" in mutData {
+                print(f"InvestigateNode add-as-evidence error: {mutData['error']}");
+                showActionError("We couldn't add that source as evidence. Please try again.");
+                investigateResults = [];
+                isSaving = False;
+                return;
+            }
             if "graph" in mutData { currentGraph = mutData["graph"]; }
             if "score" in mutData {
                 currentScore = mutData["score"];
@@ -239,7 +266,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 _piri = _piri + 1;
             }
             selectedNode = _pirFound;
-        } except Exception { }
+        } except Exception as e {
+            print(f"InvestigateNode pick-result UI error: {e}");
+            showActionError("We couldn't add that source as evidence. Please try again.");
+        }
         investigateResults = [];
         isSaving = False;
         pushUpdate();
@@ -261,12 +291,19 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     async def handleAutoFix() -> None {
         if not selectedNode or not currentGraph { return; }
         isSaving = True;
+        actionError = "";
         _afGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _afNodeId = selectedNode["id"];
         _afPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         try {
             mutResult = await root spawn InvestigateNode(graphId=_afGraphId, nodeId=_afNodeId, addAsEvidence=True);
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
+            if "error" in mutData {
+                print(f"AutoFix error: {mutData['error']}");
+                showActionError("We couldn't auto-fix this issue right now. Please try again.");
+                isSaving = False;
+                return;
+            }
             if "graph" in mutData { currentGraph = mutData["graph"]; }
             if "score" in mutData {
                 currentScore = mutData["score"];
@@ -284,9 +321,12 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 _afi = _afi + 1;
             }
             selectedNode = _afFound;
-        } except Exception { }
+            addedAsEvidenceMap[_afNodeId] = True;
+        } except Exception as e {
+            print(f"AutoFix UI error: {e}");
+            showActionError("We couldn't auto-fix this issue right now. Please try again.");
+        }
         isSaving = False;
-        addedAsEvidenceMap[_aeNodeId] = True;
         pushUpdate();
     }
 
@@ -296,6 +336,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _aeSourceUrl = selectedNode["sourceUrl"] if "sourceUrl" in selectedNode else "";
         if not _aeMoreInfo { return; }
         isSaving = True;
+        actionError = "";
         _aeGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _aeNodeId = selectedNode["id"];
         _aePrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
@@ -305,6 +346,12 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 evidenceContent=_aeMoreInfo, sourceUrl=_aeSourceUrl
             );
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
+            if "error" in mutData {
+                print(f"AddEvidenceToNode error: {mutData['error']}");
+                showActionError("We couldn't add that evidence right now. Please try again.");
+                isSaving = False;
+                return;
+            }
             if "graph" in mutData { currentGraph = mutData["graph"]; }
             if "score" in mutData {
                 currentScore = mutData["score"];
@@ -322,9 +369,12 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 _aei = _aei + 1;
             }
             selectedNode = _aeFound;
-        } except Exception { }
+            addedAsEvidenceMap[_aeNodeId] = True;
+        } except Exception as e {
+            print(f"AddEvidenceToNode UI error: {e}");
+            showActionError("We couldn't add that evidence right now. Please try again.");
+        }
         isSaving = False;
-        addedAsEvidenceMap[_aeNodeId] = True;
         pushUpdate();
     }
 
@@ -335,6 +385,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         showConfirmDelete = False;
         investigateResults = [];
         investigateLoading = False;
+        actionError = "";
     }
 
     def handleEditInput(e: any) -> None {
@@ -359,6 +410,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     async def saveEdit() -> None {
         if not editInputValue.strip() or not selectedNode or not currentGraph { return; }
         isSaving = True;
+        actionError = "";
         _seGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _seNodeId = selectedNode["id"];
         _seMode = editMode;
@@ -399,6 +451,15 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if mutResult {
                 mutData = mutResult["reports"][0] if mutResult["reports"] else {};
+                if "error" in mutData {
+                    print(f"saveEdit error: {mutData['error']}");
+                    showActionError("We couldn't update the graph right now. Please try again.");
+                    editMode = "";
+                    editInputValue = "";
+                    sourceUrlValue = "";
+                    isSaving = False;
+                    return;
+                }
                 if "graph" in mutData { currentGraph = mutData["graph"]; }
                 if "score" in mutData {
                     currentScore = mutData["score"];
@@ -417,7 +478,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 }
                 selectedNode = _seFound;
             }
-        } except Exception { }
+        } except Exception as e {
+            print(f"saveEdit UI error: {e}");
+            showActionError("We couldn't update the graph right now. Please try again.");
+        }
 
         editMode = "";
         editInputValue = "";
@@ -431,12 +495,19 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _delNodeId = selectedNode["id"] if selectedNode and "id" in selectedNode else "";
         if not _delNodeId { return; }
         isSaving = True;
+        actionError = "";
         _delPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         _delGraphId = currentGraph["id"] if "id" in currentGraph else "";
 
         try {
             mutResult = await root spawn DeleteNode(graphId=_delGraphId, nodeId=_delNodeId);
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
+            if "error" in mutData {
+                print(f"DeleteNode error: {mutData['error']}");
+                showActionError("We couldn't delete that node right now. Please try again.");
+                isSaving = False;
+                return;
+            }
             if "graph" in mutData { currentGraph = mutData["graph"]; }
             if "score" in mutData {
                 currentScore = mutData["score"];
@@ -445,7 +516,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
             if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-        } except Exception { }
+        } except Exception as e {
+            print(f"DeleteNode UI error: {e}");
+            showActionError("We couldn't delete that node right now. Please try again.");
+        }
 
         selectedNode = None;
         showConfirmDelete = False;
@@ -461,6 +535,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         if not ca_text or not ca_target { return; }
 
         isSaving = True;
+        actionError = "";
         _acGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _acPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
 
@@ -469,6 +544,12 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 graphId=_acGraphId, targetNodeId=ca_target, counterargContent=ca_text
             );
             addData = addResult["reports"][0] if addResult["reports"] else {};
+            if "error" in addData {
+                print(f"AddCounterargumentNode error: {addData['error']}");
+                showActionError("We couldn't add that counterargument right now. Please try again.");
+                isSaving = False;
+                return;
+            }
             if "graph" in addData { currentGraph = addData["graph"]; }
             if "score" in addData {
                 currentScore = addData["score"];
@@ -477,7 +558,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if "issues" in addData { currentIssues = addData["issues"]; }
             if "nextActions" in addData { currentNextActions = addData["nextActions"]; }
-        } except Exception { }
+        } except Exception as e {
+            print(f"AddCounterargumentNode UI error: {e}");
+            showActionError("We couldn't add that counterargument right now. Please try again.");
+        }
 
         isSaving = False;
         pushUpdate();
@@ -486,12 +570,19 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     async def handleExpandBranch() -> None {
         if not selectedNode or not currentGraph { return; }
         isSaving = True;
+        actionError = "";
         _ebGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _ebNodeId = selectedNode["id"];
         _ebPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         try {
             mutResult = await root spawn ExpandBranch(graphId=_ebGraphId, nodeId=_ebNodeId);
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
+            if "error" in mutData {
+                print(f"ExpandBranch error: {mutData['error']}");
+                showActionError("We couldn't expand this branch right now. Please try again.");
+                isSaving = False;
+                return;
+            }
             if "graph" in mutData { currentGraph = mutData["graph"]; }
             if "score" in mutData {
                 currentScore = mutData["score"];
@@ -509,9 +600,21 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 _ebi = _ebi + 1;
             }
             selectedNode = _ebFound;
-        } except Exception { }
+        } except Exception as e {
+            print(f"ExpandBranch UI error: {e}");
+            showActionError("We couldn't expand this branch right now. Please try again.");
+        }
         isSaving = False;
         pushUpdate();
+    }
+
+    def showActionError(message: str) -> None {
+        actionError = message;
+        setTimeout(lambda -> None {
+            if actionError == message {
+                actionError = "";
+            }
+        }, 3500);
     }
 
     if not currentGraph or not currentScore {
@@ -994,6 +1097,13 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                         </div>
 
                         <div className="rs-panel-scroll">
+                            {(
+                                <Alert
+                                    variant="destructive"
+                                    description={actionError}
+                                    className="rs-panel-alert"
+                                />
+                            ) if actionError else None}
 
                             <div className="rs-panel-section">
                                 <div className="rs-section-heading rs-section-heading-issues">

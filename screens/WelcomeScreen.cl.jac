@@ -82,7 +82,7 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
         email = "";
         password = "";
         name = "";
-        ctx.setAuth(userId, saved_email, False);
+        ctx.setAuth(userId, saved_email, False, False);
         nav("/generate");
     }
 
@@ -107,7 +107,8 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
             user_data = result["reports"][0] if result["reports"] else {};
             if user_data and "id" in user_data {
                 is_dark = "theme" in user_data and user_data["theme"] == "dark";
-                ctx.setAuth(user_data["id"], saved_email, is_dark);
+                is_accessibility = "accessibilityMode" in user_data and user_data["accessibilityMode"];
+                ctx.setAuth(user_data["id"], saved_email, is_dark, is_accessibility);
             }
         } except Exception {}
 
