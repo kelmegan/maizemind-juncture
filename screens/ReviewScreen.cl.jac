@@ -33,7 +33,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         investigatedAssumptions: list = [],
         investigateResults: list = [],
         investigateLoading: bool = False,
-        suggestedCounterargs: list = [];
+        suggestedCounterargs: list = [],
+        dismissedCounterargTexts: list = [];
 
     async def loadGraphData() -> None {
         graph_id = loc_state["graphId"] if "graphId" in loc_state else ctx.cachedGraphId;
@@ -431,6 +432,11 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         if not currentGraph { return; }
         _delNodeId = selectedNode["id"] if selectedNode and "id" in selectedNode else "";
         if not _delNodeId { return; }
+        _delNodeType = selectedNode["type"] if selectedNode and "type" in selectedNode else "";
+        _delNodeContent = selectedNode["content"] if selectedNode and "content" in selectedNode else "";
+        if _delNodeType == "COUNTERARGUMENT" and _delNodeContent and _delNodeContent not in dismissedCounterargTexts {
+            dismissedCounterargTexts.append(_delNodeContent);
+        }
         isSaving = True;
         _delPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         _delGraphId = currentGraph["id"] if "id" in currentGraph else "";
@@ -760,6 +766,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     while _vci < len(suggestedCounterargs) {
         _vc = suggestedCounterargs[_vci];
         _vc_text = _vc["text"] if "text" in _vc else "";
+        if _vc_text in dismissedCounterargTexts {
+            _vci = _vci + 1;
+            continue;
+        }
         _already_in_graph = False;
         _gni = 0;
         while _gni < len(_graph_nodes_for_filter) {
