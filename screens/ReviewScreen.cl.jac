@@ -33,7 +33,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         investigatedAssumptions: list = [],
         investigateResults: list = [],
         investigateLoading: bool = False,
-        suggestedCounterargs: list = [];
+        suggestedCounterargs: list = [],
+        dismissedCounterargTexts: list = [];
 
     async def loadGraphData() -> None {
         graph_id = loc_state["graphId"] if "graphId" in loc_state else ctx.cachedGraphId;
@@ -210,7 +211,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         investigateLoading = False;
     }
 
-    async def handlePickInvestigateResult(resultIndex: int) -> None {
+    async def handlePickInvestigateResult(resultIndex: int, pickedTitle: str, pickedUrl: str) -> None {
         if not selectedNode or not currentGraph { return; }
         isSaving = True;
         _pirGraphId = currentGraph["id"] if "id" in currentGraph else "";
@@ -219,7 +220,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         try {
             mutResult = await root spawn InvestigateNode(
                 graphId=_pirGraphId, nodeId=_pirNodeId,
-                selectedResultIndex=resultIndex, addAsEvidence=True
+                selectedResultIndex=resultIndex, addAsEvidence=True,
+                selectedTitle=pickedTitle, selectedUrl=pickedUrl
             );
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
             if "graph" in mutData { currentGraph = mutData["graph"]; }
@@ -245,8 +247,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         pushUpdate();
     }
 
-    def makePickResultHandler(idx: int) -> any {
-        return lambda -> None { handlePickInvestigateResult(idx); };
+    def makePickResultHandler(idx: int, title: str, url: str) -> any {
+        return lambda -> None { handlePickInvestigateResult(idx, title, url); };
     }
 
     def handleInvestigateAssumption(assumption: str) -> None {
@@ -430,6 +432,11 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         if not currentGraph { return; }
         _delNodeId = selectedNode["id"] if selectedNode and "id" in selectedNode else "";
         if not _delNodeId { return; }
+        _delNodeType = selectedNode["type"] if selectedNode and "type" in selectedNode else "";
+        _delNodeContent = selectedNode["content"] if selectedNode and "content" in selectedNode else "";
+        if _delNodeType == "COUNTERARGUMENT" and _delNodeContent and _delNodeContent not in dismissedCounterargTexts {
+            dismissedCounterargTexts.append(_delNodeContent);
+        }
         isSaving = True;
         _delPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         _delGraphId = currentGraph["id"] if "id" in currentGraph else "";
@@ -759,6 +766,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     while _vci < len(suggestedCounterargs) {
         _vc = suggestedCounterargs[_vci];
         _vc_text = _vc["text"] if "text" in _vc else "";
+        if _vc_text in dismissedCounterargTexts {
+            _vci = _vci + 1;
+            continue;
+        }
         _already_in_graph = False;
         _gni = 0;
         while _gni < len(_graph_nodes_for_filter) {
@@ -820,7 +831,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _ir_title = _ir["title"] if "title" in _ir else "";
         _ir_summary = _ir["summary"] if "summary" in _ir else "";
         _ir_url = _ir["url"] if "url" in _ir else "";
-        _ir_pick_fn = makePickResultHandler(_iri);
+        _ir_pick_fn = makePickResultHandler(_iri, _ir_title, _ir_url);
         investigateResultElements.append(
             <div key={f"inv_{str(_iri)}"} className="rs-investigate-card">
                 <div className="rs-investigate-title">{_ir_title}</div>
