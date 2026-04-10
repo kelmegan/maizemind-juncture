@@ -100,9 +100,9 @@ walker:pub AddEvidenceToNode {
             "sourceUrl": ev_source
         };
 
-        updated_nodes = list(graph_node.nodes)
-        updated_nodes.append(new_evidence)
-        graph_node.nodes = updated_nodes
+        updated_nodes = list(graph_node.nodes);
+        updated_nodes.append(new_evidence);
+        graph_node.nodes = updated_nodes;
 
         new_edge = {
             "id": f"edge_{evidence_id}",
@@ -111,9 +111,9 @@ walker:pub AddEvidenceToNode {
             "type": "SUPPORTS"
         };
 
-        updated_edges = list(graph_node.edges)
-        updated_edges.append(new_edge)
-        graph_node.edges = updated_edges
+        updated_edges = list(graph_node.edges);
+        updated_edges.append(new_edge);
+        graph_node.edges = updated_edges;
         graph_node.updatedAt = str(int(time.time()));
 
         # If evaluate=True, run LLM evaluation on the new evidence node
@@ -1216,7 +1216,7 @@ walker:pub InvestigateNode {
                 }
             }
             graph_node.nodes = new_nodes_d;
-            graph_node.updatedAt = str(time.time_ns());
+            graph_node.updatedAt = str(int(time.time()));
 
             if self.addAsEvidence and summary_d {
                 # Dedup: skip if an EVIDENCE child with same content already SUPPORTS target
@@ -1286,7 +1286,7 @@ walker:pub InvestigateNode {
                     updated_edges_d = list(graph_node.edges);
                     updated_edges_d.append(nw_edge_d);
                     graph_node.edges = updated_edges_d;
-                    graph_node.updatedAt = str(time.time_ns());
+                    graph_node.updatedAt = str(int(time.time()));
                     print(f"  Added evidence node {ev_id_d} from Wikipedia source");
                 } else {
                     print(f"  Skipped duplicate evidence (already a child of target node)");
