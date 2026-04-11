@@ -44,14 +44,46 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         viewY: float           = 40.0,
         scale: float           = 1.0;
 
+    def estimateNodeBox(nodeItem: dict) -> dict {
+        node_content = nodeItem["content"] if "content" in nodeItem else "";
+        max_chars = 26;
+        line_count = 1;
+        if len(node_content) > max_chars {
+            words = node_content.split(" ");
+            cur = "";
+            lines: list = [];
+            for w in words {
+                test = (cur + " " + w).trim() if cur else w;
+                if len(test) <= max_chars {
+                    cur = test;
+                } else {
+                    if cur { lines.append(cur); }
+                    cur = w;
+                }
+            }
+            if cur { lines.append(cur); }
+            line_count = min(3, len(lines)) if len(lines) > 0 else 1;
+        }
+        return {"w": NODE_W * 1.0, "h": max(70.0, 32.0 + line_count * 17.0 + 12.0)};
+    }
+
+    def getNodeBox(nid: str) -> dict {
+        fi = 0;
+        while fi < len(nodes) {
+            if nodes[fi]["id"] == nid {
+                return estimateNodeBox(nodes[fi]);
+            }
+            fi = fi + 1;
+        }
+        return {"w": NODE_W * 1.0, "h": NODE_H * 1.0};
+    }
+
     can with entry {
         n_count = len(nodes);
-        n_edges = len(edges);
         if n_count == 0 { return; }
 
-        # ── Build parallel arrays: ids[], xs[], ys[], vxs[], vys[] ──
-        # Using ONLY index-based while loops (no for-in on dicts)
-
+        # Real graph nodes determine the main layered layout.
+        # Suggested ghost nodes are positioned after layout as anchored callouts.
         ids: list = [];
         xs: list = [];
         ys: list = [];
@@ -60,30 +92,46 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         txs: list = [];
         tys: list = [];
         depths: list = [];
+        isGhostNode: list = [];
+        halfWs: list = [];
+        halfHs: list = [];
 
-        # Initialize from node positions
         ni = 0;
         while ni < n_count {
-            ids.append(nodes[ni]["id"]);
-            xs.append(nodes[ni]["position"]["x"] if "position" in nodes[ni] else 0.0);
-            ys.append(nodes[ni]["position"]["y"] if "position" in nodes[ni] else 0.0);
+            node_item = nodes[ni];
+            node_box = estimateNodeBox(node_item);
+            ghost_flag = node_item["isGhost"] if "isGhost" in node_item else False;
+            ids.append(node_item["id"]);
+            xs.append(node_item["position"]["x"] if "position" in node_item else 0.0);
+            ys.append(node_item["position"]["y"] if "position" in node_item else 0.0);
             vxs.append(0.0);
             vys.append(0.0);
             txs.append(0.0);
             tys.append(0.0);
             depths.append(-1);
+            isGhostNode.append(ghost_flag);
+            halfWs.append(node_box["w"] / 2.0);
+            halfHs.append(node_box["h"] / 2.0);
             ni = ni + 1;
         }
 
-        # Find index of root (THESIS or first)
         root_idx = 0;
         ri = 0;
         while ri < n_count {
-            if nodes[ri]["type"] == "THESIS" { root_idx = ri; break; }
+            if not isGhostNode[ri] and nodes[ri]["type"] == "THESIS" { root_idx = ri; break; }
             ri = ri + 1;
         }
+        if isGhostNode[root_idx] {
+            ri = 0;
+            while ri < n_count {
+                if not isGhostNode[ri] {
+                    root_idx = ri;
+                    break;
+                }
+                ri = ri + 1;
+            }
+        }
 
-        # BFS to compute depths using index arrays
         depths[root_idx] = 0;
         bfs_queue: list = [root_idx];
         bqi = 0;
@@ -91,17 +139,19 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             ci = bfs_queue[bqi];
             cur_id = ids[ci];
             cur_d = depths[ci];
-            # Scan edges for neighbors
             ei = 0;
-            while ei < n_edges {
+            while ei < len(edges) {
                 nb_id = "";
-                if edges[ei]["source"] == cur_id { nb_id = edges[ei]["target"]; }
-                elif edges[ei]["target"] == cur_id { nb_id = edges[ei]["source"]; }
+                edge_type = edges[ei]["type"] if "type" in edges[ei] else "";
+                is_ghost_edge = edges[ei]["isGhost"] if "isGhost" in edges[ei] else False;
+                if not is_ghost_edge and (edge_type == "SUPPORTS" or edge_type == "ADDRESSES") {
+                    if edges[ei]["source"] == cur_id { nb_id = edges[ei]["target"]; }
+                    elif edges[ei]["target"] == cur_id { nb_id = edges[ei]["source"]; }
+                }
                 if nb_id {
-                    # Find index of neighbor
                     nbi = 0;
                     while nbi < n_count {
-                        if ids[nbi] == nb_id and depths[nbi] == -1 {
+                        if ids[nbi] == nb_id and (not isGhostNode[nbi]) and depths[nbi] == -1 {
                             depths[nbi] = cur_d + 1;
                             bfs_queue.append(nbi);
                             break;
@@ -114,128 +164,120 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             bqi = bqi + 1;
         }
 
-        # Fix disconnected nodes (depth still -1)
         max_d = 0;
         mi = 0;
         while mi < n_count {
-            if depths[mi] > max_d { max_d = depths[mi]; }
+            if (not isGhostNode[mi]) and depths[mi] > max_d { max_d = depths[mi]; }
             mi = mi + 1;
         }
         mi = 0;
         while mi < n_count {
-            if depths[mi] == -1 { depths[mi] = max_d + 1; }
+            if (not isGhostNode[mi]) and depths[mi] == -1 { depths[mi] = max_d + 1; }
             mi = mi + 1;
         }
 
-        # Count nodes per depth layer and compute BFS target positions
-        # First pass: count per layer
         max_layer = 0;
         mi = 0;
         while mi < n_count {
-            if depths[mi] > max_layer { max_layer = depths[mi]; }
+            if (not isGhostNode[mi]) and depths[mi] > max_layer { max_layer = depths[mi]; }
             mi = mi + 1;
         }
 
-        # For each layer, count nodes and assign x positions
         layer = 0;
+        current_y = 0.0;
         while layer <= max_layer {
-            # Count nodes in this layer
             count = 0;
+            layer_max_h = 70.0;
             ci = 0;
             while ci < n_count {
-                if depths[ci] == layer { count = count + 1; }
+                if (not isGhostNode[ci]) and depths[ci] == layer {
+                    count = count + 1;
+                    if halfHs[ci] * 2.0 > layer_max_h { layer_max_h = halfHs[ci] * 2.0; }
+                }
                 ci = ci + 1;
             }
-            # Assign positions to nodes in this layer
             idx = 0;
             ci = 0;
             while ci < n_count {
-                if depths[ci] == layer {
-                    txs[ci] = (idx - (count - 1) / 2.0) * 250;
-                    tys[ci] = layer * 130.0;
-                    # Start nodes at their target positions
+                if (not isGhostNode[ci]) and depths[ci] == layer {
+                    txs[ci] = (idx - (count - 1) / 2.0) * 280.0;
+                    tys[ci] = current_y;
                     xs[ci] = txs[ci];
                     ys[ci] = tys[ci];
                     idx = idx + 1;
                 }
                 ci = ci + 1;
             }
+            current_y = current_y + layer_max_h + 96.0;
             layer = layer + 1;
         }
 
-        # Precompute edge source/target indices
-        edge_si: list = [];
-        edge_ti: list = [];
+        force_si: list = [];
+        force_ti: list = [];
         ei = 0;
-        while ei < n_edges {
+        while ei < len(edges) {
             src = edges[ei]["source"];
             tgt = edges[ei]["target"];
-            si = -1;
-            ti = -1;
-            fi = 0;
-            while fi < n_count {
-                if ids[fi] == src { si = fi; }
-                if ids[fi] == tgt { ti = fi; }
-                fi = fi + 1;
+            edge_type = edges[ei]["type"] if "type" in edges[ei] else "";
+            is_ghost_edge = edges[ei]["isGhost"] if "isGhost" in edges[ei] else False;
+            if not is_ghost_edge and (edge_type == "SUPPORTS" or edge_type == "ADDRESSES") {
+                si = -1;
+                ti = -1;
+                fi = 0;
+                while fi < n_count {
+                    if ids[fi] == src and (not isGhostNode[fi]) { si = fi; }
+                    if ids[fi] == tgt and (not isGhostNode[fi]) { ti = fi; }
+                    fi = fi + 1;
+                }
+                if si >= 0 and ti >= 0 {
+                    force_si.append(si);
+                    force_ti.append(ti);
+                }
             }
-            edge_si.append(si);
-            edge_ti.append(ti);
             ei = ei + 1;
         }
 
-        # Compute degrees for link bias
         degs: list = [];
         di = 0;
         while di < n_count { degs.append(0); di = di + 1; }
         ei = 0;
-        while ei < n_edges {
-            if edge_si[ei] >= 0 { degs[edge_si[ei]] = degs[edge_si[ei]] + 1; }
-            if edge_ti[ei] >= 0 { degs[edge_ti[ei]] = degs[edge_ti[ei]] + 1; }
+        while ei < len(force_si) {
+            degs[force_si[ei]] = degs[force_si[ei]] + 1;
+            degs[force_ti[ei]] = degs[force_ti[ei]] + 1;
             ei = ei + 1;
         }
-
-        # ── Force simulation: exact d3-force parameters from mockup ──
-        # forceLink:     distance=140, strength=0.05
-        # forceManyBody: strength=-80, distanceMax=300
-        # forceCollide:  radius=112
-        # forceX:        strength=0.08
-        # forceY:        strength=0.3
-        # alphaDecay=0.12, velocityDecay=0.75 (internal=0.25), alpha=0.3, 150 ticks
 
         alpha = 0.3;
         tick = 0;
         while tick < 150 {
-            # Alpha decay
             alpha = alpha * 0.88;
 
-            # Link force
             ei = 0;
-            while ei < n_edges {
-                si = edge_si[ei];
-                ti = edge_ti[ei];
-                if si >= 0 and ti >= 0 {
-                    dx = xs[ti] + vxs[ti] - xs[si] - vxs[si];
-                    dy = ys[ti] + vys[ti] - ys[si] - vys[si];
-                    dist = (dx * dx + dy * dy) ** 0.5;
-                    if dist < 0.001 { dist = 0.001; }
-                    strength = (dist - 140.0) / dist * alpha * 0.05;
-                    fx = dx * strength;
-                    fy = dy * strength;
-                    total_deg = degs[si] + degs[ti];
-                    bias = degs[ti] / total_deg if total_deg > 0 else 0.5;
-                    vxs[ti] = vxs[ti] - fx * bias;
-                    vys[ti] = vys[ti] - fy * bias;
-                    vxs[si] = vxs[si] + fx * (1.0 - bias);
-                    vys[si] = vys[si] + fy * (1.0 - bias);
-                }
+            while ei < len(force_si) {
+                si = force_si[ei];
+                ti = force_ti[ei];
+                dx = xs[ti] + vxs[ti] - xs[si] - vxs[si];
+                dy = ys[ti] + vys[ti] - ys[si] - vys[si];
+                dist = (dx * dx + dy * dy) ** 0.5;
+                if dist < 0.001 { dist = 0.001; }
+                strength = (dist - 170.0) / dist * alpha * 0.05;
+                fx = dx * strength;
+                fy = dy * strength;
+                total_deg = degs[si] + degs[ti];
+                bias = degs[ti] / total_deg if total_deg > 0 else 0.5;
+                vxs[ti] = vxs[ti] - fx * bias;
+                vys[ti] = vys[ti] - fy * bias;
+                vxs[si] = vxs[si] + fx * (1.0 - bias);
+                vys[si] = vys[si] + fy * (1.0 - bias);
                 ei = ei + 1;
             }
 
-            # Many-body (charge) force
             ia = 0;
             while ia < n_count {
+                if isGhostNode[ia] { ia = ia + 1; continue; }
                 ib = ia + 1;
                 while ib < n_count {
+                    if isGhostNode[ib] { ib = ib + 1; continue; }
                     dx = xs[ib] - xs[ia];
                     dy = ys[ib] - ys[ia];
                     dist_sq = dx * dx + dy * dy;
@@ -254,65 +296,137 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                 ia = ia + 1;
             }
 
-            # Collision force (radius=112, pair min distance=224)
             ia = 0;
             while ia < n_count {
+                if isGhostNode[ia] { ia = ia + 1; continue; }
                 ib = ia + 1;
                 while ib < n_count {
+                    if isGhostNode[ib] { ib = ib + 1; continue; }
                     dx = xs[ib] - xs[ia];
                     dy = ys[ib] - ys[ia];
-                    dist = (dx * dx + dy * dy) ** 0.5;
-                    if dist < 224.0 and dist > 0.01 {
-                        overlap = (224.0 - dist) / dist * 0.5;
-                        vxs[ib] = vxs[ib] + dx * overlap;
-                        vys[ib] = vys[ib] + dy * overlap;
-                        vxs[ia] = vxs[ia] - dx * overlap;
-                        vys[ia] = vys[ia] - dy * overlap;
+                    overlap_x = (halfWs[ia] + halfWs[ib] + 28.0) - abs(dx);
+                    overlap_y = (halfHs[ia] + halfHs[ib] + 28.0) - abs(dy);
+                    if overlap_x > 0.0 and overlap_y > 0.0 {
+                        if overlap_x < overlap_y {
+                            push_x = overlap_x * 0.5;
+                            if dx >= 0.0 {
+                                vxs[ib] = vxs[ib] + push_x;
+                                vxs[ia] = vxs[ia] - push_x;
+                            } else {
+                                vxs[ib] = vxs[ib] - push_x;
+                                vxs[ia] = vxs[ia] + push_x;
+                            }
+                        } else {
+                            push_y = overlap_y * 0.5;
+                            if dy >= 0.0 {
+                                vys[ib] = vys[ib] + push_y;
+                                vys[ia] = vys[ia] - push_y;
+                            } else {
+                                vys[ib] = vys[ib] - push_y;
+                                vys[ia] = vys[ia] + push_y;
+                            }
+                        }
                     }
                     ib = ib + 1;
                 }
                 ia = ia + 1;
             }
 
-            # X/Y positioning forces
             pi = 0;
             while pi < n_count {
-                vxs[pi] = vxs[pi] + (txs[pi] - xs[pi]) * 0.08 * alpha;
-                vys[pi] = vys[pi] + (tys[pi] - ys[pi]) * 0.3 * alpha;
+                if not isGhostNode[pi] {
+                    vxs[pi] = vxs[pi] + (txs[pi] - xs[pi]) * 0.08 * alpha;
+                    vys[pi] = vys[pi] + (tys[pi] - ys[pi]) * 0.3 * alpha;
+                }
                 pi = pi + 1;
             }
 
-            # Apply velocity with decay (d3: vx *= 1-velocityDecay, then x += vx)
             pi = 0;
             while pi < n_count {
-                vxs[pi] = vxs[pi] * 0.25;
-                vys[pi] = vys[pi] * 0.25;
-                xs[pi] = xs[pi] + vxs[pi];
-                ys[pi] = ys[pi] + vys[pi];
+                if not isGhostNode[pi] {
+                    vxs[pi] = vxs[pi] * 0.25;
+                    vys[pi] = vys[pi] * 0.25;
+                    xs[pi] = xs[pi] + vxs[pi];
+                    ys[pi] = ys[pi] + vys[pi];
+                }
                 pi = pi + 1;
             }
 
             tick = tick + 1;
         }
 
-        # Normalize positions
         min_x = 99999.0;
         min_y = 99999.0;
         pi = 0;
         while pi < n_count {
-            if xs[pi] < min_x { min_x = xs[pi]; }
-            if ys[pi] < min_y { min_y = ys[pi]; }
+            if not isGhostNode[pi] {
+                if xs[pi] < min_x { min_x = xs[pi]; }
+                if ys[pi] < min_y { min_y = ys[pi]; }
+            }
             pi = pi + 1;
         }
 
         positions: dict = {};
         pi = 0;
         while pi < n_count {
-            positions[ids[pi]] = {
-                "x": xs[pi] - min_x + 200,
-                "y": ys[pi] - min_y + 100
-            };
+            if not isGhostNode[pi] {
+                positions[ids[pi]] = {
+                    "x": xs[pi] - min_x + 200,
+                    "y": ys[pi] - min_y + 100
+                };
+            }
             pi = pi + 1;
+        }
+
+        # Counterargument-style nodes and suggested ghost nodes render in a side lane
+        # instead of influencing the main structural layout.
+        contra_groups: dict = {};
+        ei = 0;
+        while ei < len(edges) {
+            edge_type = edges[ei]["type"] if "type" in edges[ei] else "";
+            if edge_type == "CONTRADICTS" {
+                src = edges[ei]["source"];
+                tgt = edges[ei]["target"];
+                if tgt in positions {
+                    if tgt not in contra_groups {
+                        contra_groups[tgt] = [];
+                    }
+                    contra_groups[tgt].append(src);
+                }
+            }
+            ei = ei + 1;
+        }
+
+        ti = 0;
+        while ti < len(nodes) {
+            tgt_id = nodes[ti]["id"];
+            if tgt_id in contra_groups and tgt_id in positions {
+                contra_ids = contra_groups[tgt_id];
+                cj = 0;
+                while cj < len(contra_ids) {
+                    src_id = contra_ids[cj];
+                    src_box = getNodeBox(src_id);
+                    tgt_box = getNodeBox(tgt_id);
+                    vertical_gap = max(110.0, (src_box["h"] + tgt_box["h"]) / 2.0 + 24.0);
+                    target_pos = positions[tgt_id];
+                    is_ghost_src = False;
+                    si = 0;
+                    while si < len(nodes) {
+                        if nodes[si]["id"] == src_id {
+                            is_ghost_src = nodes[si]["isGhost"] if "isGhost" in nodes[si] else False;
+                            break;
+                        }
+                        si = si + 1;
+                    }
+                    extra_x = 120.0 if is_ghost_src else 0.0;
+                    positions[src_id] = {
+                        "x": target_pos["x"] + 280.0 + extra_x,
+                        "y": target_pos["y"] + (cj - (len(contra_ids) - 1) / 2.0) * vertical_gap
+                    };
+                    cj = cj + 1;
+                }
+            }
+            ti = ti + 1;
         }
 
         nodePositions = positions;
@@ -450,14 +564,18 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         cur_e = edges[ei];
         s_pos = getPos(cur_e["source"]);
         t_pos = getPos(cur_e["target"]);
+        s_box = getNodeBox(cur_e["source"]);
+        t_box = getNodeBox(cur_e["target"]);
         sx = s_pos["x"]; sy = s_pos["y"];
         tx = t_pos["x"]; ty = t_pos["y"];
-        mid_y = (sy + 40 + ty - 40) / 2.0;
+        s_half_h = s_box["h"] / 2.0;
+        t_half_h = t_box["h"] / 2.0;
+        mid_y = (sy + s_half_h + ty - t_half_h) / 2.0;
         mx = (sx + tx) / 2.0;
         color  = edgeColor(cur_e["type"]);
         dash   = edgeDash(cur_e["type"]);
 
-        path_d = f"M {sx},{sy + 40} C {sx},{mid_y} {tx},{mid_y} {tx},{ty - 40}";
+        path_d = f"M {sx},{sy + s_half_h} C {sx},{mid_y} {tx},{mid_y} {tx},{ty - t_half_h}";
 
         e_type = cur_e["type"];
         mkr_id = "mk-sup";
