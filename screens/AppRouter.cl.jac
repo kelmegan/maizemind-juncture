@@ -16,7 +16,7 @@ def:pub AppRouter -> JsxElement {
         currentUserId: str = "",
         currentUserEmail: str = "",
         cachedGraphId: str = "",
-        cachedCounterargSuggestions: list = [];
+        cachedCounterargSuggestions: list[{}] = [];
 
     async def loadContext() -> None {
         stored_id = localStorage.getItem("maizemind_graph_id");
