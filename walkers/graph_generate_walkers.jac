@@ -1090,15 +1090,22 @@ walker:pub GetGraphWithScoring {
             } elif ntype == "EVIDENCE" {
                 n["nodeScore"] = int(self.evidence_quality(n) * 100);
             } elif ntype == "COUNTERARGUMENT" {
-                # Find all addressing evidence and compute quality-weighted score
+                # Find all addressing nodes and compute quality-weighted score
                 address_quality_sum = 0.0;
                 address_count = 0;
                 for e in edges {
                     if e.get("type", "") == "ADDRESSES" and e.get("target", "") == nid {
                         addr_node = self.get_node(nodes, e.get("source", ""));
                         if addr_node {
-                            address_count = address_count + 1;
-                            address_quality_sum = address_quality_sum + self.evidence_quality(addr_node);
+                            addr_type = addr_node.get("type", "");
+                            if addr_type == "EVIDENCE" {
+                                address_count = address_count + 1;
+                                address_quality_sum = address_quality_sum + self.evidence_quality(addr_node);
+                            } else {
+                                # Claims/other nodes addressing a counterargument get a baseline quality
+                                address_count = address_count + 1;
+                                address_quality_sum = address_quality_sum + 0.5;
+                            }
                         }
                     }
                 }
