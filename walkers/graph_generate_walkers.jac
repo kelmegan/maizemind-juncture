@@ -887,7 +887,7 @@ walker:pub GetGraphWithScoring {
                 "severity": "high",
                 "type": "unresolved_contradiction",
                 "description": "A contradiction is unaddressed",
-                "suggestedAction": "Add a response with an ADDRESSES edge or mark the contradiction as acknowledged.",
+                "suggestedAction": "Add a response that addresses this counterargument, or mark it as acknowledged.",
                 "area": "Counterargument Handling",
                 "estimatedLift": counter_unit + 2
             });
@@ -904,7 +904,7 @@ walker:pub GetGraphWithScoring {
                     "severity": "medium",
                     "type": "disconnected_claim",
                     "description": "This claim is disconnected from the main thesis path",
-                    "suggestedAction": "Link this claim to thesis/parent claim with a SUPPORTS edge.",
+                    "suggestedAction": "Link this claim to the thesis or a parent claim so it supports the argument.",
                     "area": "Coherence",
                     "estimatedLift": coherence_unit + 1
                 });
