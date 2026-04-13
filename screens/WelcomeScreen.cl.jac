@@ -325,7 +325,7 @@ def:pub WelcomeScreen(props: any) -> JsxElement {
                         <Button label={"Processing..." if loading else "Continue as Guest"} variant="outline" onClick={openEulaForGuest} disabled={loading} className="auth-guest-btn" />
 
                         <div className="auth-terms-row">
-                            <span className="auth-terms-text">By continuing, you agree to our </span>
+                            <span className="auth-terms-text">By continuing you agree to our </span>
                             <button className="auth-terms-link" onClick={openEulaReadOnly}>
                                 End User License Agreement
                             </button>

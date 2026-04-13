@@ -68,73 +68,47 @@ def:pub Header(props: any) -> JsxElement {
     show_export  = screen == "review";
 
     return (
-        <div>
-            {(
-                <Modal
-                    title="End User License Agreement"
-                    content={getEulaContent()}
-                    primaryButton={{
-                        "label": "Close",
-                        "onClick": closeEula
-                    }}
-                    onClose={closeEula}
-                    showClose={True}
-                    closeable={True}
-                />
-            ) if showEulaModal else None}
-
-            <header className="app-header">
-                <div className="app-header-inner">
-                    <div className="app-header-left">
-                        {(
-                            <Button
-                                label={(<ArrowLeft className="app-header-back-icon" />)}
-                                variant="ghost"
-                                onClick={handleBack}
-                                className="app-header-back-btn"
-                            />
-                        ) if show_back else None}
-                        <span className="app-header-logo" onClick={handleLogoClick}>MaizeMind</span>
-                        {(
-                            <>
-                                <span className="app-header-dot">·</span>
-                                <span className="app-header-title">{title}</span>
-                            </>
-                        ) if title else None}
-                    </div>
-
-                    <div className="app-header-right">
-                        {(
-                            <Button
-                                label={(<><Download className="app-header-btn-icon" />Export</>)}
-                                variant="ghost"
-                                onClick={handleExport}
-                            />
-                        ) if show_export else None}
-                        {(
-                            <Button
-                                label={(<><User className="app-header-btn-icon" />Profile</>)}
-                                variant="ghost"
-                                onClick={handleProfile}
-                            />
-                        ) if show_profile else None}
-                        {(
-                            <Button
-                                label={(<><LogOut className="app-header-btn-icon" />Log Out</>)}
-                                variant="ghost"
-                                onClick={handleLogout}
-                            />
-                        ) if show_logout else None}
-
-                        <button
-                            className="header-eula-btn"
-                            onClick={openEula}
-                            title="View End User License Agreement"
-                            aria-label="View End User License Agreement"
-                        >
-                            <ScrollText className="header-eula-icon" />
-                        </button>
-                    </div>
+        <header className="app-header">
+            <div className="app-header-inner">
+                <div className="app-header-left">
+                    {(
+                        <Button
+                            label={(<ArrowLeft className="app-header-back-icon" />)}
+                            variant="ghost"
+                            onClick={handleBack}
+                            className="app-header-back-btn"
+                        />
+                    ) if show_back else None}
+                    <span className="app-header-logo" onClick={handleLogoClick}>MaizeMind</span>
+                    {(
+                        <>
+                            <span className="app-header-dot">·</span>
+                            <span className="app-header-title">{title}</span>
+                        </>
+                    ) if title else None}
+                </div>
+                <div className="app-header-right">
+                    {(
+                        <Button
+                            label={(<><Download className="app-header-btn-icon" />Export</>)}
+                            variant="ghost"
+                            onClick={handleExport}
+                        />
+                    ) if show_export else None}
+                    {(
+                        <Button
+                            label={(<><User className="app-header-btn-icon" />Profile</>)}
+                            variant="ghost"
+                            onClick={handleProfile}
+                        />
+                    ) if show_profile else None}
+                    {(
+                        <Button
+                            label={(<><LogOut className="app-header-btn-icon" />Log Out</>)}
+                            variant="ghost"
+                            onClick={handleLogout}
+                        />
+                    ) if show_logout else None}
                 </div>
             </header>
         </div>
