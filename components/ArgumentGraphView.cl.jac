@@ -11,6 +11,8 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
     edges       = list(props.edges) if props.edges else [];
     onNodeClick = props.onNodeClick if props.onNodeClick else None;
     onGhostAccept = props.onGhostAccept if props.onGhostAccept else None;
+    savedNodePositions = props.layoutHints if props.layoutHints else {};
+    onNodePositionsChange = props.onNodePositionsChange if props.onNodePositionsChange else None;
     selectedNodeId = props.selectedNodeId if props.selectedNodeId else None;
     focusBranch = props.focusBranch if props.focusBranch else None;
 
@@ -97,15 +99,20 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         isGhostNode: list = [];
         halfWs: list = [];
         halfHs: list = [];
+        hasSavedHint: list = [];
+        seededXs: list = [];
+        seededYs: list = [];
 
         ni = 0;
         while ni < n_count {
             node_item = nodes[ni];
             node_box = estimateNodeBox(node_item);
             ghost_flag = node_item["isGhost"] if "isGhost" in node_item else False;
+            node_id = node_item["id"];
+            seeded_pos = savedNodePositions[node_id] if node_id in savedNodePositions else (node_item["position"] if "position" in node_item else {"x": 0.0, "y": 0.0});
             ids.append(node_item["id"]);
-            xs.append(node_item["position"]["x"] if "position" in node_item else 0.0);
-            ys.append(node_item["position"]["y"] if "position" in node_item else 0.0);
+            xs.append(float(seeded_pos["x"]));
+            ys.append(float(seeded_pos["y"]));
             vxs.append(0.0);
             vys.append(0.0);
             txs.append(0.0);
@@ -114,6 +121,9 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             isGhostNode.append(ghost_flag);
             halfWs.append(node_box["w"] / 2.0);
             halfHs.append(node_box["h"] / 2.0);
+            hasSavedHint.append(node_id in savedNodePositions);
+            seededXs.append(float(seeded_pos["x"]));
+            seededYs.append(float(seeded_pos["y"]));
             ni = ni + 1;
         }
 
@@ -202,9 +212,12 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             ci = 0;
             while ci < n_count {
                 if (not isGhostNode[ci]) and depths[ci] == layer {
-                    txs[ci] = (idx - (count - 1) / 2.0) * 280.0;
+                    default_x = (idx - (count - 1) / 2.0) * 280.0;
+                    txs[ci] = seededXs[ci] if hasSavedHint[ci] else default_x;
                     tys[ci] = current_y;
-                    xs[ci] = txs[ci];
+                    if not hasSavedHint[ci] {
+                        xs[ci] = txs[ci];
+                    }
                     ys[ci] = tys[ci];
                     idx = idx + 1;
                 }
@@ -421,10 +434,14 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                         si = si + 1;
                     }
                     extra_x = 120.0 if is_ghost_src else 0.0;
-                    positions[src_id] = {
-                        "x": target_pos["x"] + 280.0 + extra_x,
-                        "y": target_pos["y"] + (cj - (len(contra_ids) - 1) / 2.0) * vertical_gap
-                    };
+                    if src_id in savedNodePositions {
+                        positions[src_id] = savedNodePositions[src_id];
+                    } else {
+                        positions[src_id] = {
+                            "x": target_pos["x"] + 280.0 + extra_x,
+                            "y": target_pos["y"] + (cj - (len(contra_ids) - 1) / 2.0) * vertical_gap
+                        };
+                    }
                     cj = cj + 1;
                 }
             }
@@ -549,8 +566,12 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
     }
 
     def handleMouseUp(e: any) -> None {
+        if dragDidMove and onNodePositionsChange {
+            onNodePositionsChange(nodePositions);
+        }
         draggingNodeId = None;
         isPanning      = False;
+        dragDidMove    = False;
     }
 
     def handleNodeClickInternal(nodeItem: dict) -> None {
