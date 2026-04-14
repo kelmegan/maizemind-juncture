@@ -13,6 +13,7 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
     onGhostAccept = props.onGhostAccept if props.onGhostAccept else None;
     savedNodePositions = props.layoutHints if props.layoutHints else {};
     onNodePositionsChange = props.onNodePositionsChange if props.onNodePositionsChange else None;
+    onLayoutResolved = props.onLayoutResolved if props.onLayoutResolved else None;
     selectedNodeId = props.selectedNodeId if props.selectedNodeId else None;
     focusBranch = props.focusBranch if props.focusBranch else None;
 
@@ -82,6 +83,222 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         return {"w": NODE_W * 1.0, "h": NODE_H * 1.0};
     }
 
+    def positionsChanged(next_positions: dict, prev_positions: dict) -> bool {
+        ni = 0;
+        while ni < len(nodes) {
+            node_id = nodes[ni]["id"];
+            is_ghost = nodes[ni]["isGhost"] if "isGhost" in nodes[ni] else False;
+            if is_ghost {
+                ni = ni + 1;
+                continue;
+            }
+            if node_id not in next_positions or node_id not in prev_positions {
+                return True;
+            }
+
+            next_pos = next_positions[node_id] if next_positions[node_id] else {"x": 0, "y": 0};
+            prev_pos = prev_positions[node_id] if prev_positions[node_id] else {"x": 0, "y": 0};
+            next_x = float(next_pos["x"]) if "x" in next_pos else 0.0;
+            next_y = float(next_pos["y"]) if "y" in next_pos else 0.0;
+            prev_x = float(prev_pos["x"]) if "x" in prev_pos else 0.0;
+            prev_y = float(prev_pos["y"]) if "y" in prev_pos else 0.0;
+            if abs(next_x - prev_x) > 0.5 or abs(next_y - prev_y) > 0.5 {
+                return True;
+            }
+            ni = ni + 1;
+        }
+        return False;
+    }
+
+    def clampAroundAnchor(value: float, anchor: float, limit: float) -> float {
+        delta = value - anchor;
+        if delta > limit { return anchor + limit; }
+        if delta < 0.0 - limit { return anchor - limit; }
+        return value;
+    }
+
+    def isNodeLocked(nodeId: str) -> bool {
+        ni = 0;
+        while ni < len(nodes) {
+            if nodes[ni]["id"] == nodeId {
+                return nodes[ni]["layoutLocked"] if "layoutLocked" in nodes[ni] else False;
+            }
+            ni = ni + 1;
+        }
+        return False;
+    }
+
+    def spreadDenseLayerNeighbors(raw_positions: dict, id_list: list, depth_list: list) -> dict {
+        result: dict = {};
+        if not raw_positions { return result; }
+
+        ri = 0;
+        while ri < len(id_list) {
+            node_id = id_list[ri];
+            if node_id in raw_positions {
+                pos = raw_positions[node_id] if raw_positions[node_id] else {"x": 0, "y": 0};
+                result[node_id] = {
+                    "x": float(pos["x"]) if "x" in pos else 0.0,
+                    "y": float(pos["y"]) if "y" in pos else 0.0
+                };
+            }
+            ri = ri + 1;
+        }
+
+        max_depth = 0;
+        di = 0;
+        while di < len(depth_list) {
+            if depth_list[di] > max_depth { max_depth = depth_list[di]; }
+            di = di + 1;
+        }
+
+        layer = 0;
+        while layer <= max_depth {
+            layer_ids: list = [];
+            li = 0;
+            while li < len(id_list) {
+                if depth_list[li] == layer and id_list[li] in result {
+                    layer_ids.append(id_list[li]);
+                }
+                li = li + 1;
+            }
+
+            li = 0;
+            while li < len(layer_ids) {
+                lj = li + 1;
+                while lj < len(layer_ids) {
+                    left_id = layer_ids[li];
+                    right_id = layer_ids[lj];
+                    left_x = result[left_id]["x"] if left_id in result else 0.0;
+                    right_x = result[right_id]["x"] if right_id in result else 0.0;
+                    if right_x < left_x {
+                        tmp_id = layer_ids[li];
+                        layer_ids[li] = layer_ids[lj];
+                        layer_ids[lj] = tmp_id;
+                    }
+                    lj = lj + 1;
+                }
+                li = li + 1;
+            }
+
+            pass_idx = 0;
+            while pass_idx < 3 {
+                li = 1;
+                while li < len(layer_ids) {
+                    prev_id = layer_ids[li - 1];
+                    curr_id = layer_ids[li];
+                    prev_box = getNodeBox(prev_id);
+                    curr_box = getNodeBox(curr_id);
+                    min_gap = (prev_box["w"] + curr_box["w"]) / 2.0 + 12.0;
+                    gap = result[curr_id]["x"] - result[prev_id]["x"];
+                    if gap < min_gap {
+                        needed = min_gap - gap;
+                        prev_locked = isNodeLocked(prev_id);
+                        curr_locked = isNodeLocked(curr_id);
+                        prev_share = 0.22 if prev_locked else 0.55;
+                        curr_share = 0.22 if curr_locked else 0.85;
+                        share_total = prev_share + curr_share;
+                        result[prev_id]["x"] = result[prev_id]["x"] - needed * (prev_share / share_total);
+                        result[curr_id]["x"] = result[curr_id]["x"] + needed * (curr_share / share_total);
+                    }
+                    li = li + 1;
+                }
+                pass_idx = pass_idx + 1;
+            }
+            layer = layer + 1;
+        }
+
+        return result;
+    }
+
+    def resolveOverlapPositions(raw_positions: dict) -> dict {
+        result: dict = {};
+        if not raw_positions { return result; }
+
+        ni = 0;
+        while ni < len(nodes) {
+            node_id = nodes[ni]["id"];
+            if node_id in raw_positions {
+                pos = raw_positions[node_id] if raw_positions[node_id] else {"x": 0, "y": 0};
+                result[node_id] = {
+                    "x": float(pos["x"]) if "x" in pos else 0.0,
+                    "y": float(pos["y"]) if "y" in pos else 0.0
+                };
+            }
+            ni = ni + 1;
+        }
+
+        pass_idx = 0;
+        while pass_idx < 8 {
+            any_moved = False;
+            ia = 0;
+            while ia < len(nodes) {
+                node_a = nodes[ia];
+                id_a = node_a["id"] if "id" in node_a else "";
+                if (not id_a) or id_a not in result {
+                    ia = ia + 1;
+                    continue;
+                }
+
+                pos_a = result[id_a];
+                box_a = getNodeBox(id_a);
+                locked_a = node_a["layoutLocked"] if "layoutLocked" in node_a else False;
+                mobility_a = 0.28 if locked_a else 1.0;
+
+                ib = ia + 1;
+                while ib < len(nodes) {
+                    node_b = nodes[ib];
+                    id_b = node_b["id"] if "id" in node_b else "";
+                    if (not id_b) or id_b not in result {
+                        ib = ib + 1;
+                        continue;
+                    }
+
+                    pos_b = result[id_b];
+                    box_b = getNodeBox(id_b);
+                    locked_b = node_b["layoutLocked"] if "layoutLocked" in node_b else False;
+                    mobility_b = 0.28 if locked_b else 1.0;
+
+                    dx = pos_b["x"] - pos_a["x"];
+                    dy = pos_b["y"] - pos_a["y"];
+                    min_x_gap = (box_a["w"] + box_b["w"]) / 2.0 + 10.0;
+                    min_y_gap = (box_a["h"] + box_b["h"]) / 2.0 + 8.0;
+                    overlap_x = min_x_gap - abs(dx);
+                    overlap_y = min_y_gap - abs(dy);
+
+                    if overlap_x > 0.0 and overlap_y > 0.0 {
+                        total_mobility = mobility_a + mobility_b;
+                        share_a = mobility_a / total_mobility if total_mobility > 0.0 else 0.5;
+                        share_b = mobility_b / total_mobility if total_mobility > 0.0 else 0.5;
+
+                        if overlap_x <= overlap_y {
+                            push_x = overlap_x + 2.0;
+                            dir_x = 1.0 if dx >= 0.0 else -1.0;
+                            pos_a["x"] = pos_a["x"] - dir_x * push_x * share_a;
+                            pos_b["x"] = pos_b["x"] + dir_x * push_x * share_b;
+                        } else {
+                            push_y = overlap_y + 2.0;
+                            dir_y = 1.0 if dy >= 0.0 else -1.0;
+                            pos_a["y"] = pos_a["y"] - dir_y * push_y * share_a;
+                            pos_b["y"] = pos_b["y"] + dir_y * push_y * share_b;
+                        }
+
+                        result[id_a] = pos_a;
+                        result[id_b] = pos_b;
+                        any_moved = True;
+                    }
+                    ib = ib + 1;
+                }
+                ia = ia + 1;
+            }
+
+            if not any_moved { break; }
+            pass_idx = pass_idx + 1;
+        }
+
+        return result;
+    }
+
     can with entry {
         n_count = len(nodes);
         if n_count == 0 { return; }
@@ -99,7 +316,8 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         isGhostNode: list = [];
         halfWs: list = [];
         halfHs: list = [];
-        hasSavedHint: list = [];
+        hasSeededPosition: list = [];
+        isLockedNode: list = [];
         seededXs: list = [];
         seededYs: list = [];
 
@@ -109,7 +327,8 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             node_box = estimateNodeBox(node_item);
             ghost_flag = node_item["isGhost"] if "isGhost" in node_item else False;
             node_id = node_item["id"];
-            seeded_pos = savedNodePositions[node_id] if node_id in savedNodePositions else (node_item["position"] if "position" in node_item else {"x": 0.0, "y": 0.0});
+            node_has_position = "position" in node_item;
+            seeded_pos = savedNodePositions[node_id] if node_id in savedNodePositions else (node_item["position"] if node_has_position else {"x": 0.0, "y": 0.0});
             ids.append(node_item["id"]);
             xs.append(float(seeded_pos["x"]));
             ys.append(float(seeded_pos["y"]));
@@ -121,7 +340,8 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             isGhostNode.append(ghost_flag);
             halfWs.append(node_box["w"] / 2.0);
             halfHs.append(node_box["h"] / 2.0);
-            hasSavedHint.append(node_id in savedNodePositions);
+            hasSeededPosition.append((node_id in savedNodePositions) or node_has_position);
+            isLockedNode.append(node_item["layoutLocked"] if "layoutLocked" in node_item else False);
             seededXs.append(float(seeded_pos["x"]));
             seededYs.append(float(seeded_pos["y"]));
             ni = ni + 1;
@@ -212,18 +432,18 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             ci = 0;
             while ci < n_count {
                 if (not isGhostNode[ci]) and depths[ci] == layer {
-                    default_x = (idx - (count - 1) / 2.0) * 280.0;
-                    txs[ci] = seededXs[ci] if hasSavedHint[ci] else default_x;
-                    tys[ci] = current_y;
-                    if not hasSavedHint[ci] {
+                    default_x = (idx - (count - 1) / 2.0) * 248.0;
+                    txs[ci] = seededXs[ci] if hasSeededPosition[ci] else default_x;
+                    tys[ci] = seededYs[ci] if hasSeededPosition[ci] else current_y;
+                    if not hasSeededPosition[ci] {
                         xs[ci] = txs[ci];
+                        ys[ci] = tys[ci];
                     }
-                    ys[ci] = tys[ci];
                     idx = idx + 1;
                 }
                 ci = ci + 1;
             }
-            current_y = current_y + layer_max_h + 96.0;
+            current_y = current_y + layer_max_h + 82.0;
             layer = layer + 1;
         }
 
@@ -278,12 +498,17 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                 strength = (dist - 170.0) / dist * alpha * 0.05;
                 fx = dx * strength;
                 fy = dy * strength;
+                mobility_si = 0.28 if isLockedNode[si] else 1.0;
+                mobility_ti = 0.28 if isLockedNode[ti] else 1.0;
                 total_deg = degs[si] + degs[ti];
                 bias = degs[ti] / total_deg if total_deg > 0 else 0.5;
-                vxs[ti] = vxs[ti] - fx * bias;
-                vys[ti] = vys[ti] - fy * bias;
-                vxs[si] = vxs[si] + fx * (1.0 - bias);
-                vys[si] = vys[si] + fy * (1.0 - bias);
+                total_mobility = mobility_si + mobility_ti;
+                share_si = mobility_si / total_mobility if total_mobility > 0.0 else 0.5;
+                share_ti = mobility_ti / total_mobility if total_mobility > 0.0 else 0.5;
+                vxs[ti] = vxs[ti] - fx * bias * share_ti;
+                vys[ti] = vys[ti] - fy * bias * share_ti;
+                vxs[si] = vxs[si] + fx * (1.0 - bias) * share_si;
+                vys[si] = vys[si] + fy * (1.0 - bias) * share_si;
                 ei = ei + 1;
             }
 
@@ -301,10 +526,15 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                         w = -80.0 * alpha / dist;
                         ux = dx / dist;
                         uy = dy / dist;
-                        vxs[ia] = vxs[ia] + ux * w;
-                        vys[ia] = vys[ia] + uy * w;
-                        vxs[ib] = vxs[ib] - ux * w;
-                        vys[ib] = vys[ib] - uy * w;
+                        mobility_a = 0.28 if isLockedNode[ia] else 1.0;
+                        mobility_b = 0.28 if isLockedNode[ib] else 1.0;
+                        total_mobility = mobility_a + mobility_b;
+                        share_a = mobility_a / total_mobility if total_mobility > 0.0 else 0.5;
+                        share_b = mobility_b / total_mobility if total_mobility > 0.0 else 0.5;
+                        vxs[ia] = vxs[ia] + ux * w * share_a;
+                        vys[ia] = vys[ia] + uy * w * share_a;
+                        vxs[ib] = vxs[ib] - ux * w * share_b;
+                        vys[ib] = vys[ib] - uy * w * share_b;
                     }
                     ib = ib + 1;
                 }
@@ -319,26 +549,31 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                     if isGhostNode[ib] { ib = ib + 1; continue; }
                     dx = xs[ib] - xs[ia];
                     dy = ys[ib] - ys[ia];
-                    overlap_x = (halfWs[ia] + halfWs[ib] + 28.0) - abs(dx);
-                    overlap_y = (halfHs[ia] + halfHs[ib] + 28.0) - abs(dy);
+                    overlap_x = (halfWs[ia] + halfWs[ib] + 12.0) - abs(dx);
+                    overlap_y = (halfHs[ia] + halfHs[ib] + 12.0) - abs(dy);
                     if overlap_x > 0.0 and overlap_y > 0.0 {
+                        mobility_a = 0.28 if isLockedNode[ia] else 1.0;
+                        mobility_b = 0.28 if isLockedNode[ib] else 1.0;
+                        total_mobility = mobility_a + mobility_b;
+                        share_a = mobility_a / total_mobility if total_mobility > 0.0 else 0.5;
+                        share_b = mobility_b / total_mobility if total_mobility > 0.0 else 0.5;
                         if overlap_x < overlap_y {
                             push_x = overlap_x * 0.5;
                             if dx >= 0.0 {
-                                vxs[ib] = vxs[ib] + push_x;
-                                vxs[ia] = vxs[ia] - push_x;
+                                vxs[ib] = vxs[ib] + push_x * share_b;
+                                vxs[ia] = vxs[ia] - push_x * share_a;
                             } else {
-                                vxs[ib] = vxs[ib] - push_x;
-                                vxs[ia] = vxs[ia] + push_x;
+                                vxs[ib] = vxs[ib] - push_x * share_b;
+                                vxs[ia] = vxs[ia] + push_x * share_a;
                             }
                         } else {
                             push_y = overlap_y * 0.5;
                             if dy >= 0.0 {
-                                vys[ib] = vys[ib] + push_y;
-                                vys[ia] = vys[ia] - push_y;
+                                vys[ib] = vys[ib] + push_y * share_b;
+                                vys[ia] = vys[ia] - push_y * share_a;
                             } else {
-                                vys[ib] = vys[ib] - push_y;
-                                vys[ia] = vys[ia] + push_y;
+                                vys[ib] = vys[ib] - push_y * share_b;
+                                vys[ia] = vys[ia] + push_y * share_a;
                             }
                         }
                     }
@@ -350,8 +585,10 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             pi = 0;
             while pi < n_count {
                 if not isGhostNode[pi] {
-                    vxs[pi] = vxs[pi] + (txs[pi] - xs[pi]) * 0.08 * alpha;
-                    vys[pi] = vys[pi] + (tys[pi] - ys[pi]) * 0.3 * alpha;
+                    anchor_strength_x = 0.2 if isLockedNode[pi] else (0.12 if hasSeededPosition[pi] else 0.08);
+                    anchor_strength_y = 0.34 if isLockedNode[pi] else (0.22 if hasSeededPosition[pi] else 0.3);
+                    vxs[pi] = vxs[pi] + (txs[pi] - xs[pi]) * anchor_strength_x * alpha;
+                    vys[pi] = vys[pi] + (tys[pi] - ys[pi]) * anchor_strength_y * alpha;
                 }
                 pi = pi + 1;
             }
@@ -359,10 +596,19 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             pi = 0;
             while pi < n_count {
                 if not isGhostNode[pi] {
-                    vxs[pi] = vxs[pi] * 0.25;
-                    vys[pi] = vys[pi] * 0.25;
+                    drag = 0.42 if isLockedNode[pi] else (0.3 if hasSeededPosition[pi] else 0.25);
+                    vxs[pi] = vxs[pi] * drag;
+                    vys[pi] = vys[pi] * drag;
                     xs[pi] = xs[pi] + vxs[pi];
                     ys[pi] = ys[pi] + vys[pi];
+
+                    if isLockedNode[pi] {
+                        xs[pi] = clampAroundAnchor(xs[pi], txs[pi], 44.0);
+                        ys[pi] = clampAroundAnchor(ys[pi], tys[pi], 44.0);
+                    } elif hasSeededPosition[pi] {
+                        xs[pi] = clampAroundAnchor(xs[pi], txs[pi], 110.0);
+                        ys[pi] = clampAroundAnchor(ys[pi], tys[pi], 96.0);
+                    }
                 }
                 pi = pi + 1;
             }
@@ -403,10 +649,9 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                 src = edges[ei]["source"];
                 tgt = edges[ei]["target"];
                 if tgt in positions {
-                    if tgt not in contra_groups {
-                        contra_groups[tgt] = [];
-                    }
-                    contra_groups[tgt].append(src);
+                    contra_bucket: list = list(contra_groups[tgt]) if tgt in contra_groups else [];
+                    contra_bucket.append(src);
+                    contra_groups[tgt] = contra_bucket;
                 }
             }
             ei = ei + 1;
@@ -422,23 +667,25 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
                     src_id = contra_ids[cj];
                     src_box = getNodeBox(src_id);
                     tgt_box = getNodeBox(tgt_id);
-                    vertical_gap = max(110.0, (src_box["h"] + tgt_box["h"]) / 2.0 + 24.0);
+                    vertical_gap = max(88.0, (src_box["h"] + tgt_box["h"]) / 2.0 + 14.0);
                     target_pos = positions[tgt_id];
                     is_ghost_src = False;
+                    src_locked = False;
                     si = 0;
                     while si < len(nodes) {
                         if nodes[si]["id"] == src_id {
                             is_ghost_src = nodes[si]["isGhost"] if "isGhost" in nodes[si] else False;
+                            src_locked = nodes[si]["layoutLocked"] if "layoutLocked" in nodes[si] else False;
                             break;
                         }
                         si = si + 1;
                     }
                     extra_x = 120.0 if is_ghost_src else 0.0;
-                    if src_id in savedNodePositions {
+                    if src_locked and src_id in savedNodePositions {
                         positions[src_id] = savedNodePositions[src_id];
                     } else {
                         positions[src_id] = {
-                            "x": target_pos["x"] + 280.0 + extra_x,
+                            "x": target_pos["x"] + 252.0 + extra_x,
                             "y": target_pos["y"] + (cj - (len(contra_ids) - 1) / 2.0) * vertical_gap
                         };
                     }
@@ -448,7 +695,13 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
             ti = ti + 1;
         }
 
+        positions = spreadDenseLayerNeighbors(positions, ids, depths);
+        positions = resolveOverlapPositions(positions);
+
         nodePositions = positions;
+        if onLayoutResolved and positionsChanged(positions, savedNodePositions) {
+            onLayoutResolved(positions);
+        }
     }
 
     def getPos(nid: str) -> dict {
