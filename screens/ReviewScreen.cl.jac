@@ -19,6 +19,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         currentScore: dict = None,
         currentIssues: list = [],
         currentNextActions: list = [],
+        layoutHints: dict = {},
+        layoutHintGraphId: str = "",
         selectedNode: dict | None = None,
         focusBranch: str = None,
         editMode: str = "",
@@ -53,6 +55,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             if "score" in data { currentScore = data["score"]; }
             if "issues" in data { currentIssues = data["issues"]; }
             if "nextActions" in data { currentNextActions = data["nextActions"]; }
+            if graph_id != layoutHintGraphId {
+                layoutHints = {};
+                layoutHintGraphId = graph_id;
+            }
         } except Exception as e {
             print(f"ReviewScreen load error: {e}");
         }
@@ -73,6 +79,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             graph_id = currentGraph["id"] if "id" in currentGraph else "";
             ctx.setGraphCache(graph_id, suggestedCounterargs);
         }
+    }
+
+    def handleNodePositionsChange(updatedPositions: dict) -> None {
+        if currentGraph {
+            graph_id = currentGraph["id"] if "id" in currentGraph else "";
+            layoutHintGraphId = graph_id;
+        }
+        layoutHints = updatedPositions if updatedPositions else {};
     }
 
     def handleNodeClick(node_data: any) -> None {
@@ -1038,6 +1052,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             selectedNodeId={selectedNode["id"] if selectedNode else None}
                             focusBranch={focusBranch}
                             onGhostAccept={handleAcceptCounterarg}
+                            layoutHints={layoutHints}
+                            onNodePositionsChange={handleNodePositionsChange}
                         />
                     </div>
 
