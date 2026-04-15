@@ -42,7 +42,9 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         thesisToast: str = "";
 
     async def loadGraphData() -> None {
-        graph_id = loc_state["graphId"] if "graphId" in loc_state else ctx.cachedGraphId;
+        graph_id = ctx.cachedGraphId
+                if ctx.cachedGraphId
+                else (loc_state["graphId"] if "graphId" in loc_state else "");
         if not graph_id { return; }
         try {
             result = await root spawn GetGraphWithScoring(graphId=graph_id);
