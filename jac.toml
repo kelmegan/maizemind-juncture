@@ -43,6 +43,7 @@ temperature = 0.3
 max_tokens = 1500
 
 [plugins.scale.kubernetes]
+namespace = "maizemind-juncture"
 domain = "maizemind.com"
 cert_manager_email = "maya.hillegonds1@gmail.com"
 
