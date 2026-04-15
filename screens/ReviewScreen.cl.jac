@@ -34,7 +34,12 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         investigateResults: list = [],
         investigateLoading: bool = False,
         suggestedCounterargs: list = [],
-        dismissedCounterargTexts: list = [];
+        dismissedCounterargTexts: list = [],
+        undoDelete: dict | None = None,
+        showAllAssumptions: bool = False,
+        tutorialStep: int = 1,
+        showTutorial: bool = True,
+        thesisToast: str = "";
 
     async def loadGraphData() -> None {
         graph_id = loc_state["graphId"] if "graphId" in loc_state else ctx.cachedGraphId;
@@ -75,6 +80,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         editInputValue = "";
         showConfirmDelete = False;
         showScoreDelta = False;
+        showAllAssumptions = False;
         investigateResults = [];
         investigateLoading = False;
         node_id = node_data["id"] if node_data and "id" in node_data else "";
@@ -288,7 +294,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             selectedNode = _afFound;
         } except Exception { }
         isSaving = False;
-        addedAsEvidenceMap[_aeNodeId] = True;
+        addedAsEvidenceMap[_afNodeId] = True;
         pushUpdate();
     }
 
@@ -434,9 +440,27 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         if not _delNodeId { return; }
         _delNodeType = selectedNode["type"] if selectedNode and "type" in selectedNode else "";
         _delNodeContent = selectedNode["content"] if selectedNode and "content" in selectedNode else "";
+
+        # Block thesis deletion — show toast instead
+        if _delNodeType == "THESIS" {
+            showConfirmDelete = False;
+            thesisToast = "active";
+            setTimeout(lambda -> None {
+                thesisToast = "";
+            }, 3000);
+            return;
+        }
+
         if _delNodeType == "COUNTERARGUMENT" and _delNodeContent and _delNodeContent not in dismissedCounterargTexts {
             dismissedCounterargTexts.append(_delNodeContent);
         }
+
+        # Snapshot for undo
+        _undoGraph = currentGraph;
+        _undoScore = currentScore;
+        _undoIssues = currentIssues;
+        _undoActions = currentNextActions;
+
         isSaving = True;
         _delPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         _delGraphId = currentGraph["id"] if "id" in currentGraph else "";
@@ -458,6 +482,29 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         showConfirmDelete = False;
         editMode = "";
         isSaving = False;
+
+        # Show undo toast for 5 seconds
+        undoDelete = {
+            "graph": _undoGraph,
+            "score": _undoScore,
+            "issues": _undoIssues,
+            "nextActions": _undoActions,
+            "nodeName": _delNodeContent[:30] if len(_delNodeContent) > 30 else _delNodeContent
+        };
+        setTimeout(lambda -> None {
+            undoDelete = None;
+        }, 5000);
+
+        pushUpdate();
+    }
+
+    def handleUndoDelete() -> None {
+        if not undoDelete { return; }
+        currentGraph = undoDelete["graph"];
+        currentScore = undoDelete["score"];
+        currentIssues = undoDelete["issues"];
+        currentNextActions = undoDelete["nextActions"];
+        undoDelete = None;
         pushUpdate();
     }
 
@@ -561,7 +608,21 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     sel_type = selectedNode["type"] if selectedNode and "type" in selectedNode else "CLAIM";
     sel_content = selectedNode["content"] if selectedNode and "content" in selectedNode else "";
 
-    sel_node_score = selectedNode["nodeScore"] if selectedNode and "nodeScore" in selectedNode else -1;
+    # Always read the freshest node data from currentGraph to avoid stale scores
+    _fresh_sel = selectedNode;
+    if selectedNode and currentGraph {
+        _fsnId = selectedNode["id"] if "id" in selectedNode else "";
+        _fsnNodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
+        _fsni = 0;
+        while _fsni < len(_fsnNodes) {
+            if _fsnNodes[_fsni]["id"] == _fsnId {
+                _fresh_sel = _fsnNodes[_fsni];
+                break;
+            }
+            _fsni = _fsni + 1;
+        }
+    }
+    sel_node_score = _fresh_sel["nodeScore"] if _fresh_sel and "nodeScore" in _fresh_sel else -1;
     sel_has_node_score = sel_node_score >= 0;
 
     sel_str_color = "#16a34a" if sel_node_score >= 70 else ("#ca8a04" if sel_node_score >= 50 else "#dc2626");
@@ -580,19 +641,19 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     sel_assumptions: list = [];
     sel_has_assumptions = False;
     sel_source_url = "";
-    if selectedNode {
-        sel_ev_category = selectedNode["evidence_category"] if "evidence_category" in selectedNode else "";
-        sel_assumptions = selectedNode["assumptions"] if "assumptions" in selectedNode else [];
+    if _fresh_sel {
+        sel_ev_category = _fresh_sel["evidence_category"] if "evidence_category" in _fresh_sel else "";
+        sel_assumptions = _fresh_sel["assumptions"] if "assumptions" in _fresh_sel else [];
         sel_has_assumptions = len(sel_assumptions) > 0;
-        sel_source_url = selectedNode["sourceUrl"] if "sourceUrl" in selectedNode else "";
+        sel_source_url = _fresh_sel["sourceUrl"] if "sourceUrl" in _fresh_sel else "";
     }
     sel_has_source = len(sel_source_url) > 0 if sel_source_url else False;
     sel_is_well_sourced = sel_has_source and sel_is_evidence;
     sel_ev_cat_display = sel_ev_category.replace("_", " ") if sel_ev_category else "logical reasoning";
 
     sel_more_info = "";
-    if selectedNode {
-        sel_more_info = selectedNode["moreInfo"] if "moreInfo" in selectedNode else "";
+    if _fresh_sel {
+        sel_more_info = _fresh_sel["moreInfo"] if "moreInfo" in _fresh_sel else "";
     }
     sel_has_more_info = len(sel_more_info) > 0 if sel_more_info else False;
 
@@ -663,13 +724,15 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     }
 
     assumptionElements: list = [];
+    _maxAssumptions = len(sel_assumptions) if showAllAssumptions else 3;
+    if _maxAssumptions > len(sel_assumptions) { _maxAssumptions = len(sel_assumptions); }
     _ai = 0;
-    while _ai < len(sel_assumptions) {
+    while _ai < _maxAssumptions {
         assumption = sel_assumptions[_ai];
         investigate_fn = makeInvestigateAssumptionHandler(assumption);
         assumptionElements.append(
             <div key={f"assumption_{str(_ai)}"} className="rs-assumption-step-card">
-                <div className="rs-assumption-step-label">⚠️ Assumed</div>
+                <div className="rs-assumption-step-label">Assumed</div>
                 <div className="rs-assumption-step-text">{assumption}</div>
                 {(
                     <div>
@@ -679,7 +742,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                         </div>
                         <button className="rs-assumption-action-btn"
                             onClick={investigate_fn}>
-                            🔍 Find Evidence →
+                            Find Evidence →
                         </button>
                     </div>
                 ) if assumption not in investigatedAssumptions else None}
@@ -687,6 +750,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         );
         _ai = _ai + 1;
     }
+    _hiddenAssumptionCount = len(sel_assumptions) - _maxAssumptions;
 
     def makeIssueClickHandler(nodeId: str) -> any {
         return lambda -> None { handleIssueClick(nodeId); };
@@ -981,6 +1045,72 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             {node_count_str} nodes - {edge_count_str} edges
                         </span>
                     </div>
+
+                    {(
+                        <div className="rs-undo-toast">
+                            <span className="rs-undo-toast-text">
+                                Deleted node
+                            </span>
+                            <button className="rs-undo-toast-btn" onClick={handleUndoDelete}>
+                                Undo
+                            </button>
+                        </div>
+                    ) if undoDelete else None}
+
+                    {(
+                        <div className="rs-thesis-toast">
+                            The thesis is the foundation of your argument and cannot be deleted.
+                        </div>
+                    ) if thesisToast else None}
+
+                    {(
+                        <div className="rs-tutorial-popup">
+                            <button className="rs-tutorial-close" onClick={lambda -> None { showTutorial = False; }}>
+                                x
+                            </button>
+                            {(
+                                <div>
+                                    <div className="rs-tutorial-step-label">Step 1 of 3</div>
+                                    <div className="rs-tutorial-title">Explore your argument</div>
+                                    <div className="rs-tutorial-text">
+                                        Click any node in the graph to view its quality score and details.
+                                    </div>
+                                    <button className="rs-tutorial-next" onClick={lambda -> None { tutorialStep = 2; }}>
+                                        Next
+                                    </button>
+                                </div>
+                            ) if tutorialStep == 1 else None}
+                            {(
+                                <div>
+                                    <div className="rs-tutorial-step-label">Step 2 of 3</div>
+                                    <div className="rs-tutorial-title">Take action</div>
+                                    <div className="rs-tutorial-text">
+                                        Use the action buttons to respond, counter, expand, or investigate a node.
+                                    </div>
+                                    <div className="rs-tutorial-nav">
+                                        <button className="rs-tutorial-back" onClick={lambda -> None { tutorialStep = 1; }}>
+                                            Back
+                                        </button>
+                                        <button className="rs-tutorial-next" onClick={lambda -> None { tutorialStep = 3; }}>
+                                            Next
+                                        </button>
+                                    </div>
+                                </div>
+                            ) if tutorialStep == 2 else None}
+                            {(
+                                <div>
+                                    <div className="rs-tutorial-step-label">Step 3 of 3</div>
+                                    <div className="rs-tutorial-title">Improve your score</div>
+                                    <div className="rs-tutorial-text">
+                                        Check the issues panel for weaknesses and follow the suggested next actions to strengthen your argument.
+                                    </div>
+                                    <button className="rs-tutorial-next" onClick={lambda -> None { showTutorial = False; }}>
+                                        Got it
+                                    </button>
+                                </div>
+                            ) if tutorialStep == 3 else None}
+                        </div>
+                    ) if showTutorial else None}
                 </div>
 
                 {(
@@ -1017,6 +1147,18 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                         {(
                                             <div className="rs-assumptions-in-issues">
                                                 {assumptionElements}
+                                                {(
+                                                    <button className="rs-show-more-btn"
+                                                        onClick={lambda -> None { showAllAssumptions = True; }}>
+                                                        {f"Show {_hiddenAssumptionCount} more"}
+                                                    </button>
+                                                ) if _hiddenAssumptionCount > 0 else None}
+                                                {(
+                                                    <button className="rs-show-more-btn"
+                                                        onClick={lambda -> None { showAllAssumptions = False; }}>
+                                                        Show less
+                                                    </button>
+                                                ) if showAllAssumptions and len(sel_assumptions) > 3 else None}
                                             </div>
                                         ) if sel_has_assumptions else None}
                                     </div>
@@ -1030,41 +1172,49 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                     <span className="rs-section-dot rs-section-dot-actions"></span>
                                     Quick Actions
                                 </div>
-                                <div className="rs-actions-row">
+                                <div className="rs-actions-grid">
                                     {(
                                         <button className="rs-action-btn rs-action-btn-respond"
-                                            onClick={lambda -> None { startEdit("address"); }}>
-                                            💬 Respond
+                                            onClick={lambda -> None { startEdit("address"); }}
+                                            title="Add evidence or reasoning to address this counterargument">
+                                            Respond
                                         </button>
                                     ) if show_address else (
                                         <button className="rs-action-btn rs-action-btn-respond"
-                                            onClick={lambda -> None { startEdit("respond"); }}>
-                                            💬 Respond
+                                            onClick={lambda -> None { startEdit("respond"); }}
+                                            title="Add supporting evidence or reasoning to this node">
+                                            Respond
                                         </button>
                                     ) if show_respond else None}
                                     {(
-                                        <button className="rs-action-btn rs-action-btn-default"
-                                            onClick={lambda -> None { startEdit("counter"); }}>
-                                            ⚔️ Counter
+                                        <button className="rs-action-btn rs-action-btn-counter"
+                                            onClick={lambda -> None { startEdit("counter"); }}
+                                            title="Generate a counterargument against this claim">
+                                            Counter
                                         </button>
                                     ) if show_add_counter else None}
                                     {(
                                         <button className="rs-action-btn rs-action-btn-expand"
-                                            onClick={handleExpandBranch}>
-                                            🌿 Expand
+                                            onClick={handleExpandBranch}
+                                            title="Break this claim into sub-claims and evidence">
+                                            Expand
                                         </button>
                                     ) if show_expand else None}
                                     {(
                                         <button className="rs-action-btn rs-action-btn-default"
-                                            onClick={lambda -> None { startEdit("investigate"); }}>
-                                            🔍 Investigate
+                                            onClick={lambda -> None { startEdit("investigate"); }}
+                                            title="Find Wikipedia sources related to this node">
+                                            Investigate
                                         </button>
                                     ) if not sel_is_well_sourced else (
-                                        <span className="rs-sourced-badge">✓ Sourced</span>
+                                        <span className="rs-sourced-badge">Sourced</span>
                                     )}
+                                </div>
+                                <div className="rs-actions-delete-row">
                                     <button className="rs-action-btn rs-action-btn-delete"
-                                        onClick={lambda -> None { startEdit("delete"); }}>
-                                        🗑️ Delete
+                                        onClick={lambda -> None { startEdit("delete"); }}
+                                        title="Remove this node and its connections">
+                                        Delete
                                     </button>
                                 </div>
                             </div>
@@ -1094,7 +1244,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                 <div className="rs-delete-box">
                                     <div className="rs-delete-title">Delete this node?</div>
                                     <div className="rs-delete-warning">
-                                        This will remove the node and all its connections. This cannot be undone.
+                                        This will remove the node and all its connections.
                                     </div>
                                     <div className="rs-edit-buttons">
                                         <button className="rs-confirm-delete-btn"
@@ -1109,6 +1259,9 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                     <div className="rs-section-heading rs-section-heading-info">
                                         <span className="rs-section-dot rs-section-dot-info"></span>
                                         Wikipedia Sources
+                                    </div>
+                                    <div className="rs-wiki-disclaimer">
+                                        Sources come from Wikipedia and may not be fully reliable. Always verify before citing.
                                     </div>
                                     {(
                                         <div className="rs-investigate-loading">Searching Wikipedia...</div>
@@ -1166,7 +1319,9 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                                 {str(sel_node_score)}
                                             </div>
                                             <div className="rs-quality-score-meta">
-                                                <div className="rs-quality-score-label">Quality Score</div>
+                                                <div className="rs-quality-score-label">
+                                                    {"Strong" if sel_node_score >= 70 else ("Fair" if sel_node_score >= 50 else "Weak")}
+                                                </div>
                                                 {(
                                                     <div className="rs-quality-category">
                                                         {sel_ev_cat_display}
@@ -1194,8 +1349,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                         </div>
 
                         <div className="rs-default-scroll">
+
                             <div className="rs-default-section-header">
-                                <span>📈</span>
                                 <span className="rs-default-section-title">Reasoning Score</span>
                             </div>
 
@@ -1255,7 +1410,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             </div>
 
                             <div className="rs-default-section-header">
-                                <span>⚠️</span>
                                 <span className="rs-default-section-title">Top Issues</span>
                             </div>
                             {(
@@ -1271,7 +1425,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
                             <div className="rs-next-actions-section">
                                 <div className="rs-default-section-header">
-                                    <span>🧭</span>
                                     <span className="rs-default-section-title">Next 3 Actions</span>
                                 </div>
                                 {(
@@ -1286,7 +1439,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             {(
                                 <div className="rs-counterargs-section">
                                     <div className="rs-default-section-header">
-                                        <span>⚔️</span>
                                         <span className="rs-default-section-title">
                                             Consider These Counterarguments
                                         </span>

@@ -35,6 +35,8 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
     has nodePositions: dict    = {},
         draggingNodeId: str    = None,
         dragDidMove: bool      = False,
+        dragStartClientX: float = 0.0,
+        dragStartClientY: float = 0.0,
         nodeDragOffsetX: float = 0.0,
         nodeDragOffsetY: float = 0.0,
         isPanning: bool        = False,
@@ -395,12 +397,20 @@ def:pub ArgumentGraphView(props: any) -> JsxElement {
         pos    = getPos(nodeId);
         nodeDragOffsetX = (e.clientX - rect.left - viewX) / scale - pos["x"];
         nodeDragOffsetY = (e.clientY - rect.top  - viewY) / scale - pos["y"];
-        draggingNodeId  = nodeId;
-        dragDidMove     = False;
+        draggingNodeId    = nodeId;
+        dragDidMove       = False;
+        dragStartClientX  = e.clientX;
+        dragStartClientY  = e.clientY;
     }
 
     def handleMouseMove(e: any) -> None {
         if draggingNodeId {
+            # Only count as drag if mouse moved more than 4px (prevents click jitter)
+            dx = e.clientX - dragStartClientX;
+            dy = e.clientY - dragStartClientY;
+            if not dragDidMove and (dx * dx + dy * dy) < 16 {
+                return;
+            }
             rect  = e.currentTarget.getBoundingClientRect();
             new_x = (e.clientX - rect.left - viewX) / scale - nodeDragOffsetX;
             new_y = (e.clientY - rect.top  - viewY) / scale - nodeDragOffsetY;

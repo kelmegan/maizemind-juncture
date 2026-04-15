@@ -49,7 +49,7 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
     ht_color = config["ht"];
 
     # Score badge color (matches nodeScore thresholds)
-    score_val = node_score if node_score else 50;
+    score_val = node_score;
     str_color = "#16a34a" if score_val >= 70 else ("#ca8a04" if score_val >= 50 else "#dc2626");
 
     # Wrap text into lines
@@ -98,7 +98,7 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
     }
 
     return (
-        <g opacity={opacity_val}>
+        <g opacity={opacity_val} cursor="pointer" className="rs-node-hover">
             {(
                 <rect x={str(-w/2 - 4)} y={str(-h/2 - 4)} width={str(w + 8)} height={str(h + 8)}
                     rx="18" fill="none" stroke={stroke_color} strokeWidth="2" opacity="0.4" />
@@ -126,18 +126,6 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
             </text>
 
             {line_elements}
-
-            {(
-                <g>
-                    <circle cx={str(w/2 - 14)} cy={str(h/2 - 14)} r="7" fill="#ef4444" />
-                    <text x={str(w/2 - 14)} y={str(h/2 - 10)} fontSize="9" fill="#fff"
-                        textAnchor="middle" fontWeight="700">!</text>
-                </g>
-            ) if has_issues else None}
-
-            {(
-                <circle cx={str(w/2 - 30)} cy={str(h/2 - 14)} r="5" fill="#f59e0b" opacity="0.8" />
-            ) if has_assumptions else None}
 
             {(
                 <g>
