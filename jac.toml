@@ -44,7 +44,7 @@ max_tokens = 1500
 
 [plugins.scale.kubernetes]
 namespace = "maizemind-juncture"
-domain = "maizemind.com"
+domain = "www.maizemind.com"
 cert_manager_email = "maya.hillegonds1@gmail.com"
 
 [plugins.scale.secrets]
