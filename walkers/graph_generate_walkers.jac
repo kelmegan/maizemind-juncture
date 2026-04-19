@@ -482,23 +482,52 @@ walker:pub GetGraphWithScoring {
         return False;
     }
 
-    def claim_support_score(nodes: list, edges: list, claim_id: str) -> float {
+    def claim_support_score_internal(nodes: list, edges: list, claim_id: str, visited: list) -> float {
+        if claim_id in visited {
+            return 0.0;
+        }
+        next_visited = list(visited);
+        next_visited.append(claim_id);
+
         total_support = 0.0;
         evidence_count = 0;
+        claim_supporter_scores: list[float] = [];
         for e in edges {
             if e.get("type", "") == "SUPPORTS" and e.get("target", "") == claim_id {
                 src_node = self.get_node(nodes, e.get("source", ""));
                 if src_node and src_node.get("type", "") == "EVIDENCE" {
                     evidence_count = evidence_count + 1;
                     total_support = total_support + self.edge_weight(e) * self.evidence_quality(src_node);
+                } elif src_node and src_node.get("type", "") in ["CLAIM", "THESIS"] {
+                    claim_supporter_scores.append(
+                        self.claim_support_score_internal(nodes, edges, src_node.get("id", ""), next_visited)
+                    );
                 }
             }
         }
-        if evidence_count == 0 {
-            return 0.0;
+        if evidence_count > 0 {
+            avg_quality = self.clamp01(total_support / max(1, evidence_count));
+            return self.clamp01(0.55 + 0.45 * avg_quality);
         }
-        if total_support > 1.0 { total_support = 1.0; }
-        return self.clamp01(total_support);
+        if len(claim_supporter_scores) > 0 {
+            supporter_sum = 0.0;
+            si = 0;
+            while si < len(claim_supporter_scores) {
+                supporter_sum = supporter_sum + claim_supporter_scores[si];
+                si = si + 1;
+            }
+            avg_supporter = self.clamp01(supporter_sum / max(1, len(claim_supporter_scores)));
+            base_credit = 0.28 + 0.52 * avg_supporter;
+            if self.has_assumption(nodes, edges, claim_id) {
+                base_credit = base_credit + 0.08;
+            }
+            return self.clamp01(base_credit);
+        }
+        return 0.0;
+    }
+
+    def claim_support_score(nodes: list, edges: list, claim_id: str) -> float {
+        return self.claim_support_score_internal(nodes, edges, claim_id, []);
     }
 
     """Check if a claim has assumptions — looks at supporting evidence nodes' assumptions lists."""
