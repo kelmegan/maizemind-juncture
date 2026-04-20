@@ -1,0 +1,188 @@
+{
+  "id": "business_complex_launch_review",
+  "graph_mode": "business_meeting_decision",
+  "graphMode": "business_meeting_decision",
+  "title": "Complex business decision board",
+  "summary": "A richer launch review board with multiple options, mixed evidence, blocker risks, questions, assumptions, and actions.",
+  "primary_decision_id": "d1",
+  "expectations": {
+    "currentOverallMin": 55,
+    "currentOverallMax": 65,
+    "readinessStatus": "NOT_READY",
+    "criticalBlockersMin": 2,
+    "blockerCap": 59
+  },
+  "nodes": [
+    {
+      "id": "d1",
+      "type": "THESIS",
+      "role": "DECISION",
+      "text": "Should we launch the AI meeting assistant beta to external customers in June?",
+      "content": "Should we launch the AI meeting assistant beta to external customers in June?",
+      "decision_status": "tentative",
+      "confidence": 0.76
+    },
+    {
+      "id": "o1",
+      "type": "CLAIM",
+      "role": "OPTION",
+      "text": "Launch only to internal teams in June",
+      "content": "Launch only to internal teams in June",
+      "option_status": "leading",
+      "confidence": 0.73
+    },
+    {
+      "id": "o2",
+      "type": "CLAIM",
+      "role": "OPTION",
+      "text": "Run a limited beta with five design-partner customers",
+      "content": "Run a limited beta with five design-partner customers",
+      "option_status": "proposed",
+      "confidence": 0.69
+    },
+    {
+      "id": "o3",
+      "type": "CLAIM",
+      "role": "OPTION",
+      "text": "Delay launch until the security review and export controls are complete",
+      "content": "Delay launch until the security review and export controls are complete",
+      "option_status": "proposed",
+      "confidence": 0.71
+    },
+    {
+      "id": "e1",
+      "type": "EVIDENCE",
+      "role": "EVIDENCE",
+      "text": "The core transcription and action-item pipeline already meets internal reliability targets.",
+      "content": "The core transcription and action-item pipeline already meets internal reliability targets.",
+      "evidence_kind": "metric",
+      "evidence_category": "empirical_data",
+      "source_span_ids": ["s12"],
+      "confidence": 0.83
+    },
+    {
+      "id": "e2",
+      "type": "EVIDENCE",
+      "role": "EVIDENCE",
+      "text": "Three design-partner customers said they would test the product if action summaries and admin controls are ready.",
+      "content": "Three design-partner customers said they would test the product if action summaries and admin controls are ready.",
+      "evidence_kind": "stakeholder_observation",
+      "evidence_category": "expert_testimony",
+      "speaker_ids": ["sales_lead"],
+      "confidence": 0.74
+    },
+    {
+      "id": "e3",
+      "type": "EVIDENCE",
+      "role": "EVIDENCE",
+      "text": "An internal cost estimate shows that delaying to August would add two months of contractor expense.",
+      "content": "An internal cost estimate shows that delaying to August would add two months of contractor expense.",
+      "evidence_kind": "fact",
+      "evidence_category": "empirical_data",
+      "source_span_ids": ["s33"],
+      "confidence": 0.77
+    },
+    {
+      "id": "r1",
+      "type": "COUNTERARGUMENT",
+      "role": "RISK",
+      "text": "The security review is still incomplete, which creates a launch blocker for external customer access.",
+      "content": "The security review is still incomplete, which creates a launch blocker for external customer access.",
+      "risk_kind": "risk",
+      "severity": "high",
+      "is_blocker": true,
+      "confidence": 0.79
+    },
+    {
+      "id": "r2",
+      "type": "COUNTERARGUMENT",
+      "role": "RISK",
+      "text": "Admins may reject the product if retention settings and meeting export controls are unclear.",
+      "content": "Admins may reject the product if retention settings and meeting export controls are unclear.",
+      "risk_kind": "objection",
+      "severity": "medium",
+      "is_blocker": false,
+      "confidence": 0.7
+    },
+    {
+      "id": "as1",
+      "type": "CLAIM",
+      "role": "ASSUMPTION",
+      "text": "Internal usage in June will surface most of the highest-risk failure modes before customer rollout.",
+      "content": "Internal usage in June will surface most of the highest-risk failure modes before customer rollout.",
+      "assumption_status": "explicit",
+      "confidence": 0.63
+    },
+    {
+      "id": "q1",
+      "type": "CLAIM",
+      "role": "OPEN_QUESTION",
+      "text": "Can the security team complete the review before the final June launch gate?",
+      "content": "Can the security team complete the review before the final June launch gate?",
+      "question_status": "open",
+      "is_blocker": true,
+      "confidence": 0.75
+    },
+    {
+      "id": "q2",
+      "type": "CLAIM",
+      "role": "OPEN_QUESTION",
+      "text": "Do we need customer-facing export controls in the first beta or only before general release?",
+      "content": "Do we need customer-facing export controls in the first beta or only before general release?",
+      "question_status": "open",
+      "is_blocker": false,
+      "confidence": 0.7
+    },
+    {
+      "id": "a1",
+      "type": "CLAIM",
+      "role": "ACTION",
+      "text": "Confirm the security review timeline with the security lead.",
+      "content": "Confirm the security review timeline with the security lead.",
+      "owners": ["Megan"],
+      "due_date": "2026-05-02",
+      "priority": "high",
+      "action_status": "open",
+      "confidence": 0.77
+    },
+    {
+      "id": "a2",
+      "type": "CLAIM",
+      "role": "ACTION",
+      "text": "Draft admin-facing retention and export-control settings for the beta workspace.",
+      "content": "Draft admin-facing retention and export-control settings for the beta workspace.",
+      "owners": ["Justin"],
+      "priority": "high",
+      "action_status": "in_progress",
+      "confidence": 0.74
+    },
+    {
+      "id": "a3",
+      "type": "CLAIM",
+      "role": "ACTION",
+      "text": "Prepare an internal-only launch checklist for June dogfooding.",
+      "content": "Prepare an internal-only launch checklist for June dogfooding.",
+      "owners": ["Ops"],
+      "due_date": "2026-05-08",
+      "priority": "medium",
+      "action_status": "open",
+      "confidence": 0.72
+    }
+  ],
+  "edges": [
+    { "id": "x1", "source": "d1", "target": "o1", "type": "HAS_OPTION", "role": "HAS_OPTION" },
+    { "id": "x2", "source": "d1", "target": "o2", "type": "HAS_OPTION", "role": "HAS_OPTION" },
+    { "id": "x3", "source": "d1", "target": "o3", "type": "HAS_OPTION", "role": "HAS_OPTION" },
+    { "id": "x4", "source": "e1", "target": "o1", "type": "SUPPORTS", "role": "SUPPORTS", "weight": 0.88 },
+    { "id": "x5", "source": "e2", "target": "o2", "type": "SUPPORTS", "role": "SUPPORTS", "weight": 0.82 },
+    { "id": "x6", "source": "e3", "target": "o3", "type": "SUPPORTS", "role": "SUPPORTS", "weight": 0.78 },
+    { "id": "x7", "source": "r1", "target": "o2", "type": "CONTRADICTS", "role": "OPPOSES", "weight": 0.87 },
+    { "id": "x8", "source": "r2", "target": "o2", "type": "CONTRADICTS", "role": "OPPOSES", "weight": 0.74 },
+    { "id": "x9", "source": "as1", "target": "o1", "type": "DEPENDS_ON", "role": "DEPENDS_ON", "weight": 0.76 },
+    { "id": "x10", "source": "q1", "target": "d1", "type": "BLOCKS", "role": "BLOCKS", "weight": 0.91 },
+    { "id": "x11", "source": "q2", "target": "o2", "type": "BLOCKS", "role": "BLOCKS", "weight": 0.73 },
+    { "id": "x12", "source": "a1", "target": "q1", "type": "ADDRESSES", "role": "RESOLVES", "weight": 0.84 },
+    { "id": "x13", "source": "a2", "target": "q2", "type": "ADDRESSES", "role": "RESOLVES", "weight": 0.71 },
+    { "id": "x14", "source": "a3", "target": "d1", "type": "IMPLEMENTS", "role": "IMPLEMENTS", "weight": 0.8 }
+  ]
+}

@@ -1,0 +1,18 @@
+We need to decide whether to launch the analytics pilot in Q3.
+
+Option A is an internal-only pilot with the product and operations teams.
+Option B is a limited beta with five design-partner customers.
+
+Engineering says the ingestion pipeline and dashboard are already 80% complete.
+Support says the internal pilot would be manageable with current staffing.
+
+Risk: legal review is still incomplete for customer-facing data sharing.
+Risk: a customer beta could create onboarding load before the support team is ready.
+
+Open question: can legal finish the compliance review before May 15?
+Open question: do we have enough success metrics defined to evaluate the pilot?
+
+Assumption: internal users are representative enough to validate the core workflow.
+
+Megan will confirm the legal timeline by 2026-05-02.
+Arun will propose pilot success metrics by 2026-05-06.

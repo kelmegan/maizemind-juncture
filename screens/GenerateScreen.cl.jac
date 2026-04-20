@@ -17,6 +17,8 @@ def:pub GenerateScreen(props: any) -> JsxElement {
     ctx = useContext(_AppCtx);
 
     has notes: str = "",
+        generationMode: str = "education_argument",
+        generationTemplate: str = "",
         isGenerating: bool = False,
         generateStatus: str = "",
         currentUserId: str = "",
@@ -42,22 +44,30 @@ def:pub GenerateScreen(props: any) -> JsxElement {
         showConfirmRegenerate = False;
 
         isGenerating = True;
-        generateStatus = "Step 1/3: Parsing notes into argument structure...";
+        generateStatus = "Step 1/3: Parsing notes into argument structure..."
+            if generationMode == "education_argument"
+            else "Step 1/3: Structuring meeting decisions, options, and risks...";
         setTimeout(lambda -> None {
             if isGenerating {
-                generateStatus = "Step 2/3: Analyzing graph and generating critique...";
+                generateStatus = "Step 2/3: Analyzing graph and generating critique..."
+                    if generationMode == "education_argument"
+                    else "Step 2/3: Evaluating decision readiness and unresolved blockers...";
             }
         }, 1200);
         setTimeout(lambda -> None {
             if isGenerating {
-                generateStatus = "Step 3/3: Calculating reasoning score...";
+                generateStatus = "Step 3/3: Calculating reasoning score..."
+                    if generationMode == "education_argument"
+                    else "Step 3/3: Building your decision board...";
             }
         }, 2600);
         try {
             combined_uploaded = uploadedFiles.map(lambda f -> any { return f["content"]; }).join("\n");
             result = await root spawn GenerateArgumentGraph(
                 notes=notes + combined_uploaded,
-                userId=currentUserId
+                userId=currentUserId,
+                mode=generationMode,
+                template=generationTemplate
             );
 
             data = result["reports"][0] if result["reports"] else {};
@@ -159,28 +169,83 @@ def:pub GenerateScreen(props: any) -> JsxElement {
         notes = e.target.value;
     }
 
+    def selectGenerationMode(mode: str) -> None {
+        generationMode = mode;
+        generationTemplate = "business_meeting_decision" if mode == "business_meeting_decision" else "";
+    }
+
+    mode_title = "Transform Your Notes" if generationMode == "education_argument" else "Build a Decision Board";
+    mode_subtitle = "Paste your messy notes below, and we'll create an argument map with instant feedback"
+        if generationMode == "education_argument"
+        else "Paste meeting notes or a transcript, and we'll turn it into a decision board with options, risks, and next actions";
+    notes_description = "Paste your research notes, brainstorming, or draft arguments. The messier, the better!"
+        if generationMode == "education_argument"
+        else "Paste meeting notes, call transcripts, or planning docs. We'll extract the decision, options, blockers, and follow-ups.";
+    notes_placeholder = "Example: Remote work has benefits and drawbacks. People save time commuting (about an hour per day on average). They have more flexibility for work-life balance. But some studies show isolation can be an issue. Companies save money on office space. Productivity might increase because fewer distractions..."
+        if generationMode == "education_argument"
+        else "Example: We need to decide whether to launch the pilot in Q3. Option A is an internal-only rollout. Option B is a limited customer beta. Engineering says the core infrastructure is almost ready, but legal review is still incomplete. Megan will confirm the compliance timeline by May 2. Open question: can support staff the beta without delaying onboarding?";
+    generate_label = "Generate Argument Map" if generationMode == "education_argument" else "Generate Decision Board";
+    generate_note = "This can take a moment" if generationMode == "education_argument" else "This can take a moment while we structure the meeting";
+
     return (
         <div className="generate-page">
             <Header screen="generate"/>
 
             <div className="generate-content">
                 <div className="generate-hero">
-                    <h2 className="generate-hero-title">Transform Your Notes</h2>
+                    <h2 className="generate-hero-title">{mode_title}</h2>
                     <p className="generate-hero-subtitle">
-                        Paste your messy notes below, and we'll create an argument map with instant feedback
+                        {mode_subtitle}
                     </p>
+                </div>
+
+                <div style={{"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "14px", "marginBottom": "20px"}}>
+                    <button
+                        onClick={lambda -> None { selectGenerationMode("education_argument"); }}
+                        disabled={isGenerating}
+                        style={{
+                            "padding": "16px",
+                            "borderRadius": "16px",
+                            "border": "2px solid " + ("#2563eb" if generationMode == "education_argument" else "#dbe3f0"),
+                            "background": "#eff6ff" if generationMode == "education_argument" else "#ffffff",
+                            "textAlign": "left",
+                            "cursor": "pointer"
+                        }}
+                    >
+                        <div style={{"fontWeight": "700", "fontSize": "15px", "marginBottom": "6px"}}>Education / Argument</div>
+                        <div style={{"fontSize": "13px", "color": "#4b5563"}}>
+                            Default mode for essays, class notes, claims, evidence, and counterarguments.
+                        </div>
+                    </button>
+                    <button
+                        onClick={lambda -> None { selectGenerationMode("business_meeting_decision"); }}
+                        disabled={isGenerating}
+                        style={{
+                            "padding": "16px",
+                            "borderRadius": "16px",
+                            "border": "2px solid " + ("#0f766e" if generationMode == "business_meeting_decision" else "#dbe3f0"),
+                            "background": "#ecfeff" if generationMode == "business_meeting_decision" else "#ffffff",
+                            "textAlign": "left",
+                            "cursor": "pointer"
+                        }}
+                    >
+                        <div style={{"fontWeight": "700", "fontSize": "15px", "marginBottom": "6px"}}>Business Meeting Decision</div>
+                        <div style={{"fontSize": "13px", "color": "#4b5563"}}>
+                            Optional mode for decisions, options, risks, open questions, and next actions.
+                        </div>
+                    </button>
                 </div>
 
                 <Card
                     title={(<span className="card-title-icon"><Sparkles />Your Notes</span>)}
-                    description="Paste your research notes, brainstorming, or draft arguments. The messier, the better!"
+                    description={notes_description}
                 >
                     <div className="notes-card-body">
                         <div>
                             <label className="notes-label" htmlFor="notes">Notes</label>
                             <textarea
                                 id="notes"
-                                placeholder="Example: Remote work has benefits and drawbacks. People save time commuting (about an hour per day on average). They have more flexibility for work-life balance. But some studies show isolation can be an issue. Companies save money on office space. Productivity might increase because fewer distractions..."
+                                placeholder={notes_placeholder}
                                 value={notes}
                                 onChange={handleNotesChange}
                                 className="notes-textarea"
@@ -250,11 +315,11 @@ def:pub GenerateScreen(props: any) -> JsxElement {
                                     <span className="generate-spinner-label">Generating...</span>
                                 </div>
                                 <p className="generate-spinner-status">{generateStatus}</p>
-                                <p className="generate-spinner-note">This can take a moment</p>
+                                <p className="generate-spinner-note">{generate_note}</p>
                             </div>
                         ) if isGenerating else (
                             <Button
-                                label={(<>Generate Argument Map<ArrowRight className="generate-btn-icon" /></>)}
+                                label={(<>{generate_label}<ArrowRight className="generate-btn-icon" /></>)}
                                 onClick={handleGenerate}
                                 disabled={not notes.trim()}
                                 className="generate-btn"

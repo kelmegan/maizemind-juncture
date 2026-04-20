@@ -21,6 +21,15 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
         "logical_reasoning": "LOGICAL",
         "analogy": "ANALOGY"
     };
+    semanticLabels = {
+        "DECISION": "DECISION",
+        "OPTION": "OPTION",
+        "EVIDENCE": "EVIDENCE",
+        "RISK": "RISK",
+        "ASSUMPTION": "ASSUMPTION",
+        "OPEN_QUESTION": "OPEN QUESTION",
+        "ACTION": "NEXT ACTION"
+    };
 
     node_type = node_data["type"] if "type" in node_data else "CLAIM";
     node_content = node_data["content"] if "content" in node_data else "";
@@ -34,11 +43,16 @@ def:pub ArgumentNodeComponent(props: any) -> JsxElement {
     # Evidence category info
     ev_category = node_data["evidence_category"] if "evidence_category" in node_data else "";
     ev_cat_label = categoryLabels[ev_category] if ev_category in categoryLabels else "";
+    semantic_role = str(node_data["role"]).upper() if "role" in node_data and node_data["role"] else "";
+    if not semantic_role {
+        semantic_role = str(node_data["semanticRole"]).upper() if "semanticRole" in node_data and node_data["semanticRole"] else "";
+    }
+    if semantic_role == "NEXT_ACTION" { semantic_role = "ACTION"; }
     node_assumptions = node_data["assumptions"] if "assumptions" in node_data else [];
     has_assumptions = len(node_assumptions) > 0;
 
     # Pre-compute header label
-    base_label = ev_cat_label if ev_cat_label else config["label"];
+    base_label = semanticLabels[semantic_role] if semantic_role in semanticLabels else (ev_cat_label if ev_cat_label else config["label"]);
     header_label = "SUGGESTED" if isGhost else base_label;
 
     # Colors from config

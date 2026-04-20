@@ -1,0 +1,94 @@
+{
+  "id": "business_decision_board",
+  "graph_mode": "business_meeting_decision",
+  "graphMode": "business_meeting_decision",
+  "title": "Business decision board",
+  "summary": "A decision board with options, evidence, risk, blocker question, and action.",
+  "primary_decision_id": "d1",
+  "expectations": {
+    "currentOverallMin": 55,
+    "currentOverallMax": 65,
+    "readinessStatus": "NOT_READY",
+    "criticalBlockersMin": 1,
+    "blockerCap": 59
+  },
+  "nodes": [
+    {
+      "id": "d1",
+      "type": "THESIS",
+      "role": "DECISION",
+      "text": "Should we launch the analytics pilot in Q3?",
+      "content": "Should we launch the analytics pilot in Q3?",
+      "decision_status": "tentative",
+      "confidence": 0.7
+    },
+    {
+      "id": "o1",
+      "type": "CLAIM",
+      "role": "OPTION",
+      "text": "Launch to internal users only",
+      "content": "Launch to internal users only",
+      "option_status": "leading",
+      "confidence": 0.7
+    },
+    {
+      "id": "o2",
+      "type": "CLAIM",
+      "role": "OPTION",
+      "text": "Run a limited beta with five customers",
+      "content": "Run a limited beta with five customers",
+      "option_status": "proposed",
+      "confidence": 0.6
+    },
+    {
+      "id": "e1",
+      "type": "EVIDENCE",
+      "role": "EVIDENCE",
+      "text": "The core data pipeline is already built.",
+      "content": "The core data pipeline is already built.",
+      "evidence_kind": "fact",
+      "evidence_category": "expert_testimony",
+      "confidence": 0.7
+    },
+    {
+      "id": "r1",
+      "type": "COUNTERARGUMENT",
+      "role": "RISK",
+      "text": "Legal review is not complete yet.",
+      "content": "Legal review is not complete yet.",
+      "severity": "high",
+      "is_blocker": true,
+      "confidence": 0.7
+    },
+    {
+      "id": "q1",
+      "type": "CLAIM",
+      "role": "OPEN_QUESTION",
+      "text": "Can legal finish the review before May 15?",
+      "content": "Can legal finish the review before May 15?",
+      "question_status": "open",
+      "is_blocker": true,
+      "confidence": 0.7
+    },
+    {
+      "id": "a1",
+      "type": "CLAIM",
+      "role": "ACTION",
+      "text": "Confirm the legal review timeline.",
+      "content": "Confirm the legal review timeline.",
+      "owners": ["Megan"],
+      "due_date": "2026-05-02",
+      "priority": "high",
+      "action_status": "open",
+      "confidence": 0.7
+    }
+  ],
+  "edges": [
+    { "id": "x1", "source": "d1", "target": "o1", "type": "HAS_OPTION", "role": "HAS_OPTION" },
+    { "id": "x2", "source": "d1", "target": "o2", "type": "HAS_OPTION", "role": "HAS_OPTION" },
+    { "id": "x3", "source": "e1", "target": "o1", "type": "SUPPORTS", "role": "SUPPORTS", "weight": 0.8 },
+    { "id": "x4", "source": "r1", "target": "o1", "type": "CONTRADICTS", "role": "OPPOSES", "weight": 0.8 },
+    { "id": "x5", "source": "q1", "target": "d1", "type": "BLOCKS", "role": "BLOCKS", "weight": 0.8 },
+    { "id": "x6", "source": "a1", "target": "q1", "type": "ADDRESSES", "role": "RESOLVES", "weight": 0.8 }
+  ]
+}

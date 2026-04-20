@@ -27,6 +27,50 @@ def:pub ExportScreen(props: any) -> JsxElement {
     copyStatus: str = "",
     saved: bool = False;
 
+    def semanticRole(node_data: dict) -> str {
+        role = str(node_data["role"]).upper() if "role" in node_data and node_data["role"] else "";
+        if not role {
+            role = str(node_data["semanticRole"]).upper() if "semanticRole" in node_data and node_data["semanticRole"] else "";
+        }
+        if role == "NEXT_ACTION" { role = "ACTION"; }
+        if role { return role; }
+        node_type = node_data["type"] if "type" in node_data else "";
+        if node_type == "THESIS" { return "DECISION"; }
+        if node_type == "EVIDENCE" { return "EVIDENCE"; }
+        if node_type == "COUNTERARGUMENT" { return "RISK"; }
+        return "OPTION";
+    }
+
+    def roleNodes(node_list: list, role: str) -> list {
+        result: list = [];
+        ni = 0;
+        while ni < len(node_list) {
+            if semanticRole(node_list[ni]) == role {
+                result.append(node_list[ni]);
+            }
+            ni = ni + 1;
+        }
+        return result;
+    }
+
+    def firstOwnerText(node_data: dict) -> str {
+        if not node_data { return ""; }
+        if "owner" in node_data and node_data["owner"] {
+            return str(node_data["owner"]);
+        }
+        if "owners" in node_data and node_data["owners"] {
+            owner_candidates = node_data["owners"];
+            try {
+                if len(owner_candidates) > 0 and owner_candidates[0] {
+                    return str(owner_candidates[0]);
+                }
+            } except Exception as e {
+                return str(owner_candidates);
+            }
+        }
+        return "";
+    }
+
     async def loadGraphData() -> None {
         if "graph" in loc_state and loc_state["graph"] {
             currentGraph = loc_state["graph"];
@@ -59,6 +103,85 @@ def:pub ExportScreen(props: any) -> JsxElement {
         nodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
         edges = currentGraph["edges"] if "edges" in currentGraph else [];
         NL = chr(10);
+        graph_mode = currentGraph["graph_mode"] if "graph_mode" in currentGraph and currentGraph["graph_mode"] else (currentGraph["graphMode"] if "graphMode" in currentGraph else "education_argument");
+
+        if graph_mode == "business_meeting_decision" {
+            decision_nodes = roleNodes(nodes, "DECISION");
+            option_nodes = roleNodes(nodes, "OPTION");
+            evidence_nodes = roleNodes(nodes, "EVIDENCE");
+            risk_nodes = roleNodes(nodes, "RISK");
+            assumption_nodes = roleNodes(nodes, "ASSUMPTION");
+            question_nodes = roleNodes(nodes, "OPEN_QUESTION");
+            action_nodes = roleNodes(nodes, "ACTION");
+
+            out = "DECISION BOARD" + NL;
+            out += "==================================================" + NL + NL;
+            if "title" in currentGraph and currentGraph["title"] {
+                out += "Title: " + currentGraph["title"] + NL;
+            }
+            if "summary" in currentGraph and currentGraph["summary"] {
+                out += "Summary: " + currentGraph["summary"] + NL;
+            }
+            out += NL;
+
+            decision_text = decision_nodes[0]["content"] if len(decision_nodes) > 0 and "content" in decision_nodes[0] else "Decision still under discussion";
+            out += "DECISION" + NL;
+            out += decision_text + NL + NL;
+
+            if currentScore {
+                out += "READINESS SCORE" + NL;
+                overall_text = str(currentScore["overall"]) + "/100" if ("readinessStatus" not in currentScore or currentScore["readinessStatus"] != "DISCUSSION_ONLY") else "Discussion Only";
+                out += f"Overall: {overall_text}" + NL;
+                out += f"Status: {currentScore['readinessStatus'] if 'readinessStatus' in currentScore else 'NEEDS_FOLLOW_UP'}" + NL;
+                out += NL;
+            }
+
+            def appendRoleSection(title: str, node_list: list, include_action_meta: bool = False) -> str {
+                section = title + NL;
+                if len(node_list) == 0 {
+                    return section + "- None" + NL + NL;
+                }
+                ni = 0;
+                while ni < len(node_list) {
+                    node_item = node_list[ni];
+                    line = "- " + (node_item["content"] if "content" in node_item else "");
+                    if include_action_meta {
+                        owner = firstOwnerText(node_item);
+                        due = node_item["dueDate"] if "dueDate" in node_item else (node_item["due_date"] if "due_date" in node_item else "");
+                        if owner or due {
+                            meta_bits: list = [];
+                            if owner { meta_bits.append("owner: " + owner); }
+                            if due { meta_bits.append("due: " + due); }
+                            line = line + " (" + ", ".join(meta_bits) + ")";
+                        }
+                    }
+                    section += line + NL;
+                    ni = ni + 1;
+                }
+                return section + NL;
+            }
+
+            out += appendRoleSection("OPTIONS", option_nodes);
+            out += appendRoleSection("EVIDENCE", evidence_nodes);
+            out += appendRoleSection("RISKS / OBJECTIONS", risk_nodes);
+            out += appendRoleSection("ASSUMPTIONS", assumption_nodes);
+            out += appendRoleSection("OPEN QUESTIONS", question_nodes);
+            out += appendRoleSection("NEXT ACTIONS", action_nodes, True);
+
+            if len(currentIssues) > 0 {
+                out += "TOP BLOCKERS" + NL;
+                bi = 0;
+                blocker_count = len(currentIssues);
+                if blocker_count > 3 { blocker_count = 3; }
+                while bi < blocker_count {
+                    out += "- " + (currentIssues[bi]["description"] if "description" in currentIssues[bi] else "") + NL;
+                    bi = bi + 1;
+                }
+                out += NL;
+            }
+
+            return out;
+        }
 
         node_map: dict = {};
         ni = 0;
@@ -298,22 +421,26 @@ def:pub ExportScreen(props: any) -> JsxElement {
         out += "==================================================" + NL;
         if currentScore {
             overall = currentScore["overall"] if "overall" in currentScore else 0;
-            support = currentScore["support"] if "support" in currentScore else 0;
-            premise = currentScore["premise"] if "premise" in currentScore else 0;
-            coherence = currentScore["coherence"] if "coherence" in currentScore else 0;
-            counter = currentScore["counterargument"] if "counterargument" in currentScore else 0;
+            support = currentScore["rootSupportCoverage"] if "rootSupportCoverage" in currentScore else (currentScore["support"] if "support" in currentScore else 0);
+            evidence_quality = currentScore["evidenceQuality"] if "evidenceQuality" in currentScore else (currentScore["premise"] if "premise" in currentScore else 0);
+            dialectic = currentScore["dialecticalHandling"] if "dialecticalHandling" in currentScore else (currentScore["counterargument"] if "counterargument" in currentScore else 0);
+            coherence = currentScore["structuralCoherence"] if "structuralCoherence" in currentScore else (currentScore["coherence"] if "coherence" in currentScore else 0);
+            assumptions = currentScore["assumptionExplicitness"] if "assumptionExplicitness" in currentScore else 0;
+            thesis_clarity = currentScore["thesisClarity"] if "thesisClarity" in currentScore else 0;
             out += f"Overall Score:              {overall}/100" + NL;
-            out += f"Support Quality (30%):      {support}%" + NL;
-            out += f"Logical Soundness (25%):    {premise}%" + NL;
-            out += f"Coherence (20%):            {coherence}%" + NL;
-            out += f"Counterarg. Handling (25%): {counter}%" + NL;
+            out += f"Root Support Coverage (25%): {support}%" + NL;
+            out += f"Evidence Quality (20%):      {evidence_quality}%" + NL;
+            out += f"Dialectical Handling (20%):  {dialectic}%" + NL;
+            out += f"Structural Coherence (15%):  {coherence}%" + NL;
+            out += f"Assumption Explicitness (10%): {assumptions}%" + NL;
+            out += f"Thesis Clarity (10%):        {thesis_clarity}%" + NL;
         }
 
         return out;
     }
 
     def handleCopyOutline() -> None {
-        show_flags = currentScore["overall"] < 75;
+        show_flags = currentScore["overall"] < 80;
         outline_text = generateOutlineText(show_flags);
         navigator.clipboard.writeText(outline_text)
             .then(lambda _: any -> None {
@@ -327,7 +454,7 @@ def:pub ExportScreen(props: any) -> JsxElement {
     }
 
     def handleExportPDF() -> None {
-        show_flags = currentScore["overall"] < 75;
+        show_flags = currentScore["overall"] < 80;
         outline = generateOutlineText(show_flags);
         doc = Reflect.construct(jsPDF, []);
         margin = 10;
@@ -379,7 +506,9 @@ def:pub ExportScreen(props: any) -> JsxElement {
         );
     }
 
-    show_warning = currentScore["overall"] < 75;
+    graph_mode = currentGraph["graph_mode"] if "graph_mode" in currentGraph and currentGraph["graph_mode"] else (currentGraph["graphMode"] if "graphMode" in currentGraph else "education_argument");
+    is_business_mode = graph_mode == "business_meeting_decision";
+    show_warning = currentScore["overall"] < (85 if is_business_mode else 80);
     unsupported_claims = currentScore["unsupportedClaims"] if "unsupportedClaims" in currentScore else 0;
     fix_count = unsupported_claims;
     if fix_count > 3 { fix_count = 3; }
@@ -418,17 +547,21 @@ def:pub ExportScreen(props: any) -> JsxElement {
                 <Card
                     title={
                         <div className="export-score-header">
-                            <span>Final Score</span>
+                            <span>{"Decision Readiness" if is_business_mode else "Final Score"}</span>
                             <Badge
-                                variant={"default" if currentScore["overall"] >= 75 else "destructive"}
+                                variant={"default" if currentScore["overall"] >= (85 if is_business_mode else 80) else "destructive"}
                                 className="export-score-badge"
                             >
-                                {currentScore["overall"]}/100
+                                {currentScore["overall"]}/100{(" · " + currentScore["readinessStatus"]) if is_business_mode and "readinessStatus" in currentScore else ""}
                             </Badge>
                         </div>
                     }
-                    description={"Your argument is well-structured and ready to export!"
-                        if currentScore["overall"] >= 75 else
+                    description={"Your decision board is structured enough to share with the team."
+                        if is_business_mode and currentScore["overall"] >= 85 else
+                        "Your decision board still needs follow-up before sharing."
+                        if is_business_mode else
+                        "Your argument is well-structured and ready to export!"
+                        if currentScore["overall"] >= 80 else
                         "Your argument could be improved before exporting."}
                 />
 
@@ -441,7 +574,11 @@ def:pub ExportScreen(props: any) -> JsxElement {
                     <Alert className="export-alert-warning">
                         <AlertTriangle className="export-alert-warning-icon" />
                         <div>
-                            <p>Export now, but {' ' + unsupported_claims} claims are unsupported. Want to fix the top {' ' + fix_count} issues first?</p>
+                            <p>
+                                {"Export now, but this decision still has unresolved blockers or follow-up gaps. Want to fix the top issues first?"
+                                    if is_business_mode else
+                                    "Export now, but " + str(unsupported_claims) + " claims are unsupported. Want to fix the top " + str(fix_count) + " issues first?"}
+                            </p>
                             <div style={{"marginTop": "10px"}}>
                                 <Button label="Fix Top Issues First" variant="outline" onClick={handleFixTopIssues} />
                             </div>

@@ -1,0 +1,70 @@
+{
+  "id": "education_balanced",
+  "graph_mode": "education_argument",
+  "graphMode": "education_argument",
+  "title": "Balanced education graph",
+  "summary": "A mostly supported argument with one handled counterargument.",
+  "expectations": {
+    "currentOverallMin": 78,
+    "currentOverallMax": 86,
+    "deltaOverallMin": 5,
+    "currentIssueCountMax": 1,
+    "currentPassesBar": true,
+    "requireCurrentGteLegacy": true
+  },
+  "nodes": [
+    {
+      "id": "t1",
+      "type": "THESIS",
+      "content": "Schools should start classes later for teenagers.",
+      "confidence": 0.7,
+      "issues": []
+    },
+    {
+      "id": "c1",
+      "type": "CLAIM",
+      "content": "Later start times improve sleep and focus.",
+      "confidence": 0.7,
+      "issues": []
+    },
+    {
+      "id": "e1",
+      "type": "EVIDENCE",
+      "content": "District studies reported better attendance after delaying first bell.",
+      "confidence": 0.8,
+      "evidence_category": "empirical_data",
+      "assumptions": [],
+      "issues": []
+    },
+    {
+      "id": "ca1",
+      "type": "COUNTERARGUMENT",
+      "content": "Later schedules can disrupt transportation and after-school activities.",
+      "confidence": 0.6,
+      "issues": []
+    },
+    {
+      "id": "r1",
+      "type": "CLAIM",
+      "content": "Transportation schedules can be adjusted without removing the sleep benefits.",
+      "confidence": 0.6,
+      "issues": []
+    },
+    {
+      "id": "e2",
+      "type": "EVIDENCE",
+      "content": "A neighboring district coordinated buses and still kept sports practice time.",
+      "confidence": 0.7,
+      "evidence_category": "expert_testimony",
+      "assumptions": [],
+      "issues": []
+    }
+  ],
+  "edges": [
+    { "id": "x1", "source": "c1", "target": "t1", "type": "SUPPORTS", "weight": 0.8 },
+    { "id": "x2", "source": "e1", "target": "c1", "type": "SUPPORTS", "weight": 0.9 },
+    { "id": "x3", "source": "ca1", "target": "t1", "type": "CONTRADICTS", "weight": 0.7 },
+    { "id": "x4", "source": "r1", "target": "ca1", "type": "ADDRESSES", "weight": 0.8 },
+    { "id": "x5", "source": "e2", "target": "r1", "type": "SUPPORTS", "weight": 0.8 }
+  ]
+}

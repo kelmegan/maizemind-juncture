@@ -4,6 +4,8 @@
 
 Juncture is a visual reasoning tool that transforms messy notes into structured argument graphs with AI-powered analysis. It creates an interactive visual map from your ideas, evaluates reasoning quality, and provides actionable feedback to strengthen your arguments.
 
+Education and argument mapping remain the default and primary use case. The app now also supports an optional business-facing extension for meeting decision support.
+
 Built with [Jac/Jaseci](https://www.jac-lang.org/) — full-stack (server walkers + client React components).
 
 ## Setup
@@ -108,6 +110,40 @@ rm -rf .jac && jac start main.jac
 - `screens/` — Client `.cl.jac` React screens (Welcome, Generate, Review, Export, Profile)
 - `components/` — Reusable UI components (ArgumentGraphView, Button, Card, etc.)
 - `graph/` — Node schema definitions (AppContext, User, Session, ArgumentGraph)
+
+## Modes
+
+### Education / Argument mode
+
+This is the default mode. Paste class notes, research notes, or draft arguments to generate:
+- thesis
+- claims
+- evidence
+- counterarguments
+- reasoning feedback
+
+### Business Meeting Decision mode
+
+This is an optional extension for turning meeting notes or transcripts into a decision board. It helps teams see:
+- the decision
+- options under consideration
+- supporting evidence
+- risks and objections
+- assumptions
+- open questions
+- next actions with owner and due date when present
+
+The review screen shows a Decision Readiness Score and a structured board so teams can judge whether they are actually ready to decide.
+
+## Future template direction
+
+The architecture is being prepared so more optional business templates can be added later, such as:
+- `approval_review`
+- `strategy_review`
+- `sales_deal_review`
+- `postmortem`
+
+Only `business_meeting_decision` is implemented right now.
 
 ## Team
 

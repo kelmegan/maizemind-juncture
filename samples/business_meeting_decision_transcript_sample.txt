@@ -1,0 +1,23 @@
+We need to decide whether the analytics pilot should start in Q3 or slip to Q4.
+
+Option A is an internal-only pilot with product, operations, and support.
+Option B is a limited beta with five design-partner customers.
+Option C is to delay the pilot until legal and onboarding are fully ready.
+
+Engineering says the event ingestion pipeline is already 80% complete.
+Support says an internal pilot is manageable with current staffing, but a customer beta would need more onboarding coverage.
+Sales says two design partners are ready to participate if we can confirm timing this month.
+
+Risk: legal review for customer-facing data sharing is still incomplete.
+Risk: if onboarding is rushed, the beta could create avoidable support load.
+Risk: delaying to Q4 could reduce momentum with design partners.
+
+Open question: can legal finish the compliance review before 2026-05-15?
+Open question: do we have enough success metrics defined to evaluate the pilot?
+
+Assumption: internal users are representative enough to validate the core workflow before external rollout.
+Assumption: the current dashboard is good enough for pilot feedback even if reporting is incomplete.
+
+Megan will confirm the legal timeline by 2026-05-02.
+Arun will propose pilot success metrics by 2026-05-06.
+Nina will estimate onboarding coverage needed for a five-customer beta by 2026-05-08.
