@@ -1,0 +1,49 @@
+{
+  "id": "education_fragmented",
+  "graph_mode": "education_argument",
+  "graphMode": "education_argument",
+  "title": "Fragmented education graph",
+  "summary": "A weak argument with unsupported and disconnected claims.",
+  "expectations": {
+    "currentOverallMax": 35,
+    "deltaOverallMin": 0,
+    "currentIssueCountMin": 6,
+    "currentPassesBar": false,
+    "requireCurrentGteLegacy": true
+  },
+  "nodes": [
+    {
+      "id": "t1",
+      "type": "THESIS",
+      "content": "Social media is harmful.",
+      "confidence": 0.5,
+      "issues": ["vague_language"]
+    },
+    {
+      "id": "c1",
+      "type": "CLAIM",
+      "content": "It clearly causes problems.",
+      "confidence": 0.4,
+      "issues": ["weak_inference", "vague_language"]
+    },
+    {
+      "id": "c2",
+      "type": "CLAIM",
+      "content": "Schools should ban phones completely.",
+      "confidence": 0.5,
+      "issues": ["missing_premise"]
+    },
+    {
+      "id": "e1",
+      "type": "EVIDENCE",
+      "content": "Some students say they feel distracted.",
+      "confidence": 0.5,
+      "evidence_category": "anecdotal",
+      "assumptions": [],
+      "issues": []
+    }
+  ],
+  "edges": [
+    { "id": "x1", "source": "c1", "target": "t1", "type": "SUPPORTS", "weight": 0.4 }
+  ]
+}

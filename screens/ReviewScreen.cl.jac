@@ -30,6 +30,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         editMode: str = "",
         editInputValue: str = "",
         sourceUrlValue: str = "",
+        actionOwnerValue: str = "",
+        actionDueDateValue: str = "",
+        actionPriorityValue: str = "medium",
+        actionStatusValue: str = "open",
         isSaving: bool = False,
         prevScore: int = 0,
         scoreDelta: int = 0,
@@ -46,6 +50,134 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         tutorialStep: int = 1,
         showTutorial: bool = True,
         thesisToast: str = "";
+
+    def graphMode(graph_data: dict = None) -> str {
+        target_graph = graph_data if graph_data else currentGraph;
+        if not target_graph {
+            return "education_argument";
+        }
+        if "graph_mode" in target_graph and target_graph["graph_mode"] {
+            return str(target_graph["graph_mode"]);
+        }
+        if "graphMode" in target_graph and target_graph["graphMode"] {
+            return str(target_graph["graphMode"]);
+        }
+        return "education_argument";
+    }
+
+    def isBusinessGraph(graph_data: dict = None) -> bool {
+        return graphMode(graph_data) == "business_meeting_decision";
+    }
+
+    def semanticRole(node_data: dict) -> str {
+        if not node_data { return ""; }
+        role = str(node_data["role"]).upper() if "role" in node_data and node_data["role"] else "";
+        if not role {
+            role = str(node_data["semanticRole"]).upper() if "semanticRole" in node_data and node_data["semanticRole"] else "";
+        }
+        if role == "NEXT_ACTION" { role = "ACTION"; }
+        if role { return role; }
+        node_type = node_data["type"] if "type" in node_data else "";
+        if node_type == "THESIS" { return "DECISION"; }
+        if node_type == "EVIDENCE" { return "EVIDENCE"; }
+        if node_type == "COUNTERARGUMENT" { return "RISK"; }
+        return "OPTION";
+    }
+
+    def edgeRole(edge_data: dict) -> str {
+        if not edge_data { return ""; }
+        role = str(edge_data["role"]).upper() if "role" in edge_data and edge_data["role"] else "";
+        if not role {
+            role = str(edge_data["type"]).upper() if "type" in edge_data and edge_data["type"] else "";
+        }
+        if role == "CONTRADICTS" { return "OPPOSES"; }
+        if role == "ADDRESSES" { return "RESOLVES"; }
+        return role;
+    }
+
+    def branchLinkedNodeId(edge_data: dict, current_id: str) -> str {
+        if not edge_data or not current_id { return ""; }
+        current_role = edgeRole(edge_data);
+        if "target" in edge_data and edge_data["target"] == current_id {
+            if current_role == "SUPPORTS" or current_role == "RESOLVES" or current_role == "OPPOSES" or current_role == "BLOCKS" or current_role == "DEPENDS_ON" or current_role == "IMPLEMENTS" {
+                return edge_data["source"] if "source" in edge_data else "";
+            }
+        } elif "source" in edge_data and edge_data["source"] == current_id {
+            if current_role == "HAS_OPTION" {
+                return edge_data["target"] if "target" in edge_data else "";
+            }
+        }
+        return "";
+    }
+
+    def computeBranchIds(root_id: str) -> list {
+        result: list = [];
+        if not currentGraph or not root_id { return result; }
+        queue: list = [root_id];
+        result.append(root_id);
+        graph_edges = currentGraph["edges"] if "edges" in currentGraph else [];
+        qi = 0;
+        while qi < len(queue) {
+            current_id = queue[qi];
+            ei = 0;
+            while ei < len(graph_edges) {
+                linked_id = branchLinkedNodeId(graph_edges[ei], current_id);
+                if linked_id and linked_id not in result {
+                    result.append(linked_id);
+                    queue.append(linked_id);
+                }
+                ei = ei + 1;
+            }
+            qi = qi + 1;
+        }
+        return result;
+    }
+
+    def isNodeInFocusedBranch(node_id: str) -> bool {
+        if not focusBranch or not node_id { return False; }
+        return node_id in computeBranchIds(focusBranch);
+    }
+
+    def semanticRoleLabel(role: str, fallback_type: str = "") -> str {
+        if role == "DECISION" { return "Decision"; }
+        if role == "OPTION" { return "Option"; }
+        if role == "EVIDENCE" { return "Evidence"; }
+        if role == "RISK" { return "Risk"; }
+        if role == "ASSUMPTION" { return "Assumption"; }
+        if role == "OPEN_QUESTION" { return "Open Question"; }
+        if role == "ACTION" { return "Next Action"; }
+        return fallback_type if fallback_type else "Node";
+    }
+
+    def firstOwnerText(node_data: dict) -> str {
+        if not node_data { return ""; }
+        if "owner" in node_data and node_data["owner"] {
+            return str(node_data["owner"]);
+        }
+        if "owners" in node_data and node_data["owners"] {
+            owner_candidates = node_data["owners"];
+            try {
+                if len(owner_candidates) > 0 and owner_candidates[0] {
+                    return str(owner_candidates[0]);
+                }
+            } except Exception as e {
+                return str(owner_candidates);
+            }
+        }
+        return "";
+    }
+
+    def nodesForRole(node_list: list, role: str) -> list {
+        result: list = [];
+        ni = 0;
+        while ni < len(node_list) {
+            if semanticRole(node_list[ni]) == role {
+                result.append(node_list[ni]);
+            }
+            ni = ni + 1;
+        }
+        return result;
+    }
 
     async def loadGraphData() -> None {
         graph_id = ctx.cachedGraphId
@@ -134,7 +266,33 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 "sourceUrl": node_item["sourceUrl"] if "sourceUrl" in node_item else "",
                 "moreInfo": node_item["moreInfo"] if "moreInfo" in node_item else "",
                 "acknowledged": node_item["acknowledged"] if "acknowledged" in node_item else False,
-                "layoutLocked": node_item["layoutLocked"] if "layoutLocked" in node_item else False
+                "layoutLocked": node_item["layoutLocked"] if "layoutLocked" in node_item else False,
+                "role": node_item["role"] if "role" in node_item else "",
+                "semanticRole": node_item["semanticRole"] if "semanticRole" in node_item else "",
+                "source_span_ids": list(node_item["source_span_ids"]) if "source_span_ids" in node_item and node_item["source_span_ids"] else [],
+                "speaker_ids": list(node_item["speaker_ids"]) if "speaker_ids" in node_item and node_item["speaker_ids"] else [],
+                "origin": node_item["origin"] if "origin" in node_item else "",
+                "question": node_item["question"] if "question" in node_item else "",
+                "decision_status": node_item["decision_status"] if "decision_status" in node_item else "",
+                "resolution_text": node_item["resolution_text"] if "resolution_text" in node_item else "",
+                "scope": node_item["scope"] if "scope" in node_item else "",
+                "time_horizon": node_item["time_horizon"] if "time_horizon" in node_item else "",
+                "option_status": node_item["option_status"] if "option_status" in node_item else "",
+                "evidence_kind": node_item["evidence_kind"] if "evidence_kind" in node_item else "",
+                "criterion_tags": list(node_item["criterion_tags"]) if "criterion_tags" in node_item and node_item["criterion_tags"] else [],
+                "risk_kind": node_item["risk_kind"] if "risk_kind" in node_item else "",
+                "severity": node_item["severity"] if "severity" in node_item else "",
+                "is_blocker": node_item["is_blocker"] if "is_blocker" in node_item else False,
+                "assumption_status": node_item["assumption_status"] if "assumption_status" in node_item else "",
+                "question_status": node_item["question_status"] if "question_status" in node_item else "",
+                "owner": node_item["owner"] if "owner" in node_item else "",
+                "owners": list(node_item["owners"]) if "owners" in node_item and node_item["owners"] else [],
+                "dueDate": node_item["dueDate"] if "dueDate" in node_item else "",
+                "due_date": node_item["due_date"] if "due_date" in node_item else "",
+                "priority": node_item["priority"] if "priority" in node_item else "",
+                "taskStatus": node_item["taskStatus"] if "taskStatus" in node_item else "",
+                "task_status": node_item["task_status"] if "task_status" in node_item else "",
+                "action_status": node_item["action_status"] if "action_status" in node_item else ""
             };
             if "isGhost" in node_item { cloned["isGhost"] = node_item["isGhost"]; }
             if "ghostTarget" in node_item { cloned["ghostTarget"] = node_item["ghostTarget"]; }
@@ -154,7 +312,9 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 "id": edge_item["id"] if "id" in edge_item else "",
                 "source": edge_item["source"] if "source" in edge_item else "",
                 "target": edge_item["target"] if "target" in edge_item else "",
-                "type": edge_item["type"] if "type" in edge_item else ""
+                "type": edge_item["type"] if "type" in edge_item else "",
+                "role": edge_item["role"] if "role" in edge_item else "",
+                "confidence": edge_item["confidence"] if "confidence" in edge_item else 0.5
             };
             if "weight" in edge_item { cloned["weight"] = edge_item["weight"]; }
             if "reasoning_type" in edge_item { cloned["reasoning_type"] = edge_item["reasoning_type"]; }
@@ -218,6 +378,30 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             "coherence": score_data["coherence"] if "coherence" in score_data else 0,
             "counterargument": score_data["counterargument"] if "counterargument" in score_data else 0,
             "consistency": score_data["consistency"] if "consistency" in score_data else 0,
+            "rootSupportCoverage": score_data["rootSupportCoverage"] if "rootSupportCoverage" in score_data else 0,
+            "evidenceQuality": score_data["evidenceQuality"] if "evidenceQuality" in score_data else 0,
+            "dialecticalHandling": score_data["dialecticalHandling"] if "dialecticalHandling" in score_data else 0,
+            "structuralCoherence": score_data["structuralCoherence"] if "structuralCoherence" in score_data else 0,
+            "assumptionExplicitness": score_data["assumptionExplicitness"] if "assumptionExplicitness" in score_data else 0,
+            "thesisClarity": score_data["thesisClarity"] if "thesisClarity" in score_data else 0,
+            "decisionClarity": score_data["decisionClarity"] if "decisionClarity" in score_data else 0,
+            "decisionFraming": score_data["decisionFraming"] if "decisionFraming" in score_data else 0,
+            "optionCoverage": score_data["optionCoverage"] if "optionCoverage" in score_data else 0,
+            "optionSetQuality": score_data["optionSetQuality"] if "optionSetQuality" in score_data else 0,
+            "evidenceStrength": score_data["evidenceStrength"] if "evidenceStrength" in score_data else 0,
+            "riskCoverage": score_data["riskCoverage"] if "riskCoverage" in score_data else 0,
+            "riskObjectionHandling": score_data["riskObjectionHandling"] if "riskObjectionHandling" in score_data else 0,
+            "openQuestionHandling": score_data["openQuestionHandling"] if "openQuestionHandling" in score_data else 0,
+            "assumptionQuestionHandling": score_data["assumptionQuestionHandling"] if "assumptionQuestionHandling" in score_data else 0,
+            "actionability": score_data["actionability"] if "actionability" in score_data else 0,
+            "actionabilityOwnership": score_data["actionabilityOwnership"] if "actionabilityOwnership" in score_data else 0,
+            "traceabilityHygiene": score_data["traceabilityHygiene"] if "traceabilityHygiene" in score_data else 0,
+            "readinessStatus": score_data["readinessStatus"] if "readinessStatus" in score_data else "",
+            "discussionOnly": score_data["discussionOnly"] if "discussionOnly" in score_data else False,
+            "blockerCap": score_data["blockerCap"] if "blockerCap" in score_data else 100,
+            "criticalBlockers": score_data["criticalBlockers"] if "criticalBlockers" in score_data else 0,
+            "majorBlockers": score_data["majorBlockers"] if "majorBlockers" in score_data else 0,
+            "moderateBlockers": score_data["moderateBlockers"] if "moderateBlockers" in score_data else 0,
             "unsupportedClaims": score_data["unsupportedClaims"] if "unsupportedClaims" in score_data else 0,
             "claimsNeedingPremise": score_data["claimsNeedingPremise"] if "claimsNeedingPremise" in score_data else 0,
             "unresolvedContradictions": score_data["unresolvedContradictions"] if "unresolvedContradictions" in score_data else 0,
@@ -236,6 +420,15 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             "id": graph_data["id"] if "id" in graph_data else "",
             "nodes": cloneNodeList(graph_data["nodes"]) if "nodes" in graph_data else [],
             "edges": cloneEdgeList(graph_data["edges"]) if "edges" in graph_data else [],
+            "graphMode": graph_data["graphMode"] if "graphMode" in graph_data else "education_argument",
+            "graph_mode": graph_data["graph_mode"] if "graph_mode" in graph_data else (graph_data["graphMode"] if "graphMode" in graph_data else "education_argument"),
+            "schema_version": graph_data["schema_version"] if "schema_version" in graph_data else "",
+            "board_id": graph_data["board_id"] if "board_id" in graph_data else "",
+            "primary_decision_id": graph_data["primary_decision_id"] if "primary_decision_id" in graph_data else "",
+            "meeting": graph_data["meeting"] if "meeting" in graph_data else {},
+            "template": graph_data["template"] if "template" in graph_data else "",
+            "title": graph_data["title"] if "title" in graph_data else "",
+            "summary": graph_data["summary"] if "summary" in graph_data else "",
             "createdAt": graph_data["createdAt"] if "createdAt" in graph_data else "",
             "updatedAt": graph_data["updatedAt"] if "updatedAt" in graph_data else ""
         };
@@ -463,10 +656,11 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         if "graph" not in mutData { return currentGraph; }
         next_graph = mutData["graph"];
         next_graph = applyPositionsAndLocks(next_graph, preserved_positions, preserved_node_ids);
+        next_layout_hints = clonePositionMap(next_graph, preserved_positions);
         currentGraph = next_graph;
-        layoutHints = extractPositionsFromGraph(next_graph);
+        layoutHints = next_layout_hints;
         layoutHintGraphId = next_graph["id"] if "id" in next_graph else layoutHintGraphId;
-        persistedLayoutPositions = extractPositionsFromGraph(next_graph);
+        persistedLayoutPositions = next_layout_hints;
         persistedLayoutGraphId = next_graph["id"] if "id" in next_graph else persistedLayoutGraphId;
         return next_graph;
     }
@@ -535,16 +729,25 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     }
 
     def handleNodeClick(node_data: any) -> None {
+        node_id = node_data["id"] if node_data and "id" in node_data else "";
+        next_focus = focusBranch;
+        if focusBranch and node_id and not isNodeInFocusedBranch(node_id) {
+            next_focus = node_id;
+        }
         selectedNode = node_data;
-        focusBranch = None;
+        focusBranch = next_focus;
         editMode = "";
         editInputValue = "";
+        sourceUrlValue = "";
+        actionOwnerValue = "";
+        actionDueDateValue = "";
+        actionPriorityValue = "medium";
+        actionStatusValue = "open";
         showConfirmDelete = False;
         showScoreDelta = False;
         showAllAssumptions = False;
         investigateResults = [];
         investigateLoading = False;
-        node_id = node_data["id"] if node_data and "id" in node_data else "";
         if node_id in addedAsEvidenceMap {
             addedAsEvidenceMap[node_id] = True;   # trust the map — skip the graph search
         } else {
@@ -570,6 +773,11 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         focusBranch = None;
         editMode = "";
         editInputValue = "";
+        sourceUrlValue = "";
+        actionOwnerValue = "";
+        actionDueDateValue = "";
+        actionPriorityValue = "medium";
+        actionStatusValue = "open";
         showConfirmDelete = False;
     }
 
@@ -591,6 +799,11 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                     selectedNode = n;
                     editMode = "";
                     editInputValue = "";
+                    sourceUrlValue = "";
+                    actionOwnerValue = "";
+                    actionDueDateValue = "";
+                    actionPriorityValue = "medium";
+                    actionStatusValue = "open";
                     showConfirmDelete = False;
                     break;
                 }
@@ -603,6 +816,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         showConfirmDelete = False;
         investigateResults = [];
         investigateLoading = False;
+        sourceUrlValue = "";
         if mode == "delete" {
             editMode = "";
             showConfirmDelete = True;
@@ -620,8 +834,30 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             handleAutoFix();
             return;
         }
+        if mode == "next_action" {
+            editMode = mode;
+            editInputValue = "";
+            actionOwnerValue = "";
+            actionDueDateValue = "";
+            actionPriorityValue = "medium";
+            actionStatusValue = "open";
+            return;
+        }
+        if mode == "edit_action" {
+            editMode = mode;
+            editInputValue = selectedNode["content"] if selectedNode and "content" in selectedNode else "";
+            actionOwnerValue = firstOwnerText(selectedNode);
+            actionDueDateValue = selectedNode["dueDate"] if selectedNode and "dueDate" in selectedNode else (selectedNode["due_date"] if selectedNode and "due_date" in selectedNode else "");
+            actionPriorityValue = selectedNode["priority"] if selectedNode and "priority" in selectedNode and selectedNode["priority"] else "medium";
+            actionStatusValue = selectedNode["taskStatus"] if selectedNode and "taskStatus" in selectedNode and selectedNode["taskStatus"] else (selectedNode["action_status"] if selectedNode and "action_status" in selectedNode and selectedNode["action_status"] else "open");
+            return;
+        }
         editMode = mode;
         editInputValue = "";
+        actionOwnerValue = "";
+        actionDueDateValue = "";
+        actionPriorityValue = "medium";
+        actionStatusValue = "open";
     }
 
     async def handleGenerateCounter() -> None {
@@ -813,6 +1049,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         editMode = "";
         editInputValue = "";
         sourceUrlValue = "";
+        actionOwnerValue = "";
+        actionDueDateValue = "";
+        actionPriorityValue = "medium";
+        actionStatusValue = "open";
         showConfirmDelete = False;
         investigateResults = [];
         investigateLoading = False;
@@ -824,6 +1064,22 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
     def handleSourceUrlInput(e: any) -> None {
         sourceUrlValue = e.target.value;
+    }
+
+    def handleActionOwnerInput(e: any) -> None {
+        actionOwnerValue = e.target.value;
+    }
+
+    def handleActionDueDateInput(e: any) -> None {
+        actionDueDateValue = e.target.value;
+    }
+
+    def handleActionPriorityInput(e: any) -> None {
+        actionPriorityValue = e.target.value;
+    }
+
+    def handleActionStatusInput(e: any) -> None {
+        actionStatusValue = e.target.value;
     }
 
     def applyScoreDelta(prev_value: int, new_value: int) -> None {
@@ -845,6 +1101,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             _undo_label = "Add response";
         } elif editMode == "evidence" or editMode == "respond" {
             _undo_label = "Add evidence";
+        } elif editMode == "next_action" {
+            _undo_label = "Add next action";
+        } elif editMode == "edit_action" {
+            _undo_label = "Edit next action";
         }
         pushUndoSnapshot(_undo_label);
         _seGraphId = currentGraph["id"] if "id" in currentGraph else "";
@@ -862,8 +1122,8 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             while _sei < len(_seEdges) {
                 _see = _seEdges[_sei];
                 _seSrc = _see["source"] if "source" in _see else "";
-                _seTyp = _see["type"] if "type" in _see else "";
-                if _seSrc == _seNodeId and _seTyp == "CONTRADICTS" {
+                _seTyp = edgeRole(_see);
+                if _seSrc == _seNodeId and _seTyp == ("OPPOSES" if is_business_mode else "CONTRADICTS") {
                     _seDefendId = _see["target"] if "target" in _see else "";
                     break;
                 }
@@ -879,6 +1139,26 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 _seSourceUrl = sourceUrlValue.strip() if sourceUrlValue else "";
                 mutResult = await root spawn AddEvidenceToNode(
                     graphId=_seGraphId, nodeId=_seNodeId, evidenceContent=_seContent, sourceUrl=_seSourceUrl, evaluate=True
+                );
+            } elif _seMode == "next_action" {
+                mutResult = await root spawn AddNextActionNode(
+                    graphId=_seGraphId,
+                    targetNodeId=_seNodeId,
+                    actionContent=_seContent,
+                    owner=actionOwnerValue.strip(),
+                    dueDate=actionDueDateValue.strip(),
+                    priority=actionPriorityValue.strip(),
+                    taskStatus=actionStatusValue.strip()
+                );
+            } elif _seMode == "edit_action" {
+                mutResult = await root spawn UpdateNodeContent(
+                    graphId=_seGraphId,
+                    nodeId=_seNodeId,
+                    newContent=_seContent,
+                    owner=actionOwnerValue.strip(),
+                    dueDate=actionDueDateValue.strip(),
+                    priority=actionPriorityValue.strip(),
+                    taskStatus=actionStatusValue.strip()
                 );
             } elif _seMode == "address" {
                 mutResult = await root spawn AddAddressEdge(
@@ -912,6 +1192,10 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         editMode = "";
         editInputValue = "";
         sourceUrlValue = "";
+        actionOwnerValue = "";
+        actionDueDateValue = "";
+        actionPriorityValue = "medium";
+        actionStatusValue = "open";
         isSaving = False;
         pushUpdate();
     }
@@ -1069,8 +1353,20 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         );
     }
 
+    graph_mode = graphMode();
+    is_business_mode = isBusinessGraph();
+    graph_nodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
+    graph_edges = currentGraph["edges"] if "edges" in currentGraph else [];
+    graph_title = currentGraph["title"] if "title" in currentGraph and currentGraph["title"] else (
+        "Decision board" if is_business_mode else "Argument map"
+    );
+    graph_summary = currentGraph["summary"] if "summary" in currentGraph else "";
+
     overall = currentScore["overall"] if "overall" in currentScore else 0;
-    scoreColor = "#16a34a" if overall >= 70 else ("#ca8a04" if overall >= 50 else "#dc2626");
+    overall_display = "—" if is_business_mode and "readinessStatus" in currentScore and currentScore["readinessStatus"] == "DISCUSSION_ONLY" else str(overall);
+    score_good_threshold = 85 if is_business_mode else 80;
+    score_warn_threshold = 70 if is_business_mode else 65;
+    scoreColor = "#16a34a" if overall >= score_good_threshold else ("#ca8a04" if overall >= score_warn_threshold else "#dc2626");
 
     delta_text = "";
     delta_color = "#16a34a";
@@ -1080,21 +1376,73 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         delta_color = "#16a34a" if scoreDelta > 0 else "#dc2626";
     }
 
-    support_val = currentScore["support"] if "support" in currentScore else 0;
-    premise_val = currentScore["premise"] if "premise" in currentScore else 0;
-    coherence_val = currentScore["coherence"] if "coherence" in currentScore else 0;
-    counter_val = currentScore["counterargument"] if "counterargument" in currentScore else (
-        currentScore["consistency"] if "consistency" in currentScore else 0
+    support_val = currentScore["rootSupportCoverage"] if "rootSupportCoverage" in currentScore else (currentScore["support"] if "support" in currentScore else 0);
+    premise_val = currentScore["evidenceQuality"] if "evidenceQuality" in currentScore else (currentScore["premise"] if "premise" in currentScore else 0);
+    coherence_val = currentScore["structuralCoherence"] if "structuralCoherence" in currentScore else (currentScore["coherence"] if "coherence" in currentScore else 0);
+    counter_val = currentScore["dialecticalHandling"] if "dialecticalHandling" in currentScore else (
+        currentScore["counterargument"] if "counterargument" in currentScore else (
+            currentScore["consistency"] if "consistency" in currentScore else 0
+        )
     );
+    assumption_val = currentScore["assumptionExplicitness"] if "assumptionExplicitness" in currentScore else (currentScore["premise"] if "premise" in currentScore else 0);
+    thesis_val = currentScore["thesisClarity"] if "thesisClarity" in currentScore else 0;
     support_bar_color = "#10b981" if support_val >= 70 else ("#f59e0b" if support_val >= 50 else "#ef4444");
     premise_bar_color = "#10b981" if premise_val >= 70 else ("#f59e0b" if premise_val >= 50 else "#ef4444");
     coherence_bar_color = "#10b981" if coherence_val >= 70 else ("#f59e0b" if coherence_val >= 50 else "#ef4444");
     counter_bar_color = "#10b981" if counter_val >= 70 else ("#f59e0b" if counter_val >= 50 else "#ef4444");
+    assumption_bar_color = "#10b981" if assumption_val >= 70 else ("#f59e0b" if assumption_val >= 50 else "#ef4444");
+    thesis_bar_color = "#10b981" if thesis_val >= 70 else ("#f59e0b" if thesis_val >= 50 else "#ef4444");
+
+    business_decision_val = currentScore["decisionFraming"] if "decisionFraming" in currentScore else (currentScore["decisionClarity"] if "decisionClarity" in currentScore else 0);
+    business_option_val = currentScore["optionSetQuality"] if "optionSetQuality" in currentScore else (currentScore["optionCoverage"] if "optionCoverage" in currentScore else 0);
+    business_evidence_val = currentScore["evidenceStrength"] if "evidenceStrength" in currentScore else 0;
+    business_risk_val = currentScore["riskObjectionHandling"] if "riskObjectionHandling" in currentScore else (currentScore["riskCoverage"] if "riskCoverage" in currentScore else 0);
+    business_question_val = currentScore["assumptionQuestionHandling"] if "assumptionQuestionHandling" in currentScore else (currentScore["openQuestionHandling"] if "openQuestionHandling" in currentScore else 0);
+    business_action_val = currentScore["actionabilityOwnership"] if "actionabilityOwnership" in currentScore else (currentScore["actionability"] if "actionability" in currentScore else 0);
+    business_traceability_val = currentScore["traceabilityHygiene"] if "traceabilityHygiene" in currentScore else 0;
+    readiness_status = currentScore["readinessStatus"] if "readinessStatus" in currentScore else "NEEDS_FOLLOW_UP";
+    readiness_color = "#64748b" if readiness_status == "DISCUSSION_ONLY" else ("#16a34a" if readiness_status == "READY" else ("#f59e0b" if readiness_status == "NEEDS_FOLLOW_UP" else "#dc2626"));
+    if is_business_mode and readiness_status == "DISCUSSION_ONLY" {
+        scoreColor = "#64748b";
+    }
+
+    def scoreSignalLabel(score_value: int) -> str {
+        if score_value >= 80 { return "Strong"; }
+        if score_value >= 60 { return "Watch"; }
+        return "Weak";
+    }
+
+    def scoreSignalColor(score_value: int) -> str {
+        if score_value >= 80 { return "#16a34a"; }
+        if score_value >= 60 { return "#d97706"; }
+        return "#dc2626";
+    }
+
+    business_decision_signal = scoreSignalLabel(business_decision_val);
+    business_option_signal = scoreSignalLabel(business_option_val);
+    business_evidence_signal = scoreSignalLabel(business_evidence_val);
+    business_risk_signal = scoreSignalLabel(business_risk_val);
+    business_question_signal = scoreSignalLabel(business_question_val);
+    business_action_signal = scoreSignalLabel(business_action_val);
+    business_traceability_signal = scoreSignalLabel(business_traceability_val);
+
+    business_decision_color = scoreSignalColor(business_decision_val);
+    business_option_color = scoreSignalColor(business_option_val);
+    business_evidence_color = scoreSignalColor(business_evidence_val);
+    business_risk_color = scoreSignalColor(business_risk_val);
+    business_question_color = scoreSignalColor(business_question_val);
+    business_action_color = scoreSignalColor(business_action_val);
+    business_traceability_color = scoreSignalColor(business_traceability_val);
 
     typeLegend = [
-        {"key": "THESIS",          "color": "#3b82f6", "bg": "#DBEAFE", "label": "Thesis"},
-        {"key": "CLAIM",           "color": "#9f7aea", "bg": "#e8e0fc", "label": "Claim"},
-        {"key": "EVIDENCE",        "color": "#10b981", "bg": "#d1fae5", "label": "Evidence"},
+        {"key": "DECISION", "color": "#3b82f6", "bg": "#DBEAFE", "label": "Decision"},
+        {"key": "OPTION", "color": "#9f7aea", "bg": "#e8e0fc", "label": "Option"},
+        {"key": "EVIDENCE", "color": "#10b981", "bg": "#d1fae5", "label": "Evidence"},
+        {"key": "RISK", "color": "#ef4444", "bg": "#fee2e2", "label": "Risk"}
+    ] if is_business_mode else [
+        {"key": "THESIS", "color": "#3b82f6", "bg": "#DBEAFE", "label": "Thesis"},
+        {"key": "CLAIM", "color": "#9f7aea", "bg": "#e8e0fc", "label": "Claim"},
+        {"key": "EVIDENCE", "color": "#10b981", "bg": "#d1fae5", "label": "Evidence"},
         {"key": "COUNTERARGUMENT", "color": "#ef4444", "bg": "#fee2e2", "label": "Counter"}
     ];
 
@@ -1117,6 +1465,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     }
     sel_node_score = _fresh_sel["nodeScore"] if _fresh_sel and "nodeScore" in _fresh_sel else -1;
     sel_has_node_score = sel_node_score >= 0;
+    sel_role = semanticRole(_fresh_sel) if _fresh_sel else "";
 
     sel_str_color = "#16a34a" if sel_node_score >= 70 else ("#ca8a04" if sel_node_score >= 50 else "#dc2626");
     sel_str_bg = "rgba(34,197,94,0.1)" if sel_node_score >= 70 else ("rgba(250,204,21,0.15)" if sel_node_score >= 50 else "rgba(239,68,68,0.1)");
@@ -1127,7 +1476,17 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         "EVIDENCE":        "#10b981",
         "COUNTERARGUMENT": "#ef4444"
     };
-    sel_type_color = typeColorMap[sel_type] if sel_type in typeColorMap else "#3b82f6";
+    roleColorMap = {
+        "DECISION": "#3b82f6",
+        "OPTION": "#9f7aea",
+        "EVIDENCE": "#10b981",
+        "RISK": "#ef4444",
+        "ASSUMPTION": "#64748b",
+        "OPEN_QUESTION": "#d97706",
+        "ACTION": "#0f766e"
+    };
+    sel_type_label = semanticRoleLabel(sel_role, sel_type) if is_business_mode else sel_type;
+    sel_type_color = roleColorMap[sel_role] if is_business_mode and sel_role in roleColorMap else (typeColorMap[sel_type] if sel_type in typeColorMap else "#3b82f6");
 
     sel_is_evidence = sel_type == "EVIDENCE";
     sel_ev_category = "";
@@ -1149,15 +1508,66 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         sel_more_info = _fresh_sel["moreInfo"] if "moreInfo" in _fresh_sel else "";
     }
     sel_has_more_info = len(sel_more_info) > 0 if sel_more_info else False;
+    sel_owner = firstOwnerText(_fresh_sel);
+    sel_due_date = _fresh_sel["dueDate"] if _fresh_sel and "dueDate" in _fresh_sel else (_fresh_sel["due_date"] if _fresh_sel and "due_date" in _fresh_sel else "");
+    sel_priority = _fresh_sel["priority"] if _fresh_sel and "priority" in _fresh_sel else "";
+    sel_task_status = _fresh_sel["taskStatus"] if _fresh_sel and "taskStatus" in _fresh_sel else (_fresh_sel["action_status"] if _fresh_sel and "action_status" in _fresh_sel else "");
+    sel_is_next_action = sel_role == "ACTION";
+    sel_business_context = "";
+    if is_business_mode {
+        if sel_role == "DECISION" {
+            sel_business_context = "This is the current decision framing. Tighten it if the team is still debating what exactly is being decided.";
+        } elif sel_role == "OPTION" {
+            sel_business_context = "This is one option on the table. Compare it against alternatives, evidence, and risk before closing the meeting.";
+        } elif sel_role == "EVIDENCE" {
+            sel_business_context = "This is supporting evidence. Use it to justify why an option or the decision is credible enough to move forward.";
+        } elif sel_role == "RISK" {
+            sel_business_context = "This is a risk or objection. Capture blockers here and add mitigations or owners if the team still plans to proceed.";
+        } elif sel_role == "OPEN_QUESTION" {
+            sel_business_context = "This is an unresolved question. If it blocks the decision, connect it to a concrete follow-up or owner.";
+        } elif sel_role == "ASSUMPTION" {
+            sel_business_context = "This is an assumption the team is relying on. Challenge it if the decision depends too heavily on it being true.";
+        } elif sel_role == "ACTION" {
+            sel_business_context = "This is a follow-up task. Make sure it has a clear owner, timing, and status before the meeting ends.";
+        }
+    }
+
+    issues_section_title = "Issues & Next Steps" if not is_business_mode else "What still needs follow-up";
+    actions_section_title = "Quick Actions" if not is_business_mode else "Decision Actions";
+    research_section_title = "Wikipedia Sources" if not is_business_mode else "Supporting Research";
+    research_disclaimer_text = "Sources come from Wikipedia and may not be fully reliable. Always verify before citing."
+        if not is_business_mode else
+        "These research suggestions are directional context for the decision board. Verify them before using them in a real business decision.";
+    research_loading_text = "Searching Wikipedia..." if not is_business_mode else "Researching supporting context...";
+    context_section_title = "Analysis & Source" if not is_business_mode else "Supporting Context";
+    context_empty_text = "No additional analysis available" if not is_business_mode else "No supporting context is attached to this item yet.";
+    action_details_title = "Action Details" if not is_business_mode else "Follow-up Details";
+    quality_section_title = "Node Quality" if not is_business_mode else "Decision Impact";
+    no_issue_text = "No issues found ✓" if not is_business_mode else "This item looks usable right now.";
+    add_evidence_label = "📊 Add as Evidence" if not is_business_mode else "Add to Board as Evidence";
+    research_dismiss_label = "Dismiss" if not is_business_mode else "Close research";
+    sourced_badge_label = "Sourced" if not is_business_mode else "Evidence linked";
+    delete_title_text = "Delete this node?" if not is_business_mode else "Remove this item from the board?";
+    delete_warning_text = "This will remove the node and all its connections. You can undo this from the review toolbar."
+        if not is_business_mode else
+        "This will remove the item and its linked relationships from the decision board. You can undo this from the review toolbar.";
 
     edit_label = "Respond";
     edit_placeholder = "Add evidence, reasoning, or a rebuttal...";
     if editMode == "address" {
-        edit_label = "Address This Counterargument";
-        edit_placeholder = "How would you respond to this counterargument? Provide evidence or reasoning...";
+        edit_label = "Address This Counterargument" if not is_business_mode else "Address This Risk";
+        edit_placeholder = "How would you respond to this counterargument? Provide evidence or reasoning..."
+            if not is_business_mode else
+            "How would you reduce or respond to this risk? Add mitigation, evidence, or context...";
     } elif editMode == "evidence" {
         edit_label = "Add Evidence";
         edit_placeholder = "Add a fact, statistic, study, or expert quote...";
+    } elif editMode == "next_action" {
+        edit_label = "Add Next Action";
+        edit_placeholder = "Add a concrete follow-up task that helps move this decision forward...";
+    } elif editMode == "edit_action" {
+        edit_label = "Edit Next Action";
+        edit_placeholder = "Update this next action so the team knows exactly what needs to happen...";
     }
 
     _allNodeIssues: list = [];
@@ -1245,6 +1655,86 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     }
     _hiddenAssumptionCount = len(sel_assumptions) - _maxAssumptions;
 
+    business_decision_nodes = nodesForRole(graph_nodes, "DECISION");
+    business_option_nodes = nodesForRole(graph_nodes, "OPTION");
+    business_evidence_nodes = nodesForRole(graph_nodes, "EVIDENCE");
+    business_risk_nodes = nodesForRole(graph_nodes, "RISK");
+    business_assumption_nodes = nodesForRole(graph_nodes, "ASSUMPTION");
+    business_question_nodes = nodesForRole(graph_nodes, "OPEN_QUESTION");
+    business_next_action_nodes = nodesForRole(graph_nodes, "ACTION");
+    business_option_count = len(business_option_nodes);
+    business_evidence_count = len(business_evidence_nodes);
+    business_risk_count = len(business_risk_nodes);
+    business_question_count = len(business_question_nodes);
+    business_action_total = len(business_next_action_nodes);
+    decision_text = business_decision_nodes[0]["content"] if len(business_decision_nodes) > 0 and "content" in business_decision_nodes[0] else "Decision still under discussion";
+    decision_summary_text = graph_summary if graph_summary else "Review whether the team has enough evidence, risk coverage, and follow-up to make this decision confidently.";
+    readiness_label = readiness_status.replace("_", " ");
+    business_readiness_copy = "This board is still in discussion mode. Capture one clear decision before using readiness as the headline signal."
+        if readiness_status == "DISCUSSION_ONLY" else (
+        "The decision looks ready to share. The remaining work is mostly execution and communication."
+        if readiness_status == "READY" else (
+            "The team is close, but a few blockers, ownership gaps, or unanswered questions still need follow-up."
+            if readiness_status == "NEEDS_FOLLOW_UP" else
+            "The board is not ready for a final call yet. It still needs clearer support, fewer blockers, or concrete follow-up."
+        ));
+
+    def buildBoardPreviewElements(role_nodes: list, empty_text: str, include_action_meta: bool = False) -> list {
+        result: list = [];
+        if len(role_nodes) == 0 {
+            result.append(<div key="empty" className="rs-business-board-empty">{empty_text}</div>);
+            return result;
+        }
+
+        node_count = len(role_nodes);
+        if node_count > 4 { node_count = 4; }
+        ni = 0;
+        while ni < node_count {
+            role_node = role_nodes[ni];
+            row_text = role_node["content"] if "content" in role_node else "";
+            meta_text = "";
+            if include_action_meta {
+                owner_text = firstOwnerText(role_node);
+                due_text = role_node["dueDate"] if "dueDate" in role_node else (role_node["due_date"] if "due_date" in role_node else "");
+                priority_text = role_node["priority"] if "priority" in role_node else "";
+                status_text = role_node["taskStatus"] if "taskStatus" in role_node else (role_node["action_status"] if "action_status" in role_node else "");
+                meta_text = owner_text if owner_text else "Owner TBD";
+                if due_text { meta_text = meta_text + " · Due " + due_text; }
+                if priority_text { meta_text = meta_text + " · " + priority_text + " priority"; }
+                if status_text { meta_text = meta_text + " · " + status_text; }
+            }
+            result.append(
+                <div
+                    key={role_node["id"] if "id" in role_node else str(ni)}
+                    className="rs-business-board-item"
+                >
+                    <div className="rs-business-board-item-text">{row_text}</div>
+                    {(
+                        <div className="rs-business-board-item-meta">{meta_text}</div>
+                    ) if include_action_meta and meta_text else None}
+                </div>
+            );
+            ni = ni + 1;
+        }
+
+        if len(role_nodes) > node_count {
+            result.append(
+                <div key="more" className="rs-business-board-more">
+                    {f"+{len(role_nodes) - node_count} more"}
+                </div>
+            );
+        }
+        return result;
+    }
+
+    decisionPreviewElements = buildBoardPreviewElements(business_decision_nodes, "No clear decision extracted yet.");
+    optionPreviewElements = buildBoardPreviewElements(business_option_nodes, "No explicit options found.");
+    evidencePreviewElements = buildBoardPreviewElements(business_evidence_nodes, "No supporting evidence captured yet.");
+    riskPreviewElements = buildBoardPreviewElements(business_risk_nodes, "No major risks captured yet.");
+    assumptionPreviewElements = buildBoardPreviewElements(business_assumption_nodes, "No clear assumptions extracted.");
+    questionPreviewElements = buildBoardPreviewElements(business_question_nodes, "No open questions captured.");
+    businessActionPreviewElements = buildBoardPreviewElements(business_next_action_nodes, "No next actions assigned yet.", True);
+
     def makeIssueClickHandler(nodeId: str) -> any {
         return lambda -> None { handleIssueClick(nodeId); };
     }
@@ -1256,8 +1746,9 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     _ti = 0;
     while _ti < top_count {
         iss = issues_safe[_ti];
-        sev_bg = "#fef2f2" if iss["severity"] == "high" else "#fffbeb";
-        sev_color = "#ef4444" if iss["severity"] == "high" else "#f59e0b";
+        sev_value = iss["severity"] if "severity" in iss else "moderate";
+        sev_bg = "#fef2f2" if sev_value in ["critical", "major", "high"] else ("#fffbeb" if sev_value in ["moderate", "medium"] else "#f8fafc");
+        sev_color = "#ef4444" if sev_value in ["critical", "major", "high"] else ("#f59e0b" if sev_value in ["moderate", "medium"] else "#64748b");
         iss_node_id = iss["nodeId"] if "nodeId" in iss else "";
         iss_click_fn = makeIssueClickHandler(iss_node_id);
         topIssueElements.append(
@@ -1265,7 +1756,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 <div className="rs-severity-row">
                     <span className="rs-severity-badge"
                         style={{"background": sev_bg, "color": sev_color}}>
-                        {iss["severity"]}
+                        {sev_value}
                     </span>
                 </div>
                 <div className="rs-issue-title">{iss["description"]}</div>
@@ -1316,6 +1807,31 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         );
         _na = _na + 1;
     }
+
+    business_high_blocker_count = 0;
+    _bhi = 0;
+    while _bhi < len(issues_safe) {
+        if "severity" in issues_safe[_bhi] and (issues_safe[_bhi]["severity"] == "critical" or issues_safe[_bhi]["severity"] == "major" or issues_safe[_bhi]["severity"] == "high") {
+            business_high_blocker_count = business_high_blocker_count + 1;
+        }
+        _bhi = _bhi + 1;
+    }
+
+    business_owned_action_count = 0;
+    _boi = 0;
+    while _boi < len(business_next_action_nodes) {
+        _boa = business_next_action_nodes[_boi];
+        _has_owner = len(firstOwnerText(_boa)) > 0;
+        if _has_owner {
+            business_owned_action_count = business_owned_action_count + 1;
+        }
+        _boi = _boi + 1;
+    }
+
+    business_primary_blocker = issues_safe[0]["description"] if len(issues_safe) > 0 and "description" in issues_safe[0] else "No major blocker surfaced right now.";
+    business_primary_followup = next_actions_safe[0]["action"] if len(next_actions_safe) > 0 and "action" in next_actions_safe[0] else (
+        business_next_action_nodes[0]["content"] if len(business_next_action_nodes) > 0 and "content" in business_next_action_nodes[0] else "No immediate follow-up has been assigned yet."
+    );
 
     visibleCounterargs: list = [];
     _vci = 0;
@@ -1373,7 +1889,9 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                     <span className="rs-counter-target">targets: {ca_target_short}</span>
                 </div>
                 <div className="rs-counter-text">{ca_text}</div>
-                <button onClick={ca_accept_fn} className="rs-accept-btn">Add to Graph</button>
+                <button onClick={ca_accept_fn} className="rs-accept-btn">
+                    {"Add to Graph" if not is_business_mode else "Add Risk"}
+                </button>
             </div>
         );
         _cai = _cai + 1;
@@ -1425,21 +1943,22 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 "issues": [],
                 "position": {"x": 0, "y": 0},
                 "isGhost": True,
+                "role": "RISK" if is_business_mode else "",
                 "ghostTarget": gca_target
             });
+            ghost_edge_role = "OPPOSES" if is_business_mode else "CONTRADICTS";
             ghostEdges.append({
                 "id": f"ghost_edge_{_gi}",
                 "source": ghost_id,
                 "target": gca_target,
-                "type": "CONTRADICTS",
+                "type": ghost_edge_role,
+                "role": ghost_edge_role,
                 "isGhost": True
             });
         }
         _gi = _gi + 1;
     }
 
-    graph_nodes = currentGraph["nodes"] if "nodes" in currentGraph else [];
-    graph_edges = currentGraph["edges"] if "edges" in currentGraph else [];
     allNodes = list(graph_nodes) + ghostNodes;
     allEdges = list(graph_edges) + ghostEdges;
     graph_view_key = f"{currentGraph['id'] if 'id' in currentGraph else 'graph'}:{graphViewVersion}";
@@ -1451,16 +1970,31 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     saving_overlay_display = "flex" if isSaving else "none";
 
     show_respond = sel_type != "";
-    show_add_counter = sel_type == "CLAIM" or sel_type == "THESIS" or sel_type == "COUNTERARGUMENT";
+    show_add_counter = (sel_type == "CLAIM" or sel_type == "THESIS" or sel_type == "COUNTERARGUMENT") and sel_role != "ACTION";
     show_address = sel_type == "COUNTERARGUMENT";
-    show_expand = sel_type == "CLAIM" or sel_type == "THESIS" or sel_type == "COUNTERARGUMENT";
+    show_expand = (sel_type == "CLAIM" or sel_type == "THESIS" or sel_type == "COUNTERARGUMENT") and sel_role != "ACTION";
+    show_add_next_action = is_business_mode and selectedNode and sel_role != "ACTION" and sel_type != "EVIDENCE";
+    show_edit_next_action = is_business_mode and sel_is_next_action;
     show_source_input = editMode == "evidence" or editMode == "respond";
+    show_action_fields = editMode == "next_action" or editMode == "edit_action";
     has_investigate_results = len(investigateResults) > 0;
+    counter_button_label = "Counter" if not is_business_mode else "Add Risk";
+    counter_button_title = "Generate a counterargument against this claim" if not is_business_mode else "Generate a risk or objection against this option";
+    expand_button_label = "Expand" if not is_business_mode else "Expand Branch";
+    expand_button_title = "Break this claim into sub-claims and evidence" if not is_business_mode else "Expand this branch into more options, support, or follow-up";
+    investigate_button_label = "Investigate" if not is_business_mode else "Research";
+    investigate_button_title = "Find Wikipedia sources related to this node" if not is_business_mode else "Find supporting context or evidence for this node";
+    respond_button_label = "Respond" if not is_business_mode else ("Address Risk" if show_address else "Add Support");
+    review_title = "Review Map" if not is_business_mode else "Decision Review";
+    readiness_badge_class = "rs-business-status-badge rs-business-status-ready" if readiness_status == "READY" else (
+        "rs-business-status-badge rs-business-status-followup" if readiness_status == "NEEDS_FOLLOW_UP" else
+        "rs-business-status-badge rs-business-status-notready"
+    );
 
     return (
         <div className="rs-wrapper">
 
-            <Header screen="review" title="Review Map" onExport={lambda -> None {
+            <Header screen="review" title={review_title} onExport={lambda -> None {
                 nav("/export", {"state": {
                     "graph": currentGraph,
                     "score": currentScore,
@@ -1529,6 +2063,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             key={graph_view_key}
                             nodes={allNodes}
                             edges={allEdges}
+                            graphMode={graph_mode}
                             onNodeClick={handleNodeClick}
                             selectedNodeId={selectedNode["id"] if selectedNode else None}
                             focusBranch={focusBranch}
@@ -1540,7 +2075,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                     </div>
 
                     <div className="rs-statusbar">
-                        <span className="rs-statusbar-label">Sources</span>
+                        <span className="rs-statusbar-label">{"Sources" if not is_business_mode else "Board"}</span>
                         <span className="rs-statusbar-text">
                             {node_count_str} nodes - {edge_count_str} edges
                         </span>
@@ -1578,9 +2113,11 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             {(
                                 <div>
                                     <div className="rs-tutorial-step-label">Step 1 of 3</div>
-                                    <div className="rs-tutorial-title">Explore your argument</div>
+                                    <div className="rs-tutorial-title">{"Explore your argument" if not is_business_mode else "Explore your decision board"}</div>
                                     <div className="rs-tutorial-text">
-                                        Click any node in the graph to view its quality score and details.
+                                        {"Click any node in the graph to view its quality score and details."
+                                            if not is_business_mode else
+                                            "Click any node to inspect the current decision, options, evidence, risks, and follow-up details."}
                                     </div>
                                     <button className="rs-tutorial-next" onClick={lambda -> None { tutorialStep = 2; }}>
                                         Next
@@ -1590,9 +2127,11 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             {(
                                 <div>
                                     <div className="rs-tutorial-step-label">Step 2 of 3</div>
-                                    <div className="rs-tutorial-title">Take action</div>
+                                    <div className="rs-tutorial-title">{"Take action" if not is_business_mode else "Stress-test the decision"}</div>
                                     <div className="rs-tutorial-text">
-                                        Use the action buttons to respond, counter, expand, or investigate a node.
+                                        {"Use the action buttons to respond, counter, expand, or investigate a node."
+                                            if not is_business_mode else
+                                            "Use the actions to add risks, supporting evidence, research, and concrete next steps before the meeting ends."}
                                     </div>
                                     <div className="rs-tutorial-nav">
                                         <button className="rs-tutorial-back" onClick={lambda -> None { tutorialStep = 1; }}>
@@ -1607,9 +2146,11 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             {(
                                 <div>
                                     <div className="rs-tutorial-step-label">Step 3 of 3</div>
-                                    <div className="rs-tutorial-title">Improve your score</div>
+                                    <div className="rs-tutorial-title">{"Improve your score" if not is_business_mode else "Check readiness"}</div>
                                     <div className="rs-tutorial-text">
-                                        Check the issues panel for weaknesses and follow the suggested next actions to strengthen your argument.
+                                        {"Check the issues panel for weaknesses and follow the suggested next actions to strengthen your argument."
+                                            if not is_business_mode else
+                                            "Use blockers and next actions to see whether the team is truly ready to decide or still needs follow-up."}
                                     </div>
                                     <button className="rs-tutorial-next" onClick={lambda -> None { showTutorial = False; }}>
                                         Got it
@@ -1633,12 +2174,15 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                 <div className="rs-panel-header-left">
                                     <span className="rs-panel-type-label"
                                         style={{"color": sel_type_color}}>
-                                        {sel_type}
+                                        {sel_type_label}
                                     </span>
                                 </div>
                                 <button className="rs-panel-close-btn" onClick={closePanel}>✕</button>
                             </div>
                             <h3 className="rs-panel-node-title">{sel_content}</h3>
+                            {(
+                                <div className="rs-business-node-context">{sel_business_context}</div>
+                            ) if is_business_mode and sel_business_context else None}
                         </div>
 
                         <div className="rs-panel-scroll">
@@ -1646,7 +2190,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                             <div className="rs-panel-section">
                                 <div className="rs-section-heading rs-section-heading-issues">
                                     <span className="rs-section-dot rs-section-dot-issues"></span>
-                                    Issues & Next Steps
+                                    {issues_section_title}
                                 </div>
                                 {(
                                     <div>
@@ -1670,58 +2214,72 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                         ) if sel_has_assumptions else None}
                                     </div>
                                 ) if has_node_issues or sel_has_assumptions else (
-                                    <div className="rs-well-supported">No issues found ✓</div>
+                                    <div className="rs-well-supported">{no_issue_text}</div>
                                 )}
                             </div>
 
                             <div className="rs-panel-section">
                                 <div className="rs-section-heading rs-section-heading-actions">
                                     <span className="rs-section-dot rs-section-dot-actions"></span>
-                                    Quick Actions
+                                    {actions_section_title}
                                 </div>
                                 <div className="rs-actions-grid">
                                     {(
                                         <button className="rs-action-btn rs-action-btn-respond"
                                             onClick={lambda -> None { startEdit("address"); }}
-                                            title="Add evidence or reasoning to address this counterargument">
-                                            Respond
+                                            title={"Add evidence or reasoning to address this counterargument" if not is_business_mode else "Add mitigation, ownership, or evidence to address this risk"}>
+                                            {respond_button_label}
                                         </button>
                                     ) if show_address else (
                                         <button className="rs-action-btn rs-action-btn-respond"
                                             onClick={lambda -> None { startEdit("respond"); }}
-                                            title="Add supporting evidence or reasoning to this node">
-                                            Respond
+                                            title={"Add supporting evidence or reasoning to this node" if not is_business_mode else "Add support, evidence, or context to this item"}>
+                                            {respond_button_label}
                                         </button>
                                     ) if show_respond else None}
                                     {(
                                         <button className="rs-action-btn rs-action-btn-counter"
                                             onClick={lambda -> None { startEdit("counter"); }}
-                                            title="Generate a counterargument against this claim">
-                                            Counter
+                                            title={counter_button_title}>
+                                            {counter_button_label}
                                         </button>
                                     ) if show_add_counter else None}
                                     {(
                                         <button className="rs-action-btn rs-action-btn-expand"
                                             onClick={handleExpandBranch}
-                                            title="Break this claim into sub-claims and evidence">
-                                            Expand
+                                            title={expand_button_title}>
+                                            {expand_button_label}
                                         </button>
                                     ) if show_expand else None}
                                     {(
                                         <button className="rs-action-btn rs-action-btn-default"
+                                            onClick={lambda -> None { startEdit("next_action"); }}
+                                            title="Add a concrete follow-up action for this business item">
+                                            {"Next Action" if not is_business_mode else "Add Follow-up"}
+                                        </button>
+                                    ) if show_add_next_action else None}
+                                    {(
+                                        <button className="rs-action-btn rs-action-btn-default"
+                                            onClick={lambda -> None { startEdit("edit_action"); }}
+                                            title="Edit owner, due date, priority, or status for this next action">
+                                            {"Edit Action" if not is_business_mode else "Edit Follow-up"}
+                                        </button>
+                                    ) if show_edit_next_action else None}
+                                    {(
+                                        <button className="rs-action-btn rs-action-btn-default"
                                             onClick={lambda -> None { startEdit("investigate"); }}
-                                            title="Find Wikipedia sources related to this node">
-                                            Investigate
+                                            title={investigate_button_title}>
+                                            {investigate_button_label}
                                         </button>
                                     ) if not sel_is_well_sourced else (
-                                        <span className="rs-sourced-badge">Sourced</span>
+                                        <span className="rs-sourced-badge">{sourced_badge_label}</span>
                                     )}
                                 </div>
                                 <div className="rs-actions-delete-row">
                                     <button className="rs-action-btn rs-action-btn-delete"
                                         onClick={lambda -> None { startEdit("delete"); }}
                                         title="Remove this node and its connections">
-                                        Delete
+                                        {"Delete" if not is_business_mode else "Remove"}
                                     </button>
                                 </div>
                             </div>
@@ -1740,6 +2298,30 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                             onChange={handleSourceUrlInput}
                                             placeholder="Source URL (optional) — e.g. https://example.com/study" />
                                     ) if show_source_input else None}
+                                    {(
+                                        <div style={{"display": "grid", "gap": "10px", "marginTop": "12px"}}>
+                                            <input type="text"
+                                                className="rs-edit-source-input"
+                                                value={actionOwnerValue}
+                                                onChange={handleActionOwnerInput}
+                                                placeholder="Owner (optional)" />
+                                            <input type="text"
+                                                className="rs-edit-source-input"
+                                                value={actionDueDateValue}
+                                                onChange={handleActionDueDateInput}
+                                                placeholder="Due date (optional, YYYY-MM-DD)" />
+                                            <input type="text"
+                                                className="rs-edit-source-input"
+                                                value={actionPriorityValue}
+                                                onChange={handleActionPriorityInput}
+                                                placeholder="Priority (low, medium, high)" />
+                                            <input type="text"
+                                                className="rs-edit-source-input"
+                                                value={actionStatusValue}
+                                                onChange={handleActionStatusInput}
+                                                placeholder="Status (open, blocked, in_progress, done)" />
+                                        </div>
+                                    ) if show_action_fields else None}
                                     <div className="rs-edit-buttons">
                                         <button className="rs-save-btn" onClick={saveEdit}>Save</button>
                                         <Button label="Cancel" onClick={cancelEdit} variant="secondary" />
@@ -1749,13 +2331,13 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
                             {(
                                 <div className="rs-delete-box">
-                                    <div className="rs-delete-title">Delete this node?</div>
+                                    <div className="rs-delete-title">{delete_title_text}</div>
                                     <div className="rs-delete-warning">
-                                        This will remove the node and all its connections. You can undo this from the review toolbar.
+                                        {delete_warning_text}
                                     </div>
                                     <div className="rs-edit-buttons">
                                         <button className="rs-confirm-delete-btn"
-                                            onClick={handleDelete}>Delete</button>
+                                            onClick={handleDelete}>{"Delete" if not is_business_mode else "Remove"}</button>
                                         <Button label="Cancel" onClick={cancelEdit} variant="secondary" />
                                     </div>
                                 </div>
@@ -1765,18 +2347,20 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                 <div className="rs-panel-section">
                                     <div className="rs-section-heading rs-section-heading-info">
                                         <span className="rs-section-dot rs-section-dot-info"></span>
-                                        Wikipedia Sources
+                                        {research_section_title}
                                     </div>
                                     <div className="rs-wiki-disclaimer">
-                                        Sources come from Wikipedia and may not be fully reliable. Always verify before citing.
+                                        {research_disclaimer_text}
                                     </div>
                                     {(
-                                        <div className="rs-investigate-loading">Searching Wikipedia...</div>
+                                        <div className="rs-investigate-loading">
+                                            {research_loading_text}
+                                        </div>
                                     ) if investigateLoading else None}
                                     {investigateResultElements}
                                     <button className="rs-investigate-dismiss-btn"
                                         onClick={lambda -> None { investigateResults = []; }}>
-                                        Dismiss
+                                        {research_dismiss_label}
                                     </button>
                                 </div>
                             ) if has_investigate_results or investigateLoading else None}
@@ -1785,7 +2369,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                 <div className="rs-panel-section">
                                     <div className="rs-section-heading rs-section-heading-info">
                                         <span className="rs-section-dot rs-section-dot-info"></span>
-                                        Analysis & Source
+                                        {context_section_title}
                                     </div>
                                     {(
                                         <div className="rs-analysis-text">{sel_more_info}</div>
@@ -1804,20 +2388,41 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                         <button className="rs-add-evidence-btn"
                                             onClick={handleAddAsEvidence}
                                             disabled={isSaving}>
-                                            📊 Add as Evidence
+                                            {add_evidence_label}
                                         </button>
                                     ) if sel_has_more_info and not sel_is_evidence and selectedNode and selectedNode["id"] and selectedNode["id"] not in addedAsEvidenceMap else None}
                                     {(
-                                        <div className="rs-analysis-empty">No additional analysis available</div>
+                                        <div className="rs-analysis-empty">{context_empty_text}</div>
                                     ) if not sel_has_more_info and not sel_has_source else None}
                                 </div>
                             ) if sel_is_evidence or sel_has_more_info else None}
 
                             {(
                                 <div className="rs-panel-section">
+                                    <div className="rs-section-heading rs-section-heading-info">
+                                        <span className="rs-section-dot rs-section-dot-info"></span>
+                                        {action_details_title}
+                                    </div>
+                                    <div className="rs-analysis-text">
+                                        {"Owner: " + (sel_owner if sel_owner else "Unassigned")}
+                                    </div>
+                                    <div className="rs-analysis-text">
+                                        {"Due: " + (sel_due_date if sel_due_date else "Not set")}
+                                    </div>
+                                    <div className="rs-analysis-text">
+                                        {"Priority: " + (sel_priority if sel_priority else "Not set")}
+                                    </div>
+                                    <div className="rs-analysis-text">
+                                        {"Status: " + (sel_task_status if sel_task_status else "open")}
+                                    </div>
+                                </div>
+                            ) if show_edit_next_action else None}
+
+                            {(
+                                <div className="rs-panel-section">
                                     <div className="rs-section-heading rs-section-heading-score">
                                         <span className="rs-section-dot rs-section-dot-score"></span>
-                                        Node Quality
+                                        {quality_section_title}
                                     </div>
                                     <div className="rs-quality-box">
                                         <div className="rs-quality-score-row">
@@ -1841,6 +2446,11 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                                 style={{"width": f"{sel_node_score}%", "background": sel_str_color}}>
                                             </div>
                                         </div>
+                                        {(
+                                            <div className="rs-business-quality-note">
+                                                {"Higher impact means this item is clearer, better supported, and more decision-ready."}
+                                            </div>
+                                        ) if is_business_mode else None}
                                     </div>
                                 </div>
                             ) if sel_has_node_score else None}
@@ -1857,14 +2467,133 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
                         <div className="rs-default-scroll">
 
+                            {(
+                                <div className="rs-business-board">
+                                    <div className="rs-default-section-header">
+                                        <span className="rs-default-section-title">{graph_title}</span>
+                                    </div>
+                                    <div className="rs-business-hero">
+                                        <div className="rs-business-hero-top">
+                                            <div className="rs-business-hero-kicker">Current Decision</div>
+                                            <span className={readiness_badge_class}>{readiness_label}</span>
+                                        </div>
+                                        <div className="rs-business-hero-title">
+                                            {decision_text}
+                                        </div>
+                                        <div className="rs-business-hero-summary">
+                                            {decision_summary_text}
+                                        </div>
+                                        <div className="rs-business-hero-note">{business_readiness_copy}</div>
+                                        <div className="rs-business-metrics">
+                                            <div className="rs-business-metric-card">
+                                                <div className="rs-business-metric-label">Options</div>
+                                                <div className="rs-business-metric-value">{str(business_option_count)}</div>
+                                                <div className="rs-business-metric-sub">choices captured</div>
+                                            </div>
+                                            <div className="rs-business-metric-card">
+                                                <div className="rs-business-metric-label">Evidence</div>
+                                                <div className="rs-business-metric-value">{str(business_evidence_count)}</div>
+                                                <div className="rs-business-metric-sub">supporting points logged</div>
+                                            </div>
+                                            <div className="rs-business-metric-card">
+                                                <div className="rs-business-metric-label">High blockers</div>
+                                                <div className="rs-business-metric-value">{str(business_high_blocker_count)}</div>
+                                                <div className="rs-business-metric-sub">need active follow-up</div>
+                                            </div>
+                                            <div className="rs-business-metric-card">
+                                                <div className="rs-business-metric-label">Owned actions</div>
+                                                <div className="rs-business-metric-value">
+                                                    {f"{business_owned_action_count}/{business_action_total}" if business_action_total > 0 else "0"}
+                                                </div>
+                                                <div className="rs-business-metric-sub">next steps with an owner</div>
+                                            </div>
+                                        </div>
+                                        <div className="rs-business-signal-grid">
+                                            <div className="rs-business-signal-card">
+                                                <div className="rs-business-signal-label">Primary blocker</div>
+                                                <div className="rs-business-signal-text">{business_primary_blocker}</div>
+                                            </div>
+                                            <div className="rs-business-signal-card">
+                                                <div className="rs-business-signal-label">Most important next move</div>
+                                                <div className="rs-business-signal-text">{business_primary_followup}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="rs-business-board-grid">
+                                        <div className="rs-business-board-card">
+                                            <div className="rs-business-board-card-header">
+                                                <div className="rs-business-board-card-title-wrap">
+                                                    <span className="rs-business-board-card-accent rs-business-board-card-accent-options"></span>
+                                                    <span className="rs-business-board-card-title">Options on the table</span>
+                                                </div>
+                                                <span className="rs-business-board-card-count">{str(business_option_count)}</span>
+                                            </div>
+                                            <div className="rs-business-board-list">{optionPreviewElements}</div>
+                                        </div>
+                                        <div className="rs-business-board-card">
+                                            <div className="rs-business-board-card-header">
+                                                <div className="rs-business-board-card-title-wrap">
+                                                    <span className="rs-business-board-card-accent rs-business-board-card-accent-evidence"></span>
+                                                    <span className="rs-business-board-card-title">Evidence to support the call</span>
+                                                </div>
+                                                <span className="rs-business-board-card-count">{str(business_evidence_count)}</span>
+                                            </div>
+                                            <div className="rs-business-board-list">{evidencePreviewElements}</div>
+                                        </div>
+                                        <div className="rs-business-board-card">
+                                            <div className="rs-business-board-card-header">
+                                                <div className="rs-business-board-card-title-wrap">
+                                                    <span className="rs-business-board-card-accent rs-business-board-card-accent-risk"></span>
+                                                    <span className="rs-business-board-card-title">Risks and objections</span>
+                                                </div>
+                                                <span className="rs-business-board-card-count">{str(business_risk_count)}</span>
+                                            </div>
+                                            <div className="rs-business-board-list">{riskPreviewElements}</div>
+                                        </div>
+                                        <div className="rs-business-board-card">
+                                            <div className="rs-business-board-card-header">
+                                                <div className="rs-business-board-card-title-wrap">
+                                                    <span className="rs-business-board-card-accent rs-business-board-card-accent-question"></span>
+                                                    <span className="rs-business-board-card-title">Open questions to close</span>
+                                                </div>
+                                                <span className="rs-business-board-card-count">{str(business_question_count)}</span>
+                                            </div>
+                                            <div className="rs-business-board-list">{questionPreviewElements}</div>
+                                        </div>
+                                        <div className="rs-business-board-card">
+                                            <div className="rs-business-board-card-header">
+                                                <div className="rs-business-board-card-title-wrap">
+                                                    <span className="rs-business-board-card-accent rs-business-board-card-accent-assumption"></span>
+                                                    <span className="rs-business-board-card-title">Assumptions in play</span>
+                                                </div>
+                                                <span className="rs-business-board-card-count">{str(len(business_assumption_nodes))}</span>
+                                            </div>
+                                            <div className="rs-business-board-list">{assumptionPreviewElements}</div>
+                                        </div>
+                                        <div className="rs-business-board-card">
+                                            <div className="rs-business-board-card-header">
+                                                <div className="rs-business-board-card-title-wrap">
+                                                    <span className="rs-business-board-card-accent rs-business-board-card-accent-action"></span>
+                                                    <span className="rs-business-board-card-title">Next actions before close</span>
+                                                </div>
+                                                <span className="rs-business-board-card-count">{str(business_action_total)}</span>
+                                            </div>
+                                            <div className="rs-business-board-list">{businessActionPreviewElements}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) if is_business_mode else None}
+
                             <div className="rs-default-section-header">
-                                <span className="rs-default-section-title">Reasoning Score</span>
+                                <span className="rs-default-section-title">{"Decision Readiness Score" if is_business_mode else "Reasoning Score"}</span>
                             </div>
 
                             <div className="rs-score-block">
                                 <div className="rs-score-big"
-                                    style={{"color": scoreColor}}>{overall}</div>
-                                <div className="rs-score-sub">out of 100</div>
+                                    style={{"color": scoreColor}}>{overall_display}</div>
+                                <div className="rs-score-sub">
+                                    {"out of 100" if not is_business_mode else readiness_label}
+                                </div>
                                 <div className="rs-score-bar">
                                     <div className="rs-score-bar-fill"
                                         style={{"width": f"{overall}%", "background": scoreColor}}></div>
@@ -1875,83 +2604,249 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                 ) if delta_text else None}
                             </div>
 
-                            <div className="rs-breakdown-item">
-                                <div className="rs-breakdown-row">
-                                    <span className="rs-breakdown-label">Support Quality (30%)</span>
-                                    <span className="rs-breakdown-value">{support_val}%</span>
+                            {(
+                                <div className="rs-business-breakdown-grid">
+                                    <div className="rs-business-breakdown-card">
+                                        <div className="rs-business-breakdown-top">
+                                            <div>
+                                                <div className="rs-business-breakdown-label">Decision framing</div>
+                                                <div className="rs-business-breakdown-weight">15% weight</div>
+                                            </div>
+                                            <div className="rs-business-breakdown-score" style={{"color": business_decision_color}}>
+                                                {business_decision_val}
+                                            </div>
+                                        </div>
+                                        <div className="rs-business-breakdown-status" style={{"color": business_decision_color}}>
+                                            {business_decision_signal}
+                                        </div>
+                                        <div className="rs-business-breakdown-meter">
+                                            <div className="rs-business-breakdown-fill"
+                                                style={{"width": f"{business_decision_val}%", "background": business_decision_color}}>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="rs-business-breakdown-card">
+                                        <div className="rs-business-breakdown-top">
+                                            <div>
+                                                <div className="rs-business-breakdown-label">Option set quality</div>
+                                                <div className="rs-business-breakdown-weight">15% weight</div>
+                                            </div>
+                                            <div className="rs-business-breakdown-score" style={{"color": business_option_color}}>
+                                                {business_option_val}
+                                            </div>
+                                        </div>
+                                        <div className="rs-business-breakdown-status" style={{"color": business_option_color}}>
+                                            {business_option_signal}
+                                        </div>
+                                        <div className="rs-business-breakdown-meter">
+                                            <div className="rs-business-breakdown-fill"
+                                                style={{"width": f"{business_option_val}%", "background": business_option_color}}>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="rs-business-breakdown-card">
+                                        <div className="rs-business-breakdown-top">
+                                            <div>
+                                                <div className="rs-business-breakdown-label">Evidence strength</div>
+                                                <div className="rs-business-breakdown-weight">20% weight</div>
+                                            </div>
+                                            <div className="rs-business-breakdown-score" style={{"color": business_evidence_color}}>
+                                                {business_evidence_val}
+                                            </div>
+                                        </div>
+                                        <div className="rs-business-breakdown-status" style={{"color": business_evidence_color}}>
+                                            {business_evidence_signal}
+                                        </div>
+                                        <div className="rs-business-breakdown-meter">
+                                            <div className="rs-business-breakdown-fill"
+                                                style={{"width": f"{business_evidence_val}%", "background": business_evidence_color}}>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="rs-business-breakdown-card">
+                                        <div className="rs-business-breakdown-top">
+                                            <div>
+                                                <div className="rs-business-breakdown-label">Risk handling</div>
+                                                <div className="rs-business-breakdown-weight">15% weight</div>
+                                            </div>
+                                            <div className="rs-business-breakdown-score" style={{"color": business_risk_color}}>
+                                                {business_risk_val}
+                                            </div>
+                                        </div>
+                                        <div className="rs-business-breakdown-status" style={{"color": business_risk_color}}>
+                                            {business_risk_signal}
+                                        </div>
+                                        <div className="rs-business-breakdown-meter">
+                                            <div className="rs-business-breakdown-fill"
+                                                style={{"width": f"{business_risk_val}%", "background": business_risk_color}}>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="rs-business-breakdown-card">
+                                        <div className="rs-business-breakdown-top">
+                                            <div>
+                                                <div className="rs-business-breakdown-label">Assumptions & questions</div>
+                                                <div className="rs-business-breakdown-weight">10% weight</div>
+                                            </div>
+                                            <div className="rs-business-breakdown-score" style={{"color": business_question_color}}>
+                                                {business_question_val}
+                                            </div>
+                                        </div>
+                                        <div className="rs-business-breakdown-status" style={{"color": business_question_color}}>
+                                            {business_question_signal}
+                                        </div>
+                                        <div className="rs-business-breakdown-meter">
+                                            <div className="rs-business-breakdown-fill"
+                                                style={{"width": f"{business_question_val}%", "background": business_question_color}}>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="rs-business-breakdown-card">
+                                        <div className="rs-business-breakdown-top">
+                                            <div>
+                                                <div className="rs-business-breakdown-label">Actionability & ownership</div>
+                                                <div className="rs-business-breakdown-weight">15% weight</div>
+                                            </div>
+                                            <div className="rs-business-breakdown-score" style={{"color": business_action_color}}>
+                                                {business_action_val}
+                                            </div>
+                                        </div>
+                                        <div className="rs-business-breakdown-status" style={{"color": business_action_color}}>
+                                            {business_action_signal}
+                                        </div>
+                                        <div className="rs-business-breakdown-meter">
+                                            <div className="rs-business-breakdown-fill"
+                                                style={{"width": f"{business_action_val}%", "background": business_action_color}}>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="rs-business-breakdown-card">
+                                        <div className="rs-business-breakdown-top">
+                                            <div>
+                                                <div className="rs-business-breakdown-label">Traceability & hygiene</div>
+                                                <div className="rs-business-breakdown-weight">10% weight</div>
+                                            </div>
+                                            <div className="rs-business-breakdown-score" style={{"color": business_traceability_color}}>
+                                                {business_traceability_val}
+                                            </div>
+                                        </div>
+                                        <div className="rs-business-breakdown-status" style={{"color": business_traceability_color}}>
+                                            {business_traceability_signal}
+                                        </div>
+                                        <div className="rs-business-breakdown-meter">
+                                            <div className="rs-business-breakdown-fill"
+                                                style={{"width": f"{business_traceability_val}%", "background": business_traceability_color}}>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="rs-breakdown-bar">
-                                    <div className="rs-breakdown-bar-fill"
-                                        style={{"width": f"{support_val}%", "background": support_bar_color}}></div>
+                            ) if is_business_mode else (
+                                <div>
+                                    <div className="rs-breakdown-item">
+                                        <div className="rs-breakdown-row">
+                                            <span className="rs-breakdown-label">Root support coverage (25%)</span>
+                                            <span className="rs-breakdown-value">{support_val}%</span>
+                                        </div>
+                                        <div className="rs-breakdown-bar">
+                                            <div className="rs-breakdown-bar-fill"
+                                                style={{"width": f"{support_val}%", "background": support_bar_color}}></div>
+                                        </div>
+                                    </div>
+                                    <div className="rs-breakdown-item">
+                                        <div className="rs-breakdown-row">
+                                            <span className="rs-breakdown-label">Evidence quality (20%)</span>
+                                            <span className="rs-breakdown-value">{premise_val}%</span>
+                                        </div>
+                                        <div className="rs-breakdown-bar">
+                                            <div className="rs-breakdown-bar-fill"
+                                                style={{"width": f"{premise_val}%", "background": premise_bar_color}}></div>
+                                        </div>
+                                    </div>
+                                    <div className="rs-breakdown-item">
+                                        <div className="rs-breakdown-row">
+                                            <span className="rs-breakdown-label">Dialectical handling (20%)</span>
+                                            <span className="rs-breakdown-value">{counter_val}%</span>
+                                        </div>
+                                        <div className="rs-breakdown-bar">
+                                            <div className="rs-breakdown-bar-fill"
+                                                style={{"width": f"{counter_val}%", "background": counter_bar_color}}></div>
+                                        </div>
+                                    </div>
+                                    <div className="rs-breakdown-item">
+                                        <div className="rs-breakdown-row">
+                                            <span className="rs-breakdown-label">Structural coherence (15%)</span>
+                                            <span className="rs-breakdown-value">{coherence_val}%</span>
+                                        </div>
+                                        <div className="rs-breakdown-bar">
+                                            <div className="rs-breakdown-bar-fill"
+                                                style={{"width": f"{coherence_val}%", "background": coherence_bar_color}}></div>
+                                        </div>
+                                    </div>
+                                    <div className="rs-breakdown-item">
+                                        <div className="rs-breakdown-row">
+                                            <span className="rs-breakdown-label">Assumption explicitness (10%)</span>
+                                            <span className="rs-breakdown-value">{assumption_val}%</span>
+                                        </div>
+                                        <div className="rs-breakdown-bar">
+                                            <div className="rs-breakdown-bar-fill"
+                                                style={{"width": f"{assumption_val}%", "background": assumption_bar_color}}></div>
+                                        </div>
+                                    </div>
+                                    <div className="rs-breakdown-item rs-breakdown-item-last">
+                                        <div className="rs-breakdown-row">
+                                            <span className="rs-breakdown-label">Thesis clarity (10%)</span>
+                                            <span className="rs-breakdown-value">{thesis_val}%</span>
+                                        </div>
+                                        <div className="rs-breakdown-bar">
+                                            <div className="rs-breakdown-bar-fill"
+                                                style={{"width": f"{thesis_val}%", "background": thesis_bar_color}}></div>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="rs-breakdown-item">
-                                <div className="rs-breakdown-row">
-                                    <span className="rs-breakdown-label">Logical Soundness (25%)</span>
-                                    <span className="rs-breakdown-value">{premise_val}%</span>
-                                </div>
-                                <div className="rs-breakdown-bar">
-                                    <div className="rs-breakdown-bar-fill"
-                                        style={{"width": f"{premise_val}%", "background": premise_bar_color}}></div>
-                                </div>
-                            </div>
-                            <div className="rs-breakdown-item">
-                                <div className="rs-breakdown-row">
-                                    <span className="rs-breakdown-label">Coherence (20%)</span>
-                                    <span className="rs-breakdown-value">{coherence_val}%</span>
-                                </div>
-                                <div className="rs-breakdown-bar">
-                                    <div className="rs-breakdown-bar-fill"
-                                        style={{"width": f"{coherence_val}%", "background": coherence_bar_color}}></div>
-                                </div>
-                            </div>
-                            <div className="rs-breakdown-item rs-breakdown-item-last">
-                                <div className="rs-breakdown-row">
-                                    <span className="rs-breakdown-label">Counterargument Handling (25%)</span>
-                                    <span className="rs-breakdown-value">{counter_val}%</span>
-                                </div>
-                                <div className="rs-breakdown-bar">
-                                    <div className="rs-breakdown-bar-fill"
-                                        style={{"width": f"{counter_val}%", "background": counter_bar_color}}></div>
-                                </div>
-                            </div>
+                            )}
 
                             <div className="rs-default-section-header">
-                                <span className="rs-default-section-title">Top Issues</span>
+                                <span className="rs-default-section-title">{"Top Issues" if not is_business_mode else "Top Blockers"}</span>
                             </div>
                             {(
                                 <div>
-                                    <p className="rs-panel-hint">Click on a node to fix it</p>
+                                    <p className="rs-panel-hint">
+                                        {"Click on a node to fix it" if not is_business_mode else "Click a blocker to jump to the part of the board that still needs follow-up."}
+                                    </p>
                                     <div>{topIssueElements}</div>
                                 </div>
                             ) if len(currentIssues) > 0 else (
                                 <div className="rs-no-issues-card">
-                                    No major issues found!
+                                    {"No major issues found!" if not is_business_mode else "No major blockers surfaced right now."}
                                 </div>
                             )}
 
                             <div className="rs-next-actions-section">
                                 <div className="rs-default-section-header">
-                                    <span className="rs-default-section-title">Next 3 Actions</span>
+                                    <span className="rs-default-section-title">{"Next 3 Actions" if not is_business_mode else "Top Next Actions"}</span>
                                 </div>
                                 {(
-                                    <div>{nextActionElements}</div>
-                                ) if len(nextActionElements) > 0 else (
-                                    <div className="rs-no-issues-card">
-                                        No urgent actions found. Your argument is ready to export!
-                                    </div>
-                                )}
+                                <div>{nextActionElements}</div>
+                            ) if len(nextActionElements) > 0 else (
+                                <div className="rs-no-issues-card">
+                                    {"No urgent actions found. Your argument is ready to export!"
+                                        if not is_business_mode else
+                                        "No urgent follow-up is captured yet. Add one if the team still has open risks or questions."}
+                                </div>
+                            )}
                             </div>
 
                             {(
                                 <div className="rs-counterargs-section">
                                     <div className="rs-default-section-header">
                                         <span className="rs-default-section-title">
-                                            Consider These Counterarguments
+                                            {"Consider These Counterarguments" if not is_business_mode else "Suggested Risks / Objections"}
                                         </span>
                                     </div>
                                     <p className="rs-panel-hint">
-                                        Strengthen your argument by addressing opposing views
+                                        {"Strengthen your argument by addressing opposing views"
+                                            if not is_business_mode else
+                                            "Pressure-test the decision by adding unresolved objections to the board"}
                                     </p>
                                     {counterargElements}
                                 </div>

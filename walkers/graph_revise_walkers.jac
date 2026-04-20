@@ -8,6 +8,309 @@ import json;
 import urllib.request;
 import urllib.parse;
 
+def preserve_node_fields(node_data: dict) -> dict {
+    return {
+        "id": node_data.get("id", ""),
+        "type": node_data.get("type", ""),
+        "content": node_data.get("content", ""),
+        "confidence": node_data.get("confidence", 0.5),
+        "isWeak": node_data.get("isWeak", False),
+        "issues": node_data.get("issues", []),
+        "llmIssueTypes": node_data.get("llmIssueTypes", []),
+        "position": node_data.get("position", {"x": 0, "y": 0}),
+        "evidence_category": node_data.get("evidence_category", ""),
+        "assumptions": node_data.get("assumptions", []),
+        "nodeScore": node_data.get("nodeScore", 50),
+        "sourceUrl": node_data.get("sourceUrl", ""),
+        "moreInfo": node_data.get("moreInfo", ""),
+        "acknowledged": node_data.get("acknowledged", False),
+        "layoutLocked": node_data.get("layoutLocked", False),
+        "role": node_data.get("role", node_data.get("semanticRole", "")),
+        "semanticRole": node_data.get("semanticRole", ""),
+        "source_span_ids": node_data.get("source_span_ids", []),
+        "speaker_ids": node_data.get("speaker_ids", []),
+        "origin": node_data.get("origin", ""),
+        "question": node_data.get("question", ""),
+        "decision_status": node_data.get("decision_status", ""),
+        "resolution_text": node_data.get("resolution_text", ""),
+        "scope": node_data.get("scope", ""),
+        "time_horizon": node_data.get("time_horizon", ""),
+        "option_status": node_data.get("option_status", ""),
+        "evidence_kind": node_data.get("evidence_kind", ""),
+        "criterion_tags": node_data.get("criterion_tags", []),
+        "risk_kind": node_data.get("risk_kind", ""),
+        "severity": node_data.get("severity", ""),
+        "is_blocker": node_data.get("is_blocker", False),
+        "assumption_status": node_data.get("assumption_status", ""),
+        "question_status": node_data.get("question_status", ""),
+        "owner": node_data.get("owner", ""),
+        "owners": node_data.get("owners", []),
+        "dueDate": node_data.get("dueDate", ""),
+        "due_date": node_data.get("due_date", node_data.get("dueDate", "")),
+        "priority": node_data.get("priority", ""),
+        "taskStatus": node_data.get("taskStatus", ""),
+        "task_status": node_data.get("task_status", node_data.get("taskStatus", "")),
+        "action_status": node_data.get("action_status", node_data.get("taskStatus", ""))
+    };
+}
+
+def revise_graph_payload(graph_node: obj) -> dict {
+    return {
+        "id": graph_node.id,
+        "nodes": graph_node.nodes,
+        "edges": graph_node.edges,
+        "graphMode": graph_node.graphMode if hasattr(graph_node, "graphMode") else "education_argument",
+        "graph_mode": graph_node.graph_mode if hasattr(graph_node, "graph_mode") else (graph_node.graphMode if hasattr(graph_node, "graphMode") else "education_argument"),
+        "schema_version": graph_node.schema_version if hasattr(graph_node, "schema_version") else "",
+        "board_id": graph_node.board_id if hasattr(graph_node, "board_id") else graph_node.id,
+        "primary_decision_id": graph_node.primary_decision_id if hasattr(graph_node, "primary_decision_id") else "",
+        "meeting": graph_node.meeting if hasattr(graph_node, "meeting") else {},
+        "template": graph_node.template if hasattr(graph_node, "template") else "",
+        "title": graph_node.title if hasattr(graph_node, "title") else "",
+        "summary": graph_node.summary if hasattr(graph_node, "summary") else "",
+        "createdAt": graph_node.createdAt,
+        "updatedAt": graph_node.updatedAt
+    };
+}
+
+def business_semantic_role(node_data: dict) -> str {
+    if not node_data { return ""; }
+    role = str(node_data.get("role", node_data.get("semanticRole", ""))).upper().strip();
+    if role == "NEXT_ACTION" { role = "ACTION"; }
+    if role { return role; }
+    node_type = str(node_data.get("type", "")).upper().strip();
+    if node_type == "THESIS" { return "DECISION"; }
+    if node_type == "EVIDENCE" { return "EVIDENCE"; }
+    if node_type == "COUNTERARGUMENT" { return "RISK"; }
+    return "OPTION";
+}
+
+def primary_decision_target(graph_node: obj, fallback_id: str = "") -> str {
+    if hasattr(graph_node, "primary_decision_id") and graph_node.primary_decision_id {
+        return graph_node.primary_decision_id;
+    }
+    for node in graph_node.nodes {
+        if business_semantic_role(node) == "DECISION" {
+            return node.get("id", "");
+        }
+    }
+    return fallback_id;
+}
+
+def action_edge_payload(graph_node: obj, target_node: dict, action_id: str) -> dict {
+    target_role = business_semantic_role(target_node);
+    target_id = target_node.get("id", "") if target_node else "";
+    edge_role = "IMPLEMENTS";
+    edge_target = primary_decision_target(graph_node, target_id);
+    if target_role == "OPEN_QUESTION" or target_role == "RISK" or target_role == "ASSUMPTION" {
+        edge_role = "RESOLVES";
+        edge_target = target_id;
+    } elif target_role == "DECISION" {
+        edge_role = "IMPLEMENTS";
+        edge_target = target_id;
+    }
+    return {
+        "id": f"edge_{action_id}",
+        "source": action_id,
+        "target": edge_target,
+        "type": edge_role,
+        "role": edge_role
+    };
+}
+
+def is_business_graph(graph_node: obj) -> bool {
+    if hasattr(graph_node, "graph_mode") and graph_node.graph_mode == "business_meeting_decision" {
+        return True;
+    }
+    if hasattr(graph_node, "graphMode") and graph_node.graphMode == "business_meeting_decision" {
+        return True;
+    }
+    return False;
+}
+
+def layout_box_for_content(node_content: str) -> dict {
+    max_chars = 26;
+    line_count = 1;
+    content_text = str(node_content) if node_content else "";
+    if len(content_text) > max_chars {
+        words = content_text.split(" ");
+        cur = "";
+        lines: list = [];
+        for w in words {
+            test = (cur + " " + w).strip() if cur else w;
+            if len(test) <= max_chars {
+                cur = test;
+            } else {
+                if cur { lines.append(cur); }
+                cur = w;
+            }
+        }
+        if cur { lines.append(cur); }
+        line_count = min(3, len(lines)) if len(lines) > 0 else 1;
+    }
+    return {
+        "w": 200.0,
+        "h": max(70.0, 32.0 + line_count * 17.0 + 12.0)
+    };
+}
+
+def layout_box_for_node(node_data: dict) -> dict {
+    return layout_box_for_content(node_data.get("content", ""));
+}
+
+def layout_edge_role(edge_data: dict) -> str {
+    raw_role = str(edge_data.get("role", edge_data.get("type", ""))).upper().strip();
+    if raw_role == "CONTRADICTS" { return "OPPOSES"; }
+    if raw_role == "ADDRESSES" { return "RESOLVES"; }
+    return raw_role;
+}
+
+def expand_position_candidates(
+    graph_node: obj,
+    target_node: dict,
+    branch_role: str,
+    branch_type: str,
+    target_x: float,
+    target_y: float
+) -> list {
+    target_role = business_semantic_role(target_node) if is_business_graph(graph_node) else str(target_node.get("type", "CLAIM")).upper().strip();
+    candidates: list = [];
+
+    def add_candidate(x_val: float, y_val: float) -> None {
+        candidates.append({"x": x_val, "y": y_val});
+    }
+
+    if is_business_graph(graph_node) {
+        if branch_role == "OPTION" {
+            add_candidate(target_x - 260.0, target_y + 190.0);
+            add_candidate(target_x + 260.0, target_y + 190.0);
+            add_candidate(target_x, target_y + 190.0);
+            add_candidate(target_x - 520.0, target_y + 320.0);
+            add_candidate(target_x + 520.0, target_y + 320.0);
+            add_candidate(target_x - 130.0, target_y + 320.0);
+            add_candidate(target_x + 130.0, target_y + 320.0);
+            add_candidate(target_x - 390.0, target_y + 450.0);
+            add_candidate(target_x + 390.0, target_y + 450.0);
+            add_candidate(target_x, target_y + 450.0);
+        } elif branch_role == "ACTION" {
+            add_candidate(target_x, target_y + 220.0);
+            add_candidate(target_x - 220.0, target_y + 220.0);
+            add_candidate(target_x + 220.0, target_y + 220.0);
+            add_candidate(target_x - 330.0, target_y + 330.0);
+            add_candidate(target_x + 330.0, target_y + 330.0);
+            add_candidate(target_x - 110.0, target_y + 330.0);
+            add_candidate(target_x + 110.0, target_y + 330.0);
+            add_candidate(target_x, target_y + 440.0);
+        } elif branch_type == "EVIDENCE" {
+            base_y = target_y + (340.0 if target_role == "DECISION" else 165.0);
+            add_candidate(target_x, base_y);
+            add_candidate(target_x - 240.0, base_y);
+            add_candidate(target_x + 240.0, base_y);
+            add_candidate(target_x - 120.0, base_y + 120.0);
+            add_candidate(target_x + 120.0, base_y + 120.0);
+            add_candidate(target_x - 360.0, base_y + 120.0);
+            add_candidate(target_x + 360.0, base_y + 120.0);
+            add_candidate(target_x, base_y + 240.0);
+        } else {
+            add_candidate(target_x - 220.0, target_y + 150.0);
+            add_candidate(target_x + 220.0, target_y + 150.0);
+            add_candidate(target_x, target_y + 150.0);
+            add_candidate(target_x - 110.0, target_y + 270.0);
+            add_candidate(target_x + 110.0, target_y + 270.0);
+            add_candidate(target_x - 330.0, target_y + 270.0);
+            add_candidate(target_x + 330.0, target_y + 270.0);
+            add_candidate(target_x, target_y + 390.0);
+        }
+    } else {
+        if branch_type == "EVIDENCE" {
+            add_candidate(target_x, target_y + 145.0);
+            add_candidate(target_x - 250.0, target_y + 145.0);
+            add_candidate(target_x + 250.0, target_y + 145.0);
+            add_candidate(target_x - 125.0, target_y + 260.0);
+            add_candidate(target_x + 125.0, target_y + 260.0);
+            add_candidate(target_x - 375.0, target_y + 260.0);
+            add_candidate(target_x + 375.0, target_y + 260.0);
+            add_candidate(target_x, target_y + 375.0);
+        } else {
+            add_candidate(target_x - 220.0, target_y + 145.0);
+            add_candidate(target_x + 220.0, target_y + 145.0);
+            add_candidate(target_x, target_y + 145.0);
+            add_candidate(target_x - 110.0, target_y + 260.0);
+            add_candidate(target_x + 110.0, target_y + 260.0);
+            add_candidate(target_x - 330.0, target_y + 260.0);
+            add_candidate(target_x + 330.0, target_y + 260.0);
+            add_candidate(target_x, target_y + 375.0);
+        }
+    }
+
+    return candidates;
+}
+
+def choose_expand_position(
+    graph_node: obj,
+    target_node: dict,
+    branch_role: str,
+    branch_type: str,
+    branch_content: str,
+    target_x: float,
+    target_y: float
+) -> dict {
+    candidate_box = layout_box_for_content(branch_content);
+    candidates = expand_position_candidates(graph_node, target_node, branch_role, branch_type, target_x, target_y);
+    if len(candidates) == 0 {
+        return {"x": target_x, "y": target_y + 145.0};
+    }
+
+    occupied: list = [];
+    for node in graph_node.nodes {
+        node_id = node.get("id", "");
+        node_pos = node.get("position", {"x": 0, "y": 0});
+        occupied.append({
+            "id": node_id,
+            "x": float(node_pos.get("x", 0)),
+            "y": float(node_pos.get("y", 0)),
+            "box": layout_box_for_node(node)
+        });
+    }
+
+    best_pos = candidates[0];
+    best_penalty = 999999999.0;
+    ci = 0;
+    while ci < len(candidates) {
+        cand = candidates[ci];
+        cand_x = float(cand["x"]) if "x" in cand else target_x;
+        cand_y = float(cand["y"]) if "y" in cand else target_y + 145.0;
+        penalty = float(ci) * 0.35 + abs(cand_x - target_x) * 0.03 + abs(cand_y - target_y) * 0.015;
+
+        oi = 0;
+        while oi < len(occupied) {
+            occ = occupied[oi];
+            occ_box = occ["box"] if "box" in occ else {"w": 200.0, "h": 80.0};
+            dx = abs(cand_x - float(occ["x"]) if "x" in occ else cand_x);
+            dy = abs(cand_y - float(occ["y"]) if "y" in occ else cand_y);
+            min_x_gap = (candidate_box["w"] + occ_box["w"]) / 2.0 + 30.0;
+            min_y_gap = (candidate_box["h"] + occ_box["h"]) / 2.0 + 20.0;
+            overlap_x = min_x_gap - dx;
+            overlap_y = min_y_gap - dy;
+
+            if overlap_x > 0.0 and overlap_y > 0.0 {
+                penalty = penalty + 100000.0 + overlap_x * overlap_y * 6.0;
+            } elif dx < min_x_gap + 120.0 and dy < min_y_gap + 70.0 {
+                penalty = penalty + max(0.0, (min_x_gap + 120.0) - dx) * 0.65 + max(0.0, (min_y_gap + 70.0) - dy) * 0.45;
+            }
+            oi = oi + 1;
+        }
+
+        if penalty < best_penalty {
+            best_penalty = penalty;
+            best_pos = {"x": cand_x, "y": cand_y};
+        }
+        ci = ci + 1;
+    }
+
+    return best_pos;
+}
+
 walker:pub PersistGraphLayout {
     has graphId: str,
         positions: dict = {};
@@ -50,22 +353,8 @@ walker:pub PersistGraphLayout {
                     next_y = float(existing_pos.get("y", 0));
                 }
 
-                updated_node = {
-                    "id": node.get("id", ""),
-                    "type": node.get("type", ""),
-                    "content": node.get("content", ""),
-                    "confidence": node.get("confidence", 0.5),
-                    "isWeak": node.get("isWeak", False),
-                    "issues": node.get("issues", []),
-                    "llmIssueTypes": node.get("llmIssueTypes", []),
-                    "position": {"x": next_x, "y": next_y},
-                    "evidence_category": node.get("evidence_category", ""),
-                    "assumptions": node.get("assumptions", []),
-                    "nodeScore": node.get("nodeScore", 50),
-                    "sourceUrl": node.get("sourceUrl", ""),
-                    "moreInfo": node.get("moreInfo", ""),
-                    "acknowledged": node.get("acknowledged", False)
-                };
+                updated_node = preserve_node_fields(node);
+                updated_node["position"] = {"x": next_x, "y": next_y};
                 updated_nodes.append(updated_node);
                 updated_count = updated_count + 1;
                 continue;
@@ -79,13 +368,7 @@ walker:pub PersistGraphLayout {
         report {
             "success": True,
             "updatedCount": updated_count,
-            "graph": {
-                "id": graph_node.id,
-                "nodes": graph_node.nodes,
-                "edges": graph_node.edges,
-                "createdAt": graph_node.createdAt,
-                "updatedAt": graph_node.updatedAt
-            }
+            "graph": revise_graph_payload(graph_node)
         };
         } except Exception as e {
             print(f"PersistGraphLayout ERROR: {e}");
@@ -224,7 +507,9 @@ walker:pub AddEvidenceToNode {
             "evidence_category": ev_category,
             "assumptions": ev_assumptions,
             "nodeScore": ev_node_score,
-            "sourceUrl": ev_source
+            "sourceUrl": ev_source,
+            "role": "EVIDENCE",
+            "semanticRole": "EVIDENCE"
         };
 
         updated_nodes = list(graph_node.nodes);
@@ -235,7 +520,8 @@ walker:pub AddEvidenceToNode {
             "id": f"edge_{evidence_id}",
             "source": evidence_id,
             "target": self.nodeId,
-            "type": "SUPPORTS"
+            "type": "SUPPORTS",
+            "role": "SUPPORTS" if is_business_graph(graph_node) else ""
         };
 
         updated_edges = list(graph_node.edges);
@@ -369,22 +655,8 @@ walker:pub AddAssumptionToEvidence {
                     existing_assumptions = [];
                 }
                 existing_assumptions.append(self.assumptionText);
-                updated_node = {
-                    "id": node["id"],
-                    "type": node["type"],
-                    "content": node["content"],
-                    "position": node["position"],
-                    "assumptions": existing_assumptions,
-                    "evidence_category": node.get("evidence_category", ""),
-                    "confidence": node.get("confidence", 0.5),
-                    "isWeak": node.get("isWeak", False),
-                    "issues": node.get("issues", []),
-                    "llmIssueTypes": node.get("llmIssueTypes", []),
-                    "nodeScore": node.get("nodeScore", 50),
-                    "sourceUrl": node.get("sourceUrl", ""),
-                    "moreInfo": node.get("moreInfo", ""),
-                    "acknowledged": node.get("acknowledged", False)
-                };
+                updated_node = preserve_node_fields(node);
+                updated_node["assumptions"] = existing_assumptions;
                 new_nodes: list = [];
                 for n in graph_node.nodes {
                     if n["id"] == self.nodeId {
@@ -422,7 +694,11 @@ walker:pub AddAssumptionToEvidence {
 walker:pub UpdateNodeContent {
     has graphId: str,
         nodeId: str,
-        newContent: str;
+        newContent: str,
+        owner: str = "",
+        dueDate: str = "",
+        priority: str = "",
+        taskStatus: str = "";
 
     can run with Root entry {
         try {
@@ -449,23 +725,24 @@ walker:pub UpdateNodeContent {
 
         for node in graph_node.nodes {
             if node["id"] == self.nodeId {
-                # Preserve all existing fields, only update content
-                updated_node = {
-                    "id": node["id"],
-                    "type": node["type"],
-                    "content": new_text,
-                    "position": node.get("position", {"x": 0, "y": 0}),
-                    "confidence": node.get("confidence", 0.5),
-                    "isWeak": node.get("isWeak", False),
-                    "issues": node.get("issues", []),
-                    "llmIssueTypes": node.get("llmIssueTypes", []),
-                    "evidence_category": node.get("evidence_category", ""),
-                    "assumptions": node.get("assumptions", []),
-                    "nodeScore": node.get("nodeScore", 50),
-                    "sourceUrl": node.get("sourceUrl", ""),
-                    "moreInfo": node.get("moreInfo", ""),
-                    "acknowledged": node.get("acknowledged", False)
-                };
+                updated_node = preserve_node_fields(node);
+                updated_node["content"] = new_text;
+                if self.owner or business_semantic_role(node) == "ACTION" {
+                    updated_node["owner"] = self.owner.strip();
+                    updated_node["owners"] = [] if not self.owner.strip() else [self.owner.strip()];
+                }
+                if self.dueDate or business_semantic_role(node) == "ACTION" {
+                    updated_node["dueDate"] = self.dueDate.strip();
+                    updated_node["due_date"] = self.dueDate.strip();
+                }
+                if self.priority {
+                    updated_node["priority"] = self.priority.strip();
+                }
+                if self.taskStatus {
+                    updated_node["taskStatus"] = self.taskStatus.strip();
+                    updated_node["task_status"] = self.taskStatus.strip();
+                    updated_node["action_status"] = self.taskStatus.strip();
+                }
                 new_nodes: list = [];
                 for n in graph_node.nodes {
                     if n["id"] == self.nodeId {
@@ -588,7 +865,9 @@ walker:pub AddCounterargumentNode {
         }
         # Count existing contradicts edges to this node for offset
         for te in graph_node.edges {
-            if te.get("target") == self.targetNodeId and te.get("type") == "CONTRADICTS" {
+            te_role = str(te.get("role", te.get("type", ""))).upper();
+            if te_role == "CONTRADICTS" { te_role = "OPPOSES"; }
+            if te.get("target") == self.targetNodeId and te_role == ("OPPOSES" if is_business_graph(graph_node) else "CONTRADICTS") {
                 contra_count = contra_count + 1;
             }
         }
@@ -606,7 +885,11 @@ walker:pub AddCounterargumentNode {
             "position": {"x": new_x, "y": new_y},
             "evidence_category": "",
             "assumptions": [],
-            "nodeScore": 50
+            "nodeScore": 50,
+            "role": "RISK" if is_business_graph(graph_node) else "",
+            "semanticRole": "RISK" if is_business_graph(graph_node) else "",
+            "risk_kind": "objection" if is_business_graph(graph_node) else "",
+            "severity": "medium" if is_business_graph(graph_node) else ""
         };
 
         updated_nodes = list(graph_node.nodes);
@@ -617,7 +900,8 @@ walker:pub AddCounterargumentNode {
             "id": f"edge_{counter_id}",
             "source": counter_id,
             "target": self.targetNodeId,
-            "type": "CONTRADICTS"
+            "type": "OPPOSES" if is_business_graph(graph_node) else "CONTRADICTS",
+            "role": "OPPOSES" if is_business_graph(graph_node) else ""
         };
 
         updated_edges = list(graph_node.edges);
@@ -638,6 +922,111 @@ walker:pub AddCounterargumentNode {
         };
         } except Exception as e {
             print(f"AddCounterargumentNode ERROR: {e}");
+            report {"error": str(e)};
+        }
+    }
+}
+
+walker:pub AddNextActionNode {
+    has graphId: str,
+        targetNodeId: str,
+        actionContent: str,
+        owner: str = "",
+        dueDate: str = "",
+        priority: str = "",
+        taskStatus: str = "open";
+
+    can run with Root entry {
+        try {
+        graph_node = None;
+        for graph in [-->](?:ArgumentGraph) {
+            if graph.id == self.graphId {
+                graph_node = graph;
+                break;
+            }
+        }
+
+        if not graph_node {
+            report {"error": "Graph not found"};
+            return;
+        }
+
+        action_id = f"node_action_{time.time_ns()}";
+        action_content = self.actionContent.strip();
+        if len(action_content) > 1 {
+            action_content = action_content[0].upper() + action_content[1:];
+        } elif len(action_content) == 1 {
+            action_content = action_content[0].upper();
+        }
+
+        target_pos_x = 0.0;
+        target_pos_y = 0.0;
+        target_node = None;
+        action_count = 0;
+        for tn in graph_node.nodes {
+            if tn["id"] == self.targetNodeId {
+                target_node = tn;
+                tp = tn.get("position", {"x": 0, "y": 0});
+                target_pos_x = float(tp.get("x", 0));
+                target_pos_y = float(tp.get("y", 0));
+            }
+        }
+        for te in graph_node.edges {
+            te_role = str(te.get("role", te.get("type", ""))).upper();
+            if te_role == "ADDRESSES" { te_role = "RESOLVES"; }
+            if te_role == "RESOLVES" or te_role == "IMPLEMENTS" {
+                action_count = action_count + 1;
+            }
+        }
+        new_x = target_pos_x + (action_count - 1) * 220.0;
+        new_y = target_pos_y + 220.0;
+
+        new_action = {
+            "id": action_id,
+            "type": "CLAIM",
+            "content": action_content,
+            "confidence": 0.7,
+            "isWeak": False,
+            "issues": [],
+            "llmIssueTypes": [],
+            "position": {"x": new_x, "y": new_y},
+            "evidence_category": "",
+            "assumptions": [],
+            "nodeScore": 50,
+            "role": "ACTION",
+            "semanticRole": "ACTION",
+            "owner": self.owner.strip(),
+            "owners": [] if not self.owner.strip() else [self.owner.strip()],
+            "dueDate": self.dueDate.strip(),
+            "due_date": self.dueDate.strip(),
+            "priority": self.priority.strip(),
+            "taskStatus": self.taskStatus.strip() if self.taskStatus else "open",
+            "task_status": self.taskStatus.strip() if self.taskStatus else "open",
+            "action_status": self.taskStatus.strip() if self.taskStatus else "open"
+        };
+
+        updated_nodes = list(graph_node.nodes);
+        updated_nodes.append(new_action);
+        graph_node.nodes = updated_nodes;
+
+        new_edge = action_edge_payload(graph_node, target_node, action_id);
+        updated_edges = list(graph_node.edges);
+        updated_edges.append(new_edge);
+        graph_node.edges = updated_edges;
+        graph_node.updatedAt = str(int(time.time()));
+
+        scorer = GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scorer.score_graph(graph_node);
+
+        report {
+            "success": True,
+            "graph": scored_data.get("graph", revise_graph_payload(graph_node)),
+            "score": scored_data.get("score", {}),
+            "issues": scored_data.get("issues", []),
+            "nextActions": scored_data.get("nextActions", [])
+        };
+        } except Exception as e {
+            print(f"AddNextActionNode ERROR: {e}");
             report {"error": str(e)};
         }
     }
@@ -698,7 +1087,9 @@ walker:pub AddAddressEdge {
             "position": {"x": new_x, "y": new_y},
             "evidence_category": "logical_reasoning",
             "assumptions": [],
-            "nodeScore": 50
+            "nodeScore": 50,
+            "role": "EVIDENCE",
+            "semanticRole": "EVIDENCE"
         };
 
         updated_nodes = list(graph_node.nodes);
@@ -709,14 +1100,16 @@ walker:pub AddAddressEdge {
             "id": f"edge_sup_{evidence_id}",
             "source": evidence_id,
             "target": self.defendNodeId,
-            "type": "SUPPORTS"
+            "type": "SUPPORTS",
+            "role": "SUPPORTS" if is_business_graph(graph_node) else ""
         };
 
         address_edge = {
             "id": f"edge_adr_{evidence_id}",
             "source": evidence_id,
             "target": self.counterargNodeId,
-            "type": "ADDRESSES"
+            "type": "RESOLVES" if is_business_graph(graph_node) else "ADDRESSES",
+            "role": "RESOLVES" if is_business_graph(graph_node) else ""
         };
 
         updated_edges = list(graph_node.edges);
@@ -920,22 +1313,12 @@ walker:pub EvaluateNewNode {
             node_score = int(quality * 100);
 
             # Update the node in the graph
-            updated_node = {
-                "id": target_node["id"],
-                "type": target_node["type"],
-                "content": target_node.get("content", ""),
-                "position": target_node.get("position", {"x": 0, "y": 0}),
-                "confidence": ev_confidence,
-                "isWeak": ev_confidence < 0.5,
-                "issues": target_node.get("issues", []),
-                "llmIssueTypes": target_node.get("llmIssueTypes", []),
-                "evidence_category": ev_category,
-                "assumptions": capped_assumptions,
-                "nodeScore": node_score,
-                "sourceUrl": target_node.get("sourceUrl", ""),
-                "moreInfo": target_node.get("moreInfo", ""),
-                "acknowledged": target_node.get("acknowledged", False)
-            };
+            updated_node = preserve_node_fields(target_node);
+            updated_node["confidence"] = ev_confidence;
+            updated_node["isWeak"] = ev_confidence < 0.5;
+            updated_node["evidence_category"] = ev_category;
+            updated_node["assumptions"] = capped_assumptions;
+            updated_node["nodeScore"] = node_score;
 
             # Replace node in graph
             new_nodes: list = [];
@@ -1051,7 +1434,9 @@ walker:pub GenerateCounter {
             }
         }
         for te in graph_node.edges {
-            if te.get("target") == self.targetNodeId and te.get("type") == "CONTRADICTS" {
+            te_role = str(te.get("role", te.get("type", ""))).upper();
+            if te_role == "CONTRADICTS" { te_role = "OPPOSES"; }
+            if te.get("target") == self.targetNodeId and te_role == ("OPPOSES" if is_business_graph(graph_node) else "CONTRADICTS") {
                 contra_count = contra_count + 1;
             }
         }
@@ -1069,7 +1454,11 @@ walker:pub GenerateCounter {
             "position": {"x": new_x, "y": new_y},
             "evidence_category": "",
             "assumptions": [],
-            "nodeScore": 50
+            "nodeScore": 50,
+            "role": "RISK" if is_business_graph(graph_node) else "",
+            "semanticRole": "RISK" if is_business_graph(graph_node) else "",
+            "risk_kind": "objection" if is_business_graph(graph_node) else "",
+            "severity": "medium" if is_business_graph(graph_node) else ""
         };
 
         updated_nodes = list(graph_node.nodes);
@@ -1080,7 +1469,8 @@ walker:pub GenerateCounter {
             "id": f"edge_{counter_id}",
             "source": counter_id,
             "target": self.targetNodeId,
-            "type": "CONTRADICTS"
+            "type": "OPPOSES" if is_business_graph(graph_node) else "CONTRADICTS",
+            "role": "OPPOSES" if is_business_graph(graph_node) else ""
         };
 
         updated_edges = list(graph_node.edges);
@@ -1184,22 +1574,8 @@ walker:pub ClarifyNode {
         }
 
         # Store moreInfo on the node without replacing content
-        updated_node = {
-            "id": target_node["id"],
-            "type": target_node["type"],
-            "content": target_node.get("content", ""),
-            "position": target_node.get("position", {"x": 0, "y": 0}),
-            "confidence": target_node.get("confidence", 0.5),
-            "isWeak": target_node.get("isWeak", False),
-            "issues": target_node.get("issues", []),
-            "llmIssueTypes": target_node.get("llmIssueTypes", []),
-            "evidence_category": target_node.get("evidence_category", ""),
-            "assumptions": target_node.get("assumptions", []),
-            "nodeScore": target_node.get("nodeScore", 50),
-            "moreInfo": more_info,
-            "sourceUrl": target_node.get("sourceUrl", ""),
-            "acknowledged": target_node.get("acknowledged", False)
-        };
+        updated_node = preserve_node_fields(target_node);
+        updated_node["moreInfo"] = more_info;
 
         new_nodes: list = [];
         for n in graph_node.nodes {
@@ -1317,22 +1693,9 @@ walker:pub InvestigateNode {
                 source_url_d = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(wiki_title_d)}";
             }
 
-            updated_node_d = {
-                "id": target_node["id"],
-                "type": target_node["type"],
-                "content": target_node.get("content", ""),
-                "position": target_node.get("position", {"x": 0, "y": 0}),
-                "confidence": target_node.get("confidence", 0.5),
-                "isWeak": target_node.get("isWeak", False),
-                "issues": target_node.get("issues", []),
-                "llmIssueTypes": target_node.get("llmIssueTypes", []),
-                "evidence_category": target_node.get("evidence_category", ""),
-                "assumptions": target_node.get("assumptions", []),
-                "nodeScore": target_node.get("nodeScore", 50),
-                "moreInfo": summary_d,
-                "sourceUrl": source_url_d,
-                "acknowledged": target_node.get("acknowledged", False)
-            };
+            updated_node_d = preserve_node_fields(target_node);
+            updated_node_d["moreInfo"] = summary_d;
+            updated_node_d["sourceUrl"] = source_url_d;
 
             new_nodes_d: list = [];
             for n_d in graph_node.nodes {
@@ -1399,7 +1762,9 @@ walker:pub InvestigateNode {
                         "assumptions": ev_assumptions_d,
                         "nodeScore": ev_node_score_d,
                         "sourceUrl": source_url_d,
-                        "moreInfo": summary_d
+                        "moreInfo": summary_d,
+                        "role": "EVIDENCE",
+                        "semanticRole": "EVIDENCE"
                     };
                     updated_nodes_d = list(graph_node.nodes);
                     updated_nodes_d.append(ev_node_d);
@@ -1408,7 +1773,8 @@ walker:pub InvestigateNode {
                         "id": f"edge_{ev_id_d}",
                         "source": ev_id_d,
                         "target": self.nodeId,
-                        "type": "SUPPORTS"
+                        "type": "SUPPORTS",
+                        "role": "SUPPORTS" if is_business_graph(graph_node) else ""
                     };
                     updated_edges_d = list(graph_node.edges);
                     updated_edges_d.append(nw_edge_d);
@@ -1603,22 +1969,9 @@ walker:pub InvestigateNode {
         source_url = f"https://en.wikipedia.org/wiki/{urllib.parse.quote(wiki_title)}";
 
         # Update node with investigation results
-        updated_node = {
-            "id": target_node["id"],
-            "type": target_node["type"],
-            "content": target_node.get("content", ""),
-            "position": target_node.get("position", {"x": 0, "y": 0}),
-            "confidence": target_node.get("confidence", 0.5),
-            "isWeak": target_node.get("isWeak", False),
-            "issues": target_node.get("issues", []),
-            "llmIssueTypes": target_node.get("llmIssueTypes", []),
-            "evidence_category": target_node.get("evidence_category", ""),
-            "assumptions": target_node.get("assumptions", []),
-            "nodeScore": target_node.get("nodeScore", 50),
-            "moreInfo": summary,
-            "sourceUrl": source_url,
-            "acknowledged": target_node.get("acknowledged", False)
-        };
+        updated_node = preserve_node_fields(target_node);
+        updated_node["moreInfo"] = summary;
+        updated_node["sourceUrl"] = source_url;
 
         new_nodes: list = [];
         for n in graph_node.nodes {
@@ -1667,7 +2020,9 @@ walker:pub InvestigateNode {
                 "assumptions": ev_assumptions,
                 "nodeScore": ev_node_score,
                 "sourceUrl": source_url,
-                "moreInfo": summary
+                "moreInfo": summary,
+                "role": "EVIDENCE",
+                "semanticRole": "EVIDENCE"
             };
             updated_nodes = list(graph_node.nodes);
             updated_nodes.append(ev_node);
@@ -1676,7 +2031,8 @@ walker:pub InvestigateNode {
                 "id": f"edge_{ev_id}",
                 "source": ev_id,
                 "target": self.nodeId,
-                "type": "SUPPORTS"
+                "type": "SUPPORTS",
+                "role": "SUPPORTS" if is_business_graph(graph_node) else ""
             };
             updated_edges = list(graph_node.edges);
             updated_edges.append(nw_edge);
@@ -1779,14 +2135,6 @@ walker:pub ExpandBranch {
             }
         }
 
-        # Count existing children for offset
-        existing_children = 0;
-        for te in graph_node.edges {
-            if te.get("target") == self.nodeId and te.get("type") == "SUPPORTS" {
-                existing_children = existing_children + 1;
-            }
-        }
-
         now_ts = int(time.time());
         branch_idx = 0;
         for b in branches {
@@ -1807,11 +2155,6 @@ walker:pub ExpandBranch {
             } elif len(b_content) == 1 {
                 b_content = b_content[0].upper();
             }
-
-            branch_id = f"node_branch_{now_ts}_{branch_idx}";
-            offset = existing_children + branch_idx;
-            new_x = target_pos_x + (offset - 1) * 250.0;
-            new_y = target_pos_y + 130.0;
 
             # Use LLM-provided confidence if available, else fast categorizer
             b_raw_conf = b.get("confidence", 0.5);
@@ -1838,6 +2181,31 @@ walker:pub ExpandBranch {
                 b_node_score = int(combined * 100);
             }
 
+            branch_role = "";
+            if b_type == "EVIDENCE" {
+                branch_role = "EVIDENCE";
+            } elif is_business_graph(graph_node) {
+                target_role = business_semantic_role(target_node);
+                if target_role == "OPEN_QUESTION" or target_role == "RISK" {
+                    branch_role = "ACTION";
+                } else {
+                    branch_role = "OPTION";
+                }
+            }
+
+            branch_id = f"node_branch_{now_ts}_{branch_idx}";
+            chosen_pos = choose_expand_position(
+                graph_node=graph_node,
+                target_node=target_node,
+                branch_role=branch_role,
+                branch_type=b_type,
+                branch_content=b_content,
+                target_x=target_pos_x,
+                target_y=target_pos_y
+            );
+            new_x = float(chosen_pos["x"]) if "x" in chosen_pos else target_pos_x;
+            new_y = float(chosen_pos["y"]) if "y" in chosen_pos else (target_pos_y + 145.0);
+
             new_node = {
                 "id": branch_id,
                 "type": b_type,
@@ -1850,17 +2218,40 @@ walker:pub ExpandBranch {
                 "evidence_category": b_category,
                 "assumptions": [],
                 "nodeScore": b_node_score,
-                "sourceUrl": ""
+                "sourceUrl": "",
+                "role": branch_role,
+                "semanticRole": branch_role
             };
             updated_nodes = list(graph_node.nodes);
             updated_nodes.append(new_node);
             graph_node.nodes = updated_nodes;
 
+            edge_type = "SUPPORTS";
+            edge_role = "SUPPORTS";
+            edge_source = branch_id;
+            edge_target = self.nodeId;
+            if is_business_graph(graph_node) and target_node {
+                target_role = business_semantic_role(target_node);
+                if branch_role == "OPTION" and target_role == "DECISION" {
+                    edge_type = "HAS_OPTION";
+                    edge_role = "HAS_OPTION";
+                    edge_source = self.nodeId;
+                    edge_target = branch_id;
+                } elif branch_role == "ACTION" {
+                    action_edge = action_edge_payload(graph_node, target_node, branch_id);
+                    edge_type = action_edge["type"] if "type" in action_edge else "RESOLVES";
+                    edge_role = action_edge["role"] if "role" in action_edge else edge_type;
+                    edge_source = action_edge["source"] if "source" in action_edge else branch_id;
+                    edge_target = action_edge["target"] if "target" in action_edge else self.nodeId;
+                }
+            }
+
             new_edge = {
                 "id": f"edge_{branch_id}",
-                "source": branch_id,
-                "target": self.nodeId,
-                "type": "SUPPORTS"
+                "source": edge_source,
+                "target": edge_target,
+                "type": edge_type,
+                "role": edge_role if is_business_graph(graph_node) else ""
             };
             updated_edges = list(graph_node.edges);
             updated_edges.append(new_edge);

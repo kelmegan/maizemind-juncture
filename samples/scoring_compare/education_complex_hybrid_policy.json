@@ -1,0 +1,124 @@
+{
+  "id": "education_complex_hybrid_policy",
+  "graph_mode": "education_argument",
+  "graphMode": "education_argument",
+  "title": "Complex education graph",
+  "summary": "A nuanced argument about hybrid lecture attendance with multiple supports, counterarguments, and rebuttals.",
+  "expectations": {
+    "currentOverallMin": 78,
+    "currentOverallMax": 85,
+    "deltaOverallMin": 6,
+    "currentIssueCountMax": 2,
+    "currentPassesBar": false,
+    "requireCurrentGteLegacy": true
+  },
+  "nodes": [
+    {
+      "id": "t1",
+      "type": "THESIS",
+      "content": "Universities should adopt hybrid attendance policies for large lecture courses.",
+      "confidence": 0.74,
+      "issues": []
+    },
+    {
+      "id": "c1",
+      "type": "CLAIM",
+      "content": "Hybrid attendance improves access for commuting, working, and immunocompromised students.",
+      "confidence": 0.72,
+      "issues": []
+    },
+    {
+      "id": "e1",
+      "type": "EVIDENCE",
+      "content": "A campus survey found that 61 percent of students missed at least one lecture because of work or transportation conflicts.",
+      "confidence": 0.84,
+      "evidence_category": "empirical_data",
+      "assumptions": [],
+      "issues": []
+    },
+    {
+      "id": "c2",
+      "type": "CLAIM",
+      "content": "Recorded lectures help students review difficult material and improve retention.",
+      "confidence": 0.69,
+      "issues": []
+    },
+    {
+      "id": "e2",
+      "type": "EVIDENCE",
+      "content": "A learning sciences study reported higher quiz performance when students could revisit lecture recordings before assessments.",
+      "confidence": 0.8,
+      "evidence_category": "expert_testimony",
+      "assumptions": [],
+      "issues": []
+    },
+    {
+      "id": "c3",
+      "type": "CLAIM",
+      "content": "Hybrid policy is better than either mandatory attendance or fully remote delivery because it preserves flexibility and course continuity.",
+      "confidence": 0.64,
+      "issues": ["missing_premise"]
+    },
+    {
+      "id": "ca1",
+      "type": "COUNTERARGUMENT",
+      "content": "If students can stay home, attendance and campus engagement may decline sharply.",
+      "confidence": 0.66,
+      "issues": []
+    },
+    {
+      "id": "r1",
+      "type": "CLAIM",
+      "content": "Participation credit, required in-person checkpoints, and discussion sections can preserve engagement while keeping hybrid flexibility.",
+      "confidence": 0.67,
+      "issues": []
+    },
+    {
+      "id": "e3",
+      "type": "EVIDENCE",
+      "content": "A neighboring university kept lecture attendance steady after tying weekly discussion participation to course credit.",
+      "confidence": 0.74,
+      "evidence_category": "empirical_data",
+      "assumptions": [],
+      "issues": []
+    },
+    {
+      "id": "ca2",
+      "type": "COUNTERARGUMENT",
+      "content": "Hybrid delivery can widen inequity if some students lack reliable devices or internet access.",
+      "confidence": 0.68,
+      "issues": []
+    },
+    {
+      "id": "r2",
+      "type": "CLAIM",
+      "content": "Device-lending programs and on-campus quiet study spaces can reduce most access barriers.",
+      "confidence": 0.63,
+      "issues": []
+    },
+    {
+      "id": "e4",
+      "type": "EVIDENCE",
+      "content": "The university library loaned hotspots and laptops to more than 400 students last semester, but demand still exceeded supply during finals week.",
+      "confidence": 0.71,
+      "evidence_category": "empirical_data",
+      "assumptions": [
+        "Would expanding the lending program be financially sustainable?"
+      ],
+      "issues": []
+    }
+  ],
+  "edges": [
+    { "id": "x1", "source": "c1", "target": "t1", "type": "SUPPORTS", "weight": 0.84 },
+    { "id": "x2", "source": "e1", "target": "c1", "type": "SUPPORTS", "weight": 0.9 },
+    { "id": "x3", "source": "c2", "target": "t1", "type": "SUPPORTS", "weight": 0.78 },
+    { "id": "x4", "source": "e2", "target": "c2", "type": "SUPPORTS", "weight": 0.86 },
+    { "id": "x5", "source": "c3", "target": "t1", "type": "SUPPORTS", "weight": 0.64 },
+    { "id": "x6", "source": "ca1", "target": "t1", "type": "CONTRADICTS", "weight": 0.76 },
+    { "id": "x7", "source": "r1", "target": "ca1", "type": "ADDRESSES", "weight": 0.82 },
+    { "id": "x8", "source": "e3", "target": "r1", "type": "SUPPORTS", "weight": 0.8 },
+    { "id": "x9", "source": "ca2", "target": "t1", "type": "CONTRADICTS", "weight": 0.71 },
+    { "id": "x10", "source": "r2", "target": "ca2", "type": "ADDRESSES", "weight": 0.72 },
+    { "id": "x11", "source": "e4", "target": "r2", "type": "SUPPORTS", "weight": 0.74 }
+  ]
+}
