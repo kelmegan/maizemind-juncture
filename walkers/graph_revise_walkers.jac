@@ -8,6 +8,133 @@ import json;
 import urllib.request;
 import urllib.parse;
 
+walker:pub PersistGraphLayout {
+    has graphId: str,
+        positions: dict = {};
+
+    can run with Root entry {
+        try {
+        graph_node = None;
+        for graph in [-->](?:ArgumentGraph) {
+            if graph.id == self.graphId {
+                graph_node = graph;
+                break;
+            }
+        }
+
+        if not graph_node {
+            report {"error": "Graph not found"};
+            return;
+        }
+
+        pos_map = self.positions if self.positions else {};
+        updated_nodes: list = [];
+        updated_count = 0;
+
+        for node in graph_node.nodes {
+            node_id = node.get("id", "");
+            if node_id in pos_map {
+                raw_pos = pos_map[node_id] if pos_map[node_id] else {};
+                existing_pos = node.get("position", {"x": 0, "y": 0});
+                next_x = 0.0;
+                next_y = 0.0;
+
+                try {
+                    next_x = float(raw_pos.get("x", existing_pos.get("x", 0)));
+                } except Exception {
+                    next_x = float(existing_pos.get("x", 0));
+                }
+                try {
+                    next_y = float(raw_pos.get("y", existing_pos.get("y", 0)));
+                } except Exception {
+                    next_y = float(existing_pos.get("y", 0));
+                }
+
+                updated_node = {
+                    "id": node.get("id", ""),
+                    "type": node.get("type", ""),
+                    "content": node.get("content", ""),
+                    "confidence": node.get("confidence", 0.5),
+                    "isWeak": node.get("isWeak", False),
+                    "issues": node.get("issues", []),
+                    "llmIssueTypes": node.get("llmIssueTypes", []),
+                    "position": {"x": next_x, "y": next_y},
+                    "evidence_category": node.get("evidence_category", ""),
+                    "assumptions": node.get("assumptions", []),
+                    "nodeScore": node.get("nodeScore", 50),
+                    "sourceUrl": node.get("sourceUrl", ""),
+                    "moreInfo": node.get("moreInfo", ""),
+                    "acknowledged": node.get("acknowledged", False)
+                };
+                updated_nodes.append(updated_node);
+                updated_count = updated_count + 1;
+                continue;
+            }
+            updated_nodes.append(node);
+        }
+
+        graph_node.nodes = updated_nodes;
+        graph_node.updatedAt = str(int(time.time()));
+
+        report {
+            "success": True,
+            "updatedCount": updated_count,
+            "graph": {
+                "id": graph_node.id,
+                "nodes": graph_node.nodes,
+                "edges": graph_node.edges,
+                "createdAt": graph_node.createdAt,
+                "updatedAt": graph_node.updatedAt
+            }
+        };
+        } except Exception as e {
+            print(f"PersistGraphLayout ERROR: {e}");
+            report {"error": str(e)};
+        }
+    }
+}
+
+walker:pub RestoreGraphSnapshot {
+    has graphId: str,
+        nodes: list = [],
+        edges: list = [];
+
+    can run with Root entry {
+        try {
+        graph_node = None;
+        for graph in [-->](?:ArgumentGraph) {
+            if graph.id == self.graphId {
+                graph_node = graph;
+                break;
+            }
+        }
+
+        if not graph_node {
+            report {"error": "Graph not found"};
+            return;
+        }
+
+        graph_node.nodes = list(self.nodes) if self.nodes else [];
+        graph_node.edges = list(self.edges) if self.edges else [];
+        graph_node.updatedAt = str(int(time.time()));
+
+        scorer = GetGraphWithScoring(graphId=self.graphId);
+        scored_data = scorer.score_graph(graph_node);
+
+        report {
+            "success": True,
+            "graph": scored_data.get("graph", {"id": graph_node.id, "nodes": graph_node.nodes, "edges": graph_node.edges, "createdAt": graph_node.createdAt, "updatedAt": graph_node.updatedAt}),
+            "score": scored_data.get("score", {}),
+            "issues": scored_data.get("issues", []),
+            "nextActions": scored_data.get("nextActions", [])
+        };
+        } except Exception as e {
+            print(f"RestoreGraphSnapshot ERROR: {e}");
+            report {"error": str(e)};
+        }
+    }
+}
+
 walker:pub AddEvidenceToNode {
     has graphId: str,
         nodeId: str,

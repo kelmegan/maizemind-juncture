@@ -19,6 +19,12 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         currentScore: dict = None,
         currentIssues: list = [],
         currentNextActions: list = [],
+        layoutHints: dict = {},
+        layoutHintGraphId: str = "",
+        persistedLayoutPositions: dict = {},
+        persistedLayoutGraphId: str = "",
+        graphViewVersion: int = 0,
+        undoStack: list = [],
         selectedNode: dict | None = None,
         focusBranch: str = None,
         editMode: str = "",
@@ -49,7 +55,17 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         try {
             result = await root spawn GetGraphWithScoring(graphId=graph_id);
             data = result["reports"][0] if result["reports"] else {};
-            if "graph" in data { currentGraph = data["graph"]; }
+            if "graph" in data {
+                graph_data = data["graph"];
+                seed_positions = extractPositionsFromGraph(graph_data);
+                currentGraph = applyPositionsAndLocks(graph_data, seed_positions, {});
+                layoutHints = seed_positions;
+                layoutHintGraphId = graph_id;
+                persistedLayoutPositions = seed_positions;
+                persistedLayoutGraphId = graph_id;
+                graphViewVersion = graphViewVersion + 1;
+                undoStack = [];
+            }
             if "score" in data { currentScore = data["score"]; }
             if "issues" in data { currentIssues = data["issues"]; }
             if "nextActions" in data { currentNextActions = data["nextActions"]; }
@@ -73,6 +89,449 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             graph_id = currentGraph["id"] if "id" in currentGraph else "";
             ctx.setGraphCache(graph_id, suggestedCounterargs);
         }
+    }
+
+    def clonePositionMap(graph_data: dict, position_map: dict) -> dict {
+        result: dict = {};
+        if not graph_data or not position_map { return result; }
+        graph_nodes = graph_data["nodes"] if "nodes" in graph_data else [];
+        gi = 0;
+        while gi < len(graph_nodes) {
+            position_id = graph_nodes[gi]["id"] if "id" in graph_nodes[gi] else "";
+            if position_id in position_map {
+                raw_pos = position_map[position_id] if position_map[position_id] else {"x": 0, "y": 0};
+                result[position_id] = {
+                    "x": float(raw_pos["x"]) if "x" in raw_pos else 0.0,
+                    "y": float(raw_pos["y"]) if "y" in raw_pos else 0.0
+                };
+            }
+            gi = gi + 1;
+        }
+        return result;
+    }
+
+    def cloneNodeList(node_list: list) -> list {
+        result: list = [];
+        if not node_list { return result; }
+        ni = 0;
+        while ni < len(node_list) {
+            node_item = node_list[ni];
+            cloned = {
+                "id": node_item["id"] if "id" in node_item else "",
+                "type": node_item["type"] if "type" in node_item else "",
+                "content": node_item["content"] if "content" in node_item else "",
+                "confidence": node_item["confidence"] if "confidence" in node_item else 0.5,
+                "isWeak": node_item["isWeak"] if "isWeak" in node_item else False,
+                "issues": list(node_item["issues"]) if "issues" in node_item and node_item["issues"] else [],
+                "llmIssueTypes": list(node_item["llmIssueTypes"]) if "llmIssueTypes" in node_item and node_item["llmIssueTypes"] else [],
+                "position": {
+                    "x": float(node_item["position"]["x"]) if "position" in node_item and "x" in node_item["position"] else 0.0,
+                    "y": float(node_item["position"]["y"]) if "position" in node_item and "y" in node_item["position"] else 0.0
+                },
+                "evidence_category": node_item["evidence_category"] if "evidence_category" in node_item else "",
+                "assumptions": list(node_item["assumptions"]) if "assumptions" in node_item and node_item["assumptions"] else [],
+                "nodeScore": node_item["nodeScore"] if "nodeScore" in node_item else 50,
+                "sourceUrl": node_item["sourceUrl"] if "sourceUrl" in node_item else "",
+                "moreInfo": node_item["moreInfo"] if "moreInfo" in node_item else "",
+                "acknowledged": node_item["acknowledged"] if "acknowledged" in node_item else False,
+                "layoutLocked": node_item["layoutLocked"] if "layoutLocked" in node_item else False
+            };
+            if "isGhost" in node_item { cloned["isGhost"] = node_item["isGhost"]; }
+            if "ghostTarget" in node_item { cloned["ghostTarget"] = node_item["ghostTarget"]; }
+            result.append(cloned);
+            ni = ni + 1;
+        }
+        return result;
+    }
+
+    def cloneEdgeList(edge_list: list) -> list {
+        result: list = [];
+        if not edge_list { return result; }
+        ei = 0;
+        while ei < len(edge_list) {
+            edge_item = edge_list[ei];
+            cloned = {
+                "id": edge_item["id"] if "id" in edge_item else "",
+                "source": edge_item["source"] if "source" in edge_item else "",
+                "target": edge_item["target"] if "target" in edge_item else "",
+                "type": edge_item["type"] if "type" in edge_item else ""
+            };
+            if "weight" in edge_item { cloned["weight"] = edge_item["weight"]; }
+            if "reasoning_type" in edge_item { cloned["reasoning_type"] = edge_item["reasoning_type"]; }
+            if "isGhost" in edge_item { cloned["isGhost"] = edge_item["isGhost"]; }
+            result.append(cloned);
+            ei = ei + 1;
+        }
+        return result;
+    }
+
+    def cloneIssueList(issue_list: list) -> list {
+        result: list = [];
+        if not issue_list { return result; }
+        di = 0;
+        while di < len(issue_list) {
+            item = issue_list[di];
+            cloned = {
+                "id": item["id"] if "id" in item else "",
+                "nodeId": item["nodeId"] if "nodeId" in item else "",
+                "severity": item["severity"] if "severity" in item else "",
+                "type": item["type"] if "type" in item else "",
+                "description": item["description"] if "description" in item else "",
+                "suggestedAction": item["suggestedAction"] if "suggestedAction" in item else "",
+                "area": item["area"] if "area" in item else "",
+                "estimatedLift": item["estimatedLift"] if "estimatedLift" in item else 0
+            };
+            result.append(cloned);
+            di = di + 1;
+        }
+        return result;
+    }
+
+    def cloneNextActionList(action_list: list) -> list {
+        result: list = [];
+        if not action_list { return result; }
+        di = 0;
+        while di < len(action_list) {
+            item = action_list[di];
+            cloned = {
+                "id": item["id"] if "id" in item else "",
+                "nodeId": item["nodeId"] if "nodeId" in item else "",
+                "action": item["action"] if "action" in item else "",
+                "issueType": item["issueType"] if "issueType" in item else "",
+                "rank": item["rank"] if "rank" in item else 0,
+                "severity": item["severity"] if "severity" in item else "",
+                "area": item["area"] if "area" in item else "",
+                "expectedLift": item["expectedLift"] if "expectedLift" in item else 0
+            };
+            result.append(cloned);
+            di = di + 1;
+        }
+        return result;
+    }
+
+    def cloneScoreData(score_data: dict) -> dict {
+        if not score_data { return {}; }
+        return {
+            "overall": score_data["overall"] if "overall" in score_data else 0,
+            "support": score_data["support"] if "support" in score_data else 0,
+            "premise": score_data["premise"] if "premise" in score_data else 0,
+            "coherence": score_data["coherence"] if "coherence" in score_data else 0,
+            "counterargument": score_data["counterargument"] if "counterargument" in score_data else 0,
+            "consistency": score_data["consistency"] if "consistency" in score_data else 0,
+            "unsupportedClaims": score_data["unsupportedClaims"] if "unsupportedClaims" in score_data else 0,
+            "claimsNeedingPremise": score_data["claimsNeedingPremise"] if "claimsNeedingPremise" in score_data else 0,
+            "unresolvedContradictions": score_data["unresolvedContradictions"] if "unresolvedContradictions" in score_data else 0,
+            "weakInferenceClaims": score_data["weakInferenceClaims"] if "weakInferenceClaims" in score_data else 0,
+            "vagueClaims": score_data["vagueClaims"] if "vagueClaims" in score_data else 0,
+            "orphanNodes": score_data["orphanNodes"] if "orphanNodes" in score_data else 0,
+            "disconnectedClaims": score_data["disconnectedClaims"] if "disconnectedClaims" in score_data else 0,
+            "thesisSupported": score_data["thesisSupported"] if "thesisSupported" in score_data else False,
+            "passesBar": score_data["passesBar"] if "passesBar" in score_data else False
+        };
+    }
+
+    def cloneGraphData(graph_data: dict) -> dict {
+        if not graph_data { return None; }
+        return {
+            "id": graph_data["id"] if "id" in graph_data else "",
+            "nodes": cloneNodeList(graph_data["nodes"]) if "nodes" in graph_data else [],
+            "edges": cloneEdgeList(graph_data["edges"]) if "edges" in graph_data else [],
+            "createdAt": graph_data["createdAt"] if "createdAt" in graph_data else "",
+            "updatedAt": graph_data["updatedAt"] if "updatedAt" in graph_data else ""
+        };
+    }
+
+    def pushUndoSnapshot(actionLabel: str) -> None {
+        if not currentGraph { return; }
+        snapshot = {
+            "label": actionLabel,
+            "graph": cloneGraphData(currentGraph),
+            "score": cloneScoreData(currentScore) if currentScore else {},
+            "issues": cloneIssueList(currentIssues) if currentIssues else [],
+            "nextActions": cloneNextActionList(currentNextActions) if currentNextActions else [],
+            "layoutHints": clonePositionMap(currentGraph, getStableLayoutPositions()),
+            "persistedLayoutPositions": clonePositionMap(currentGraph, persistedLayoutPositions) if persistedLayoutPositions else clonePositionMap(currentGraph, extractPositionsFromGraph(currentGraph)),
+            "selectedNodeId": selectedNode["id"] if selectedNode and "id" in selectedNode else "",
+            "focusBranch": focusBranch if focusBranch else "",
+            "dismissedCounterargTexts": list(dismissedCounterargTexts) if dismissedCounterargTexts else []
+        };
+        next_stack = list(undoStack);
+        next_stack.append(snapshot);
+        if len(next_stack) > 20 {
+            next_stack = next_stack[1:];
+        }
+        undoStack = next_stack;
+    }
+
+    def findNodeById(graph_data: dict, node_id: str) -> dict | None {
+        if not graph_data or not node_id { return None; }
+        graph_nodes = graph_data["nodes"] if "nodes" in graph_data else [];
+        gi = 0;
+        while gi < len(graph_nodes) {
+            if graph_nodes[gi]["id"] == node_id {
+                return graph_nodes[gi];
+            }
+            gi = gi + 1;
+        }
+        return None;
+    }
+
+    def extractPositionsFromGraph(graph_data: dict) -> dict {
+        result: dict = {};
+        if not graph_data or "nodes" not in graph_data { return result; }
+        graph_nodes = graph_data["nodes"] if "nodes" in graph_data else [];
+        gi = 0;
+        while gi < len(graph_nodes) {
+            graph_node = graph_nodes[gi];
+            graph_id = graph_node["id"] if "id" in graph_node else "";
+            graph_pos = graph_node["position"] if "position" in graph_node else {"x": 0, "y": 0};
+            result[graph_id] = {
+                "x": float(graph_pos["x"]) if "x" in graph_pos else 0.0,
+                "y": float(graph_pos["y"]) if "y" in graph_pos else 0.0
+            };
+            gi = gi + 1;
+        }
+        return result;
+    }
+
+    def extractNodeIdMap(graph_data: dict) -> dict {
+        result: dict = {};
+        if not graph_data or "nodes" not in graph_data { return result; }
+        graph_nodes = graph_data["nodes"] if "nodes" in graph_data else [];
+        gi = 0;
+        while gi < len(graph_nodes) {
+            graph_node = graph_nodes[gi];
+            graph_id = graph_node["id"] if "id" in graph_node else "";
+            if graph_id { result[graph_id] = True; }
+            gi = gi + 1;
+        }
+        return result;
+    }
+
+    def extractLockedNodeIdMap(graph_data: dict) -> dict {
+        result: dict = {};
+        if not graph_data or "nodes" not in graph_data { return result; }
+        graph_nodes = graph_data["nodes"] if "nodes" in graph_data else [];
+        gi = 0;
+        while gi < len(graph_nodes) {
+            graph_node = graph_nodes[gi];
+            graph_id = graph_node["id"] if "id" in graph_node else "";
+            is_locked = graph_node["layoutLocked"] if "layoutLocked" in graph_node else False;
+            if graph_id and is_locked {
+                result[graph_id] = True;
+            }
+            gi = gi + 1;
+        }
+        return result;
+    }
+
+    def extractMovedNodeIdMap(graph_data: dict, candidate_positions: dict) -> dict {
+        result = extractLockedNodeIdMap(graph_data);
+        if not graph_data or not candidate_positions { return result; }
+        graph_nodes = graph_data["nodes"] if "nodes" in graph_data else [];
+        gi = 0;
+        while gi < len(graph_nodes) {
+            graph_node = graph_nodes[gi];
+            graph_id = graph_node["id"] if "id" in graph_node else "";
+            if graph_id and graph_id in candidate_positions {
+                graph_pos = graph_node["position"] if "position" in graph_node else {"x": 0, "y": 0};
+                next_pos = candidate_positions[graph_id] if candidate_positions[graph_id] else {"x": 0, "y": 0};
+                graph_x = float(graph_pos["x"]) if "x" in graph_pos else 0.0;
+                graph_y = float(graph_pos["y"]) if "y" in graph_pos else 0.0;
+                next_x = float(next_pos["x"]) if "x" in next_pos else 0.0;
+                next_y = float(next_pos["y"]) if "y" in next_pos else 0.0;
+                if abs(graph_x - next_x) > 0.5 or abs(graph_y - next_y) > 0.5 {
+                    result[graph_id] = True;
+                }
+            }
+            gi = gi + 1;
+        }
+        return result;
+    }
+
+    def positionsDifferFromGraph(graph_data: dict, candidate_positions: dict) -> bool {
+        if not graph_data { return False; }
+        graph_nodes = graph_data["nodes"] if "nodes" in graph_data else [];
+        gi = 0;
+        while gi < len(graph_nodes) {
+            graph_node = graph_nodes[gi];
+            graph_id = graph_node["id"] if "id" in graph_node else "";
+            if graph_id not in candidate_positions {
+                return True;
+            }
+            graph_pos = graph_node["position"] if "position" in graph_node else {"x": 0, "y": 0};
+            next_pos = candidate_positions[graph_id] if candidate_positions[graph_id] else {"x": 0, "y": 0};
+            graph_x = float(graph_pos["x"]) if "x" in graph_pos else 0.0;
+            graph_y = float(graph_pos["y"]) if "y" in graph_pos else 0.0;
+            next_x = float(next_pos["x"]) if "x" in next_pos else 0.0;
+            next_y = float(next_pos["y"]) if "y" in next_pos else 0.0;
+            if abs(graph_x - next_x) > 0.5 or abs(graph_y - next_y) > 0.5 {
+                return True;
+            }
+            gi = gi + 1;
+        }
+        return False;
+    }
+
+    def positionsDifferFromSnapshot(graph_data: dict, candidate_positions: dict, baseline_positions: dict) -> bool {
+        if not graph_data { return False; }
+        graph_nodes = graph_data["nodes"] if "nodes" in graph_data else [];
+        gi = 0;
+        while gi < len(graph_nodes) {
+            graph_node = graph_nodes[gi];
+            graph_id = graph_node["id"] if "id" in graph_node else "";
+            if graph_id not in candidate_positions or graph_id not in baseline_positions {
+                return True;
+            }
+            base_pos = baseline_positions[graph_id] if baseline_positions[graph_id] else {"x": 0, "y": 0};
+            next_pos = candidate_positions[graph_id] if candidate_positions[graph_id] else {"x": 0, "y": 0};
+            base_x = float(base_pos["x"]) if "x" in base_pos else 0.0;
+            base_y = float(base_pos["y"]) if "y" in base_pos else 0.0;
+            next_x = float(next_pos["x"]) if "x" in next_pos else 0.0;
+            next_y = float(next_pos["y"]) if "y" in next_pos else 0.0;
+            if abs(base_x - next_x) > 0.5 or abs(base_y - next_y) > 0.5 {
+                return True;
+            }
+            gi = gi + 1;
+        }
+        return False;
+    }
+
+    def applyPositionsAndLocks(graph_data: dict, preferred_positions: dict = {}, locked_node_ids: dict = {}) -> dict {
+        if not graph_data { return graph_data; }
+        graph_nodes = graph_data["nodes"] if "nodes" in graph_data else [];
+        gi = 0;
+        while gi < len(graph_nodes) {
+            graph_node = graph_nodes[gi];
+            graph_id = graph_node["id"] if "id" in graph_node else "";
+            if graph_id in preferred_positions {
+                graph_node["position"] = preferred_positions[graph_id];
+            } elif "position" not in graph_node {
+                graph_node["position"] = {"x": 0, "y": 0};
+            }
+            graph_node["layoutLocked"] = graph_id in locked_node_ids;
+            graph_nodes[gi] = graph_node;
+            gi = gi + 1;
+        }
+        graph_data["nodes"] = graph_nodes;
+        return graph_data;
+    }
+
+    def getStableLayoutPositions() -> dict {
+        if layoutHints and len(layoutHints) > 0 {
+            return layoutHints;
+        }
+        return extractPositionsFromGraph(currentGraph);
+    }
+
+    async def flushLayoutToBackend(force: bool = False) -> None {
+        if not currentGraph { return; }
+        next_positions = getStableLayoutPositions();
+        baseline_positions = persistedLayoutPositions if persistedLayoutGraphId == (currentGraph["id"] if currentGraph and "id" in currentGraph else "") else extractPositionsFromGraph(currentGraph);
+        if not force and not positionsDifferFromSnapshot(currentGraph, next_positions, baseline_positions) {
+            return;
+        }
+        graph_id = currentGraph["id"] if "id" in currentGraph else "";
+        if not graph_id { return; }
+        locked_node_ids = extractLockedNodeIdMap(currentGraph);
+        try {
+            persistResult = await root spawn PersistGraphLayout(graphId=graph_id, positions=next_positions);
+            persistData = persistResult["reports"][0] if persistResult["reports"] else {};
+            if "graph" in persistData {
+                currentGraph = applyPositionsAndLocks(
+                    persistData["graph"],
+                    next_positions,
+                    locked_node_ids
+                );
+            } else {
+                currentGraph = applyPositionsAndLocks(
+                    currentGraph,
+                    next_positions,
+                    locked_node_ids
+                );
+            }
+            layoutHints = next_positions;
+            layoutHintGraphId = graph_id;
+            persistedLayoutPositions = next_positions;
+            persistedLayoutGraphId = graph_id;
+        } except Exception as e {
+            print(f"ReviewScreen layout persist error: {e}");
+        }
+    }
+
+    def applyMutationGraph(mutData: dict, preserved_positions: dict, preserved_node_ids: dict) -> dict {
+        if "graph" not in mutData { return currentGraph; }
+        next_graph = mutData["graph"];
+        next_graph = applyPositionsAndLocks(next_graph, preserved_positions, preserved_node_ids);
+        currentGraph = next_graph;
+        layoutHints = extractPositionsFromGraph(next_graph);
+        layoutHintGraphId = next_graph["id"] if "id" in next_graph else layoutHintGraphId;
+        persistedLayoutPositions = extractPositionsFromGraph(next_graph);
+        persistedLayoutGraphId = next_graph["id"] if "id" in next_graph else persistedLayoutGraphId;
+        return next_graph;
+    }
+
+    def syncLayoutLocally(updatedPositions: dict, lock_all_nodes: bool = False) -> None {
+        if not currentGraph or not updatedPositions { return; }
+        locked_ids = extractMovedNodeIdMap(currentGraph, updatedPositions) if lock_all_nodes else extractLockedNodeIdMap(currentGraph);
+        currentGraph = applyPositionsAndLocks(currentGraph, updatedPositions, locked_ids);
+        layoutHints = updatedPositions;
+        graph_id = currentGraph["id"] if "id" in currentGraph else "";
+        layoutHintGraphId = graph_id;
+    }
+
+    def handleLayoutResolved(resolvedPositions: dict) -> None {
+        if not resolvedPositions or not currentGraph { return; }
+        if not positionsDifferFromGraph(currentGraph, resolvedPositions) { return; }
+        syncLayoutLocally(resolvedPositions, False);
+    }
+
+    async def handleNodePositionsChange(updatedPositions: dict) -> None {
+        if not updatedPositions or not currentGraph { return; }
+        pushUndoSnapshot("Move node");
+        syncLayoutLocally(updatedPositions, True);
+        await flushLayoutToBackend(True);
+    }
+
+    async def handleUndo() -> None {
+        if len(undoStack) == 0 or not currentGraph { return; }
+        last_index = len(undoStack) - 1;
+        snapshot = undoStack[last_index];
+        next_stack = list(undoStack[:last_index]);
+        graph_snapshot = snapshot["graph"] if "graph" in snapshot else None;
+        if not graph_snapshot { return; }
+
+        isSaving = True;
+        try {
+            restoreResult = await root spawn RestoreGraphSnapshot(
+                graphId=graph_snapshot["id"] if "id" in graph_snapshot else "",
+                nodes=graph_snapshot["nodes"] if "nodes" in graph_snapshot else [],
+                edges=graph_snapshot["edges"] if "edges" in graph_snapshot else []
+            );
+            restoreData = restoreResult["reports"][0] if restoreResult["reports"] else {};
+
+            if "graph" in restoreData {
+                restored_graph = restoreData["graph"];
+                restored_positions = snapshot["layoutHints"] if "layoutHints" in snapshot else extractPositionsFromGraph(restored_graph);
+                currentGraph = applyPositionsAndLocks(restored_graph, restored_positions, extractLockedNodeIdMap(graph_snapshot));
+                currentScore = restoreData["score"] if "score" in restoreData else (snapshot["score"] if "score" in snapshot else {});
+                currentIssues = restoreData["issues"] if "issues" in restoreData else (snapshot["issues"] if "issues" in snapshot else []);
+                currentNextActions = restoreData["nextActions"] if "nextActions" in restoreData else (snapshot["nextActions"] if "nextActions" in snapshot else []);
+                layoutHints = restored_positions;
+                layoutHintGraphId = restored_graph["id"] if "id" in restored_graph else layoutHintGraphId;
+                persistedLayoutPositions = snapshot["persistedLayoutPositions"] if "persistedLayoutPositions" in snapshot else restored_positions;
+                persistedLayoutGraphId = restored_graph["id"] if "id" in restored_graph else persistedLayoutGraphId;
+                graphViewVersion = graphViewVersion + 1;
+                dismissedCounterargTexts = snapshot["dismissedCounterargTexts"] if "dismissedCounterargTexts" in snapshot else [];
+                focusBranch = snapshot["focusBranch"] if "focusBranch" in snapshot else "";
+                selectedNode = findNodeById(currentGraph, snapshot["selectedNodeId"] if "selectedNodeId" in snapshot else "");
+                undoStack = next_stack;
+            }
+        } except Exception as e {
+            print(f"ReviewScreen undo error: {e}");
+        }
+        isSaving = False;
+        pushUpdate();
     }
 
     def handleNodeClick(node_data: any) -> None {
@@ -168,13 +627,17 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     async def handleGenerateCounter() -> None {
         if not selectedNode or not currentGraph { return; }
         isSaving = True;
+        pushUndoSnapshot("Generate counter");
         _gcGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _gcNodeId = selectedNode["id"];
         _gcPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+        _gcPreservedPositions = getStableLayoutPositions();
+        _gcPreservedNodeIds = extractLockedNodeIdMap(currentGraph);
         try {
+            await flushLayoutToBackend();
             mutResult = await root spawn GenerateCounter(graphId=_gcGraphId, targetNodeId=_gcNodeId);
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
-            if "graph" in mutData { currentGraph = mutData["graph"]; }
+            _freshGraph = applyMutationGraph(mutData, _gcPreservedPositions, _gcPreservedNodeIds);
             if "score" in mutData {
                 currentScore = mutData["score"];
                 _gcNewScore = currentScore["overall"] if "overall" in currentScore else _gcPrevScore;
@@ -182,7 +645,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
             if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
             _gcNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
             _gcFound = None;
             _gci = 0;
@@ -222,17 +684,21 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     async def handlePickInvestigateResult(resultIndex: int, pickedTitle: str, pickedUrl: str) -> None {
         if not selectedNode or not currentGraph { return; }
         isSaving = True;
+        pushUndoSnapshot("Add investigated evidence");
         _pirGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _pirNodeId = selectedNode["id"];
         _pirPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+        _pirPreservedPositions = getStableLayoutPositions();
+        _pirPreservedNodeIds = extractLockedNodeIdMap(currentGraph);
         try {
+            await flushLayoutToBackend();
             mutResult = await root spawn InvestigateNode(
                 graphId=_pirGraphId, nodeId=_pirNodeId,
                 selectedResultIndex=resultIndex, addAsEvidence=True,
                 selectedTitle=pickedTitle, selectedUrl=pickedUrl
             );
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
-            if "graph" in mutData { currentGraph = mutData["graph"]; }
+            _freshGraph = applyMutationGraph(mutData, _pirPreservedPositions, _pirPreservedNodeIds);
             if "score" in mutData {
                 currentScore = mutData["score"];
                 _pirNewScore = currentScore["overall"] if "overall" in currentScore else _pirPrevScore;
@@ -240,7 +706,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
             if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
             _pirNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
             _pirFound = None;
             _piri = 0;
@@ -271,13 +736,17 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     async def handleAutoFix() -> None {
         if not selectedNode or not currentGraph { return; }
         isSaving = True;
+        pushUndoSnapshot("Auto-fix node");
         _afGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _afNodeId = selectedNode["id"];
         _afPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+        _afPreservedPositions = getStableLayoutPositions();
+        _afPreservedNodeIds = extractLockedNodeIdMap(currentGraph);
         try {
+            await flushLayoutToBackend();
             mutResult = await root spawn InvestigateNode(graphId=_afGraphId, nodeId=_afNodeId, addAsEvidence=True);
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
-            if "graph" in mutData { currentGraph = mutData["graph"]; }
+            _freshGraph = applyMutationGraph(mutData, _afPreservedPositions, _afPreservedNodeIds);
             if "score" in mutData {
                 currentScore = mutData["score"];
                 _afNewScore = currentScore["overall"] if "overall" in currentScore else _afPrevScore;
@@ -285,7 +754,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
             if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
             _afNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
             _afFound = None;
             _afi = 0;
@@ -306,16 +774,20 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         _aeSourceUrl = selectedNode["sourceUrl"] if "sourceUrl" in selectedNode else "";
         if not _aeMoreInfo { return; }
         isSaving = True;
+        pushUndoSnapshot("Add evidence");
         _aeGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _aeNodeId = selectedNode["id"];
         _aePrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+        _aePreservedPositions = getStableLayoutPositions();
+        _aePreservedNodeIds = extractLockedNodeIdMap(currentGraph);
         try {
+            await flushLayoutToBackend();
             mutResult = await root spawn AddEvidenceToNode(
                 graphId=_aeGraphId, nodeId=_aeNodeId,
                 evidenceContent=_aeMoreInfo, sourceUrl=_aeSourceUrl
             );
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
-            if "graph" in mutData { currentGraph = mutData["graph"]; }
+            _freshGraph = applyMutationGraph(mutData, _aePreservedPositions, _aePreservedNodeIds);
             if "score" in mutData {
                 currentScore = mutData["score"];
                 _aeNewScore = currentScore["overall"] if "overall" in currentScore else _aePrevScore;
@@ -323,7 +795,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
             if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
             _aeNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
             _aeFound = None;
             _aei = 0;
@@ -369,11 +840,20 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     async def saveEdit() -> None {
         if not editInputValue.strip() or not selectedNode or not currentGraph { return; }
         isSaving = True;
+        _undo_label = "Edit graph";
+        if editMode == "address" {
+            _undo_label = "Add response";
+        } elif editMode == "evidence" or editMode == "respond" {
+            _undo_label = "Add evidence";
+        }
+        pushUndoSnapshot(_undo_label);
         _seGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _seNodeId = selectedNode["id"];
         _seMode = editMode;
         _seContent = editInputValue.strip();
         _sePrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+        _sePreservedPositions = getStableLayoutPositions();
+        _sePreservedNodeIds = extractLockedNodeIdMap(currentGraph);
 
         _seDefendId = "";
         if _seMode == "address" {
@@ -393,6 +873,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         }
 
         try {
+            await flushLayoutToBackend();
             mutResult = None;
             if _seMode == "evidence" or _seMode == "respond" {
                 _seSourceUrl = sourceUrlValue.strip() if sourceUrlValue else "";
@@ -409,7 +890,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if mutResult {
                 mutData = mutResult["reports"][0] if mutResult["reports"] else {};
-                if "graph" in mutData { currentGraph = mutData["graph"]; }
+                _freshGraph = applyMutationGraph(mutData, _sePreservedPositions, _sePreservedNodeIds);
                 if "score" in mutData {
                     currentScore = mutData["score"];
                     _seNewScore = currentScore["overall"] if "overall" in currentScore else _sePrevScore;
@@ -417,7 +898,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 }
                 if "issues" in mutData { currentIssues = mutData["issues"]; }
                 if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-                _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
                 _seNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
                 _seFound = None;
                 _sefi = 0;
@@ -440,6 +920,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         if not currentGraph { return; }
         _delNodeId = selectedNode["id"] if selectedNode and "id" in selectedNode else "";
         if not _delNodeId { return; }
+        pushUndoSnapshot("Delete node");
         _delNodeType = selectedNode["type"] if selectedNode and "type" in selectedNode else "";
         _delNodeContent = selectedNode["content"] if selectedNode and "content" in selectedNode else "";
 
@@ -466,11 +947,14 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         isSaving = True;
         _delPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
         _delGraphId = currentGraph["id"] if "id" in currentGraph else "";
+        _delPreservedPositions = getStableLayoutPositions();
+        _delPreservedNodeIds = extractLockedNodeIdMap(currentGraph);
 
         try {
+            await flushLayoutToBackend();
             mutResult = await root spawn DeleteNode(graphId=_delGraphId, nodeId=_delNodeId);
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
-            if "graph" in mutData { currentGraph = mutData["graph"]; }
+            applyMutationGraph(mutData, _delPreservedPositions, _delPreservedNodeIds);
             if "score" in mutData {
                 currentScore = mutData["score"];
                 _delNewScore = currentScore["overall"] if "overall" in currentScore else _delPrevScore;
@@ -517,15 +1001,19 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         if not ca_text or not ca_target { return; }
 
         isSaving = True;
+        pushUndoSnapshot("Add counterargument");
         _acGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _acPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+        _acPreservedPositions = getStableLayoutPositions();
+        _acPreservedNodeIds = extractLockedNodeIdMap(currentGraph);
 
         try {
+            await flushLayoutToBackend();
             addResult = await root spawn AddCounterargumentNode(
                 graphId=_acGraphId, targetNodeId=ca_target, counterargContent=ca_text
             );
             addData = addResult["reports"][0] if addResult["reports"] else {};
-            if "graph" in addData { currentGraph = addData["graph"]; }
+            applyMutationGraph(addData, _acPreservedPositions, _acPreservedNodeIds);
             if "score" in addData {
                 currentScore = addData["score"];
                 _acNewScore = currentScore["overall"] if "overall" in currentScore else _acPrevScore;
@@ -542,13 +1030,17 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     async def handleExpandBranch() -> None {
         if not selectedNode or not currentGraph { return; }
         isSaving = True;
+        pushUndoSnapshot("Expand branch");
         _ebGraphId = currentGraph["id"] if "id" in currentGraph else "";
         _ebNodeId = selectedNode["id"];
         _ebPrevScore = currentScore["overall"] if currentScore and "overall" in currentScore else 0;
+        _ebPreservedPositions = getStableLayoutPositions();
+        _ebPreservedNodeIds = extractLockedNodeIdMap(currentGraph);
         try {
+            await flushLayoutToBackend();
             mutResult = await root spawn ExpandBranch(graphId=_ebGraphId, nodeId=_ebNodeId);
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
-            if "graph" in mutData { currentGraph = mutData["graph"]; }
+            _freshGraph = applyMutationGraph(mutData, _ebPreservedPositions, _ebPreservedNodeIds);
             if "score" in mutData {
                 currentScore = mutData["score"];
                 _ebNewScore = currentScore["overall"] if "overall" in currentScore else _ebPrevScore;
@@ -556,7 +1048,6 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if "issues" in mutData { currentIssues = mutData["issues"]; }
             if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
             _ebNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
             _ebFound = None;
             _ebi = 0;
@@ -951,8 +1442,11 @@ def:pub ReviewScreen(props: any) -> JsxElement {
     graph_edges = currentGraph["edges"] if "edges" in currentGraph else [];
     allNodes = list(graph_nodes) + ghostNodes;
     allEdges = list(graph_edges) + ghostEdges;
+    graph_view_key = f"{currentGraph['id'] if 'id' in currentGraph else 'graph'}:{graphViewVersion}";
     node_count_str = str(len(graph_nodes)) if graph_nodes else "0";
     edge_count_str = str(len(graph_edges)) if graph_edges else "0";
+    has_undo = len(undoStack) > 0;
+    last_undo_label = undoStack[len(undoStack) - 1]["label"] if has_undo and "label" in undoStack[len(undoStack) - 1] else "last change";
 
     saving_overlay_display = "flex" if isSaving else "none";
 
@@ -1032,12 +1526,16 @@ def:pub ReviewScreen(props: any) -> JsxElement {
 
                     <div className="rs-graph-wrapper">
                         <ArgumentGraphView
+                            key={graph_view_key}
                             nodes={allNodes}
                             edges={allEdges}
                             onNodeClick={handleNodeClick}
                             selectedNodeId={selectedNode["id"] if selectedNode else None}
                             focusBranch={focusBranch}
                             onGhostAccept={handleAcceptCounterarg}
+                            layoutHints={layoutHints}
+                            onLayoutResolved={handleLayoutResolved}
+                            onNodePositionsChange={handleNodePositionsChange}
                         />
                     </div>
 
@@ -1046,6 +1544,13 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                         <span className="rs-statusbar-text">
                             {node_count_str} nodes - {edge_count_str} edges
                         </span>
+                        <div style={{"flex": "1"}}></div>
+                        <Button
+                            label={f"Undo {last_undo_label}" if has_undo else "Undo"}
+                            onClick={handleUndo}
+                            variant="secondary"
+                            disabled={not has_undo or isSaving}
+                        />
                     </div>
 
                     {(
@@ -1246,7 +1751,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                                 <div className="rs-delete-box">
                                     <div className="rs-delete-title">Delete this node?</div>
                                     <div className="rs-delete-warning">
-                                        This will remove the node and all its connections.
+                                        This will remove the node and all its connections. You can undo this from the review toolbar.
                                     </div>
                                     <div className="rs-edit-buttons">
                                         <button className="rs-confirm-delete-btn"
