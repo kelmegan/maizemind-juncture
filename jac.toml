@@ -4,6 +4,16 @@ version = "1.0.0"
 description = "Jac client application: maizemind-juncture"
 entry-point = "main.jac"
 
+[dependencies]
+jaseci = "==2.3.28"
+jaclang = "==0.16.7"
+jac-client = "==0.3.25"
+jac-scale = "==0.2.31"
+jac-super = "==0.1.22"
+jac-mcp = "==0.1.24"
+byllm = "==0.6.19"
+litellm = "==1.82.0"
+
 [dependencies.npm]
 lucide-react = "^0.483.0"
 pdfjs-dist = "^4.0.0"
