@@ -330,6 +330,27 @@ def:pub extract_llm_text(raw: object) -> str {
     return str(raw);
 }
 
+"Best-effort extraction of a JSON object or array from mixed model output."
+def extract_json_candidate(cleaned: str) -> str {
+    if not cleaned {
+        return "";
+    }
+
+    first_obj = cleaned.find("{");
+    last_obj = cleaned.rfind("}");
+    if first_obj != -1 and last_obj != -1 and last_obj > first_obj {
+        return cleaned[first_obj:last_obj + 1];
+    }
+
+    first_arr = cleaned.find("[");
+    last_arr = cleaned.rfind("]");
+    if first_arr != -1 and last_arr != -1 and last_arr > first_arr {
+        return cleaned[first_arr:last_arr + 1];
+    }
+
+    return cleaned;
+}
+
 "Parse JSON string from LLM, handling markdown fences."
 def safe_parse_json(raw: object) -> list {
     cleaned = extract_llm_text(raw).strip();
@@ -343,8 +364,11 @@ def safe_parse_json(raw: object) -> list {
         }
         cleaned = "\n".join(lines).strip();
     }
+
+    candidate = extract_json_candidate(cleaned);
+
     try {
-        return json.loads(cleaned);
+        return json.loads(candidate);
     } except Exception {
         return [];
     }
