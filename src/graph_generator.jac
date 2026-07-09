@@ -8,6 +8,16 @@ import time;
 
 # Model is configured in jac.toml under [plugins.byllm.model]
 
+# Single source of truth for evidence-category base quality weights.
+# Previously redefined inconsistently across 6 locations.
+def evidence_category_weight(category: str, fallback: float = 0.6) -> float {
+    weights: dict[str, float] = {
+        "empirical_data": 0.9, "expert_testimony": 0.8,
+        "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
+    };
+    return weights.get(category, fallback);
+}
+
 # ============================================================
 # 1. DATA TYPES
 # ============================================================
@@ -298,11 +308,7 @@ def:pub categorize_evidence_fast(text: str) -> dict {
     if confidence > 1.0 { confidence = 1.0; }
 
     # Compute node score from category weights + confidence
-    cat_weights: dict[str, float] = {
-        "empirical_data": 0.9, "expert_testimony": 0.8,
-        "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
-    };
-    base_quality = cat_weights.get(category, 0.6);
+    base_quality = evidence_category_weight(category);
     # Factor in confidence — low confidence drags down the score
     quality = base_quality * 0.5 + confidence * 0.5;
     assumption_penalty = len(assumptions) * 0.1;
@@ -330,24 +336,34 @@ def:pub extract_llm_text(raw: object) -> str {
     return str(raw);
 }
 
-"Parse JSON string from LLM, handling markdown fences."
-def safe_parse_json(raw: object) -> list {
-    cleaned = extract_llm_text(raw).strip();
+"Strip a leading/trailing markdown code fence (```json ... ```) from LLM output."
+def strip_json_fences(text: str) -> str {
+    cleaned = text.strip();
     if cleaned.startswith("```") {
         lines = cleaned.split("\n");
-        if lines[0].startswith("```") {
-            lines = lines[1:];
-        }
+        lines = lines[1:];
         if lines and lines[-1].strip().startswith("```") {
             lines = lines[:-1];
         }
         cleaned = "\n".join(lines).strip();
     }
+    return cleaned;
+}
+
+"Parse JSON string from LLM, handling markdown fences."
+def safe_parse_json(raw: object) -> list {
+    cleaned = strip_json_fences(extract_llm_text(raw).strip());
     try {
         return json.loads(cleaned);
     } except Exception {
         return [];
     }
+}
+
+"Parse a JSON object from raw LLM output, handling markdown fences."
+def parse_llm_json_object(raw: object) -> dict {
+    cleaned = strip_json_fences(extract_llm_text(raw).strip());
+    return json.loads(cleaned);
 }
 
 "Count incoming edges by label for a node."
@@ -601,17 +617,11 @@ def calculate_score(
         return ReasoningScore();
     }
 
-    # Evidence quality base weights by category
-    category_weights: dict[str, float] = {
-        "empirical_data": 0.9, "expert_testimony": 0.8,
-        "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
-    };
-
     # Score each evidence node by category and assumptions
     evidence_nodes = [n for n in nodes if n.label == "evidence"];
     evidence_scores: dict[str, float] = {};
     for ev in evidence_nodes {
-        base = category_weights.get(ev.evidence_category, 0.6);
+        base = evidence_category_weight(ev.evidence_category);
         # Each unaddressed assumption reduces quality by 15%
         assumption_count = len(ev.assumptions) if ev.assumptions else 0;
         penalty = assumption_count * 0.15;

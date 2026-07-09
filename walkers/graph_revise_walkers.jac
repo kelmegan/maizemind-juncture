@@ -1,7 +1,7 @@
 """Walkers for revising argument graph nodes."""
 
-import from graph.argument_graph_nodes { ArgumentGraph }
-import from src.graph_generator { evaluate_single_evidence, generate_counterargument, clarify_node_content, extract_llm_text, categorize_evidence_fast, expand_branch, extract_search_keywords, pick_best_wiki_result }
+import from graph.argument_graph_nodes { ArgumentGraph, find_argument_graph }
+import from src.graph_generator { evaluate_single_evidence, generate_counterargument, clarify_node_content, extract_llm_text, categorize_evidence_fast, expand_branch, extract_search_keywords, pick_best_wiki_result, evidence_category_weight, parse_llm_json_object }
 import from walkers.graph_generate_walkers { GetGraphWithScoring }
 import time;
 import json;
@@ -17,13 +17,7 @@ walker:pub AddEvidenceToNode {
 
     can run with Root entry {
         try {
-        graph_node = None;
-        for graph in [-->](?:ArgumentGraph) {
-            if graph.id == self.graphId {
-                graph_node = graph;
-                break;
-            }
-        }
+        graph_node = find_argument_graph(root, self.graphId);
 
         if not graph_node {
             report {"error": "Graph not found"};
@@ -142,16 +136,7 @@ walker:pub AddEvidenceToNode {
                     thesis_text=_ev_thesis,
                     context_description=_ev_context
                 );
-                _eval_str = extract_llm_text(raw_eval).strip();
-                if _eval_str.startswith("```") {
-                    _ef_lines = _eval_str.split("\n");
-                    _ef_lines = _ef_lines[1:];
-                    if _ef_lines and _ef_lines[-1].strip().startswith("```") {
-                        _ef_lines = _ef_lines[:-1];
-                    }
-                    _eval_str = "\n".join(_ef_lines).strip();
-                }
-                _eval_parsed = json.loads(_eval_str);
+                _eval_parsed = parse_llm_json_object(raw_eval);
 
                 _eval_cat = _eval_parsed.get("evidence_category", ev_category);
                 _eval_assumptions: list = _eval_parsed.get("assumptions", []);
@@ -169,11 +154,7 @@ walker:pub AddEvidenceToNode {
                     else { _capped.append(_ea_s); }
                 }
 
-                _cat_weights: dict[str, float] = {
-                    "empirical_data": 0.9, "expert_testimony": 0.8,
-                    "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
-                };
-                _base_q = _cat_weights.get(_eval_cat, 0.6);
+                _base_q = evidence_category_weight(_eval_cat);
                 _quality = _base_q - len(_capped) * 0.15;
                 if _quality < 0.1 { _quality = 0.1; }
                 _eval_score = int(_quality * 100);
@@ -222,13 +203,7 @@ walker:pub AddAssumptionToEvidence {
 
     can run with Root entry {
         try {
-        graph_node = None;
-        for graph in [-->](?:ArgumentGraph) {
-            if graph.id == self.graphId {
-                graph_node = graph;
-                break;
-            }
-        }
+        graph_node = find_argument_graph(root, self.graphId);
 
         if not graph_node {
             report {"error": "Graph not found"};
@@ -299,13 +274,7 @@ walker:pub UpdateNodeContent {
 
     can run with Root entry {
         try {
-        graph_node = None;
-        for graph in [-->](?:ArgumentGraph) {
-            if graph.id == self.graphId {
-                graph_node = graph;
-                break;
-            }
-        }
+        graph_node = find_argument_graph(root, self.graphId);
 
         if not graph_node {
             report {"error": "Graph not found"};
@@ -379,13 +348,7 @@ walker:pub DeleteNode {
 
     can run with Root entry {
         try {
-        graph_node = None;
-        for graph in [-->](?:ArgumentGraph) {
-            if graph.id == self.graphId {
-                graph_node = graph;
-                break;
-            }
-        }
+        graph_node = find_argument_graph(root, self.graphId);
 
         if not graph_node {
             report {"error": "Graph not found"};
@@ -425,13 +388,7 @@ walker:pub AddCounterargumentNode {
 
     can run with Root entry {
         try {
-        graph_node = None;
-        for graph in [-->](?:ArgumentGraph) {
-            if graph.id == self.graphId {
-                graph_node = graph;
-                break;
-            }
-        }
+        graph_node = find_argument_graph(root, self.graphId);
 
         if not graph_node {
             report {"error": "Graph not found"};
@@ -525,13 +482,7 @@ walker:pub AddAddressEdge {
 
     can run with Root entry {
         try {
-        graph_node = None;
-        for graph in [-->](?:ArgumentGraph) {
-            if graph.id == self.graphId {
-                graph_node = graph;
-                break;
-            }
-        }
+        graph_node = find_argument_graph(root, self.graphId);
 
         if not graph_node {
             report {"error": "Graph not found"};
@@ -620,16 +571,7 @@ walker:pub AddAddressEdge {
                 thesis_text=_addr_thesis,
                 context_description=_addr_context
             );
-            _eval_str = extract_llm_text(raw_eval).strip();
-            if _eval_str.startswith("```") {
-                _ef_lines = _eval_str.split("\n");
-                _ef_lines = _ef_lines[1:];
-                if _ef_lines and _ef_lines[-1].strip().startswith("```") {
-                    _ef_lines = _ef_lines[:-1];
-                }
-                _eval_str = "\n".join(_ef_lines).strip();
-            }
-            _eval_parsed = json.loads(_eval_str);
+            _eval_parsed = parse_llm_json_object(raw_eval);
 
             _eval_cat = _eval_parsed.get("evidence_category", "logical_reasoning");
             _eval_assumptions: list = _eval_parsed.get("assumptions", []);
@@ -690,13 +632,7 @@ walker:pub EvaluateNewNode {
     can run with Root entry {
         try {
         print(f"=== EvaluateNewNode: graphId={self.graphId}, nodeId={self.nodeId} ===");
-        graph_node = None;
-        for graph in [-->](?:ArgumentGraph) {
-            if graph.id == self.graphId {
-                graph_node = graph;
-                break;
-            }
-        }
+        graph_node = find_argument_graph(root, self.graphId);
 
         if not graph_node {
             report {"error": "Graph not found"};
@@ -738,17 +674,7 @@ walker:pub EvaluateNewNode {
             # Parse LLM response
             parsed = {};
             try {
-                raw_str = extract_llm_text(raw_result).strip();
-                # Handle markdown fences
-                if raw_str.startswith("```") {
-                    fence_lines = raw_str.split("\n");
-                    fence_lines = fence_lines[1:];
-                    if fence_lines and fence_lines[-1].strip().startswith("```") {
-                        fence_lines = fence_lines[:-1];
-                    }
-                    raw_str = "\n".join(fence_lines).strip();
-                }
-                parsed = json.loads(raw_str);
+                parsed = parse_llm_json_object(raw_result);
             } except Exception {
                 parsed = {};
             }
@@ -782,12 +708,7 @@ walker:pub EvaluateNewNode {
                 }
             }
 
-            # Category quality weights
-            cat_weights: dict[str, float] = {
-                "empirical_data": 0.9, "expert_testimony": 0.8,
-                "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
-            };
-            base_quality = cat_weights.get(ev_category, 0.6);
+            base_quality = evidence_category_weight(ev_category);
             quality = base_quality - len(capped_assumptions) * 0.15;
             if quality < 0.1 { quality = 0.1; }
             node_score = int(quality * 100);
@@ -851,13 +772,7 @@ walker:pub GenerateCounter {
 
     can run with Root entry {
         try {
-        graph_node = None;
-        for graph in [-->](?:ArgumentGraph) {
-            if graph.id == self.graphId {
-                graph_node = graph;
-                break;
-            }
-        }
+        graph_node = find_argument_graph(root, self.graphId);
 
         if not graph_node {
             report {"error": "Graph not found"};
@@ -886,16 +801,7 @@ walker:pub GenerateCounter {
             claim_text=target_content,
             thesis_text=thesis_text
         );
-        raw_str = extract_llm_text(raw_result).strip();
-        if raw_str.startswith("```") {
-            fence_lines = raw_str.split("\n");
-            fence_lines = fence_lines[1:];
-            if fence_lines and fence_lines[-1].strip().startswith("```") {
-                fence_lines = fence_lines[:-1];
-            }
-            raw_str = "\n".join(fence_lines).strip();
-        }
-        parsed = json.loads(raw_str);
+        parsed = parse_llm_json_object(raw_result);
         ca_text = parsed.get("counterargument", "");
 
         if not ca_text {
@@ -987,13 +893,7 @@ walker:pub ClarifyNode {
 
     can run with Root entry {
         try {
-        graph_node = None;
-        for graph in [-->](?:ArgumentGraph) {
-            if graph.id == self.graphId {
-                graph_node = graph;
-                break;
-            }
-        }
+        graph_node = find_argument_graph(root, self.graphId);
 
         if not graph_node {
             report {"error": "Graph not found"};
@@ -1026,16 +926,7 @@ walker:pub ClarifyNode {
             node_type=node_type,
             thesis_text=thesis_text
         );
-        raw_str = extract_llm_text(raw_result).strip();
-        if raw_str.startswith("```") {
-            fence_lines = raw_str.split("\n");
-            fence_lines = fence_lines[1:];
-            if fence_lines and fence_lines[-1].strip().startswith("```") {
-                fence_lines = fence_lines[:-1];
-            }
-            raw_str = "\n".join(fence_lines).strip();
-        }
-        parsed = json.loads(raw_str);
+        parsed = parse_llm_json_object(raw_result);
         more_info = parsed.get("moreInfo", "");
         source_hint = parsed.get("sourceHint", "");
 
@@ -1115,13 +1006,7 @@ walker:pub InvestigateNode {
 
     can run with Root entry {
         try {
-        graph_node = None;
-        for graph in [-->](?:ArgumentGraph) {
-            if graph.id == self.graphId {
-                graph_node = graph;
-                break;
-            }
-        }
+        graph_node = find_argument_graph(root, self.graphId);
 
         if not graph_node {
             report {"error": "Graph not found"};
@@ -1585,13 +1470,7 @@ walker:pub ExpandBranch {
 
     can run with Root entry {
         try {
-        graph_node = None;
-        for graph in [-->](?:ArgumentGraph) {
-            if graph.id == self.graphId {
-                graph_node = graph;
-                break;
-            }
-        }
+        graph_node = find_argument_graph(root, self.graphId);
 
         if not graph_node {
             report {"error": "Graph not found"};
@@ -1624,16 +1503,7 @@ walker:pub ExpandBranch {
             node_type=node_type,
             thesis_text=thesis_text
         );
-        raw_str = extract_llm_text(raw_result).strip();
-        if raw_str.startswith("```") {
-            fence_lines = raw_str.split("\n");
-            fence_lines = fence_lines[1:];
-            if fence_lines and fence_lines[-1].strip().startswith("```") {
-                fence_lines = fence_lines[:-1];
-            }
-            raw_str = "\n".join(fence_lines).strip();
-        }
-        parsed = json.loads(raw_str);
+        parsed = parse_llm_json_object(raw_result);
         branches = parsed.get("branches", []);
 
         if not branches {
@@ -1702,11 +1572,7 @@ walker:pub ExpandBranch {
                 cat_res = categorize_evidence_fast(b_content);
                 b_category = cat_res.get("evidence_category", "logical_reasoning");
                 # Use LLM confidence but cap by category quality
-                cat_weights: dict[str, float] = {
-                    "empirical_data": 0.9, "expert_testimony": 0.8,
-                    "logical_reasoning": 0.6, "analogy": 0.5, "anecdotal": 0.3
-                };
-                cat_quality = cat_weights.get(b_category, 0.6);
+                cat_quality = evidence_category_weight(b_category);
                 combined = cat_quality * 0.4 + b_confidence * 0.6;
                 b_node_score = int(combined * 100);
             }

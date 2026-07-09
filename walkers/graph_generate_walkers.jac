@@ -1,7 +1,7 @@
 """Walkers for generating and scoring argument graphs."""
 
-import from graph.argument_graph_nodes { ArgumentGraph }
-import from src.graph_generator { Document, generate_argument_graph }
+import from graph.argument_graph_nodes { ArgumentGraph, find_argument_graph }
+import from src.graph_generator { Document, generate_argument_graph, evidence_category_weight }
 
 walker:pub GenerateArgumentGraph {
     has notes: str;
@@ -248,13 +248,7 @@ walker:pub GetGraphWithScoring {
     has graphId: str;
 
     can run with Root entry {
-        graph_node = None;
-        for graph in [-->](?:ArgumentGraph) {
-            if graph.id == self.graphId {
-                graph_node = graph;
-                break;
-            }
-        }
+        graph_node = find_argument_graph(root, self.graphId);
 
         if not graph_node {
             report {"error": "Graph not found"};
@@ -387,15 +381,8 @@ walker:pub GetGraphWithScoring {
             return 0.0;
         }
 
-        cat_weights: dict[str, float] = {
-            "empirical_data": 0.92,
-            "expert_testimony": 0.82,
-            "logical_reasoning": 0.65,
-            "analogy": 0.52,
-            "anecdotal": 0.38
-        };
         ev_cat = str(node_data.get("evidence_category", "logical_reasoning")).lower().strip();
-        base = cat_weights.get(ev_cat, 0.65);
+        base = evidence_category_weight(ev_cat);
 
         conf = self.to_float(node_data.get("confidence", 0.5), 0.5);
         conf = self.clamp01(conf);

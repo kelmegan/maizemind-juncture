@@ -174,23 +174,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         try {
             mutResult = await root spawn GenerateCounter(graphId=_gcGraphId, targetNodeId=_gcNodeId);
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
-            if "graph" in mutData { currentGraph = mutData["graph"]; }
-            if "score" in mutData {
-                currentScore = mutData["score"];
-                _gcNewScore = currentScore["overall"] if "overall" in currentScore else _gcPrevScore;
-                applyScoreDelta(_gcPrevScore, _gcNewScore);
-            }
-            if "issues" in mutData { currentIssues = mutData["issues"]; }
-            if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
-            _gcNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
-            _gcFound = None;
-            _gci = 0;
-            while _gci < len(_gcNodes) {
-                if _gcNodes[_gci]["id"] == _gcNodeId { _gcFound = _gcNodes[_gci]; break; }
-                _gci = _gci + 1;
-            }
-            selectedNode = _gcFound;
+            applyMutationResult(mutData, _gcPrevScore, _gcNodeId);
         } except Exception { }
         isSaving = False;
         pushUpdate();
@@ -232,23 +216,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 selectedTitle=pickedTitle, selectedUrl=pickedUrl
             );
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
-            if "graph" in mutData { currentGraph = mutData["graph"]; }
-            if "score" in mutData {
-                currentScore = mutData["score"];
-                _pirNewScore = currentScore["overall"] if "overall" in currentScore else _pirPrevScore;
-                applyScoreDelta(_pirPrevScore, _pirNewScore);
-            }
-            if "issues" in mutData { currentIssues = mutData["issues"]; }
-            if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
-            _pirNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
-            _pirFound = None;
-            _piri = 0;
-            while _piri < len(_pirNodes) {
-                if _pirNodes[_piri]["id"] == _pirNodeId { _pirFound = _pirNodes[_piri]; break; }
-                _piri = _piri + 1;
-            }
-            selectedNode = _pirFound;
+            applyMutationResult(mutData, _pirPrevScore, _pirNodeId);
         } except Exception { }
         investigateResults = [];
         isSaving = False;
@@ -277,23 +245,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         try {
             mutResult = await root spawn InvestigateNode(graphId=_afGraphId, nodeId=_afNodeId, addAsEvidence=True);
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
-            if "graph" in mutData { currentGraph = mutData["graph"]; }
-            if "score" in mutData {
-                currentScore = mutData["score"];
-                _afNewScore = currentScore["overall"] if "overall" in currentScore else _afPrevScore;
-                applyScoreDelta(_afPrevScore, _afNewScore);
-            }
-            if "issues" in mutData { currentIssues = mutData["issues"]; }
-            if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
-            _afNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
-            _afFound = None;
-            _afi = 0;
-            while _afi < len(_afNodes) {
-                if _afNodes[_afi]["id"] == _afNodeId { _afFound = _afNodes[_afi]; break; }
-                _afi = _afi + 1;
-            }
-            selectedNode = _afFound;
+            applyMutationResult(mutData, _afPrevScore, _afNodeId);
         } except Exception { }
         isSaving = False;
         addedAsEvidenceMap[_afNodeId] = True;
@@ -315,23 +267,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 evidenceContent=_aeMoreInfo, sourceUrl=_aeSourceUrl
             );
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
-            if "graph" in mutData { currentGraph = mutData["graph"]; }
-            if "score" in mutData {
-                currentScore = mutData["score"];
-                _aeNewScore = currentScore["overall"] if "overall" in currentScore else _aePrevScore;
-                applyScoreDelta(_aePrevScore, _aeNewScore);
-            }
-            if "issues" in mutData { currentIssues = mutData["issues"]; }
-            if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
-            _aeNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
-            _aeFound = None;
-            _aei = 0;
-            while _aei < len(_aeNodes) {
-                if _aeNodes[_aei]["id"] == _aeNodeId { _aeFound = _aeNodes[_aei]; break; }
-                _aei = _aei + 1;
-            }
-            selectedNode = _aeFound;
+            applyMutationResult(mutData, _aePrevScore, _aeNodeId);
         } except Exception { }
         isSaving = False;
         addedAsEvidenceMap[_aeNodeId] = True;
@@ -363,6 +299,30 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 showScoreDelta = False;
                 scoreDelta = 0;
             }, 2200);
+        }
+    }
+
+    # Apply a mutation walker's report to graph/score/issues/nextActions state,
+    # and (if reselectNodeId is given) refresh selectedNode from the new graph.
+    def applyMutationResult(mutData: dict, prevScore: int, reselectNodeId: str | None) -> None {
+        if "graph" in mutData { currentGraph = mutData["graph"]; }
+        if "score" in mutData {
+            currentScore = mutData["score"];
+            _newScore = currentScore["overall"] if "overall" in currentScore else prevScore;
+            applyScoreDelta(prevScore, _newScore);
+        }
+        if "issues" in mutData { currentIssues = mutData["issues"]; }
+        if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
+        if reselectNodeId {
+            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
+            _nodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
+            _found = None;
+            _i = 0;
+            while _i < len(_nodes) {
+                if _nodes[_i]["id"] == reselectNodeId { _found = _nodes[_i]; break; }
+                _i = _i + 1;
+            }
+            selectedNode = _found;
         }
     }
 
@@ -409,23 +369,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
             }
             if mutResult {
                 mutData = mutResult["reports"][0] if mutResult["reports"] else {};
-                if "graph" in mutData { currentGraph = mutData["graph"]; }
-                if "score" in mutData {
-                    currentScore = mutData["score"];
-                    _seNewScore = currentScore["overall"] if "overall" in currentScore else _sePrevScore;
-                    applyScoreDelta(_sePrevScore, _seNewScore);
-                }
-                if "issues" in mutData { currentIssues = mutData["issues"]; }
-                if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-                _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
-                _seNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
-                _seFound = None;
-                _sefi = 0;
-                while _sefi < len(_seNodes) {
-                    if _seNodes[_sefi]["id"] == _seNodeId { _seFound = _seNodes[_sefi]; break; }
-                    _sefi = _sefi + 1;
-                }
-                selectedNode = _seFound;
+                applyMutationResult(mutData, _sePrevScore, _seNodeId);
             }
         } except Exception { }
 
@@ -470,14 +414,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         try {
             mutResult = await root spawn DeleteNode(graphId=_delGraphId, nodeId=_delNodeId);
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
-            if "graph" in mutData { currentGraph = mutData["graph"]; }
-            if "score" in mutData {
-                currentScore = mutData["score"];
-                _delNewScore = currentScore["overall"] if "overall" in currentScore else _delPrevScore;
-                applyScoreDelta(_delPrevScore, _delNewScore);
-            }
-            if "issues" in mutData { currentIssues = mutData["issues"]; }
-            if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
+            applyMutationResult(mutData, _delPrevScore, None);
         } except Exception { }
 
         selectedNode = None;
@@ -525,14 +462,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
                 graphId=_acGraphId, targetNodeId=ca_target, counterargContent=ca_text
             );
             addData = addResult["reports"][0] if addResult["reports"] else {};
-            if "graph" in addData { currentGraph = addData["graph"]; }
-            if "score" in addData {
-                currentScore = addData["score"];
-                _acNewScore = currentScore["overall"] if "overall" in currentScore else _acPrevScore;
-                applyScoreDelta(_acPrevScore, _acNewScore);
-            }
-            if "issues" in addData { currentIssues = addData["issues"]; }
-            if "nextActions" in addData { currentNextActions = addData["nextActions"]; }
+            applyMutationResult(addData, _acPrevScore, None);
         } except Exception { }
 
         isSaving = False;
@@ -548,23 +478,7 @@ def:pub ReviewScreen(props: any) -> JsxElement {
         try {
             mutResult = await root spawn ExpandBranch(graphId=_ebGraphId, nodeId=_ebNodeId);
             mutData = mutResult["reports"][0] if mutResult["reports"] else {};
-            if "graph" in mutData { currentGraph = mutData["graph"]; }
-            if "score" in mutData {
-                currentScore = mutData["score"];
-                _ebNewScore = currentScore["overall"] if "overall" in currentScore else _ebPrevScore;
-                applyScoreDelta(_ebPrevScore, _ebNewScore);
-            }
-            if "issues" in mutData { currentIssues = mutData["issues"]; }
-            if "nextActions" in mutData { currentNextActions = mutData["nextActions"]; }
-            _freshGraph = mutData["graph"] if "graph" in mutData else currentGraph;
-            _ebNodes = _freshGraph["nodes"] if _freshGraph and "nodes" in _freshGraph else [];
-            _ebFound = None;
-            _ebi = 0;
-            while _ebi < len(_ebNodes) {
-                if _ebNodes[_ebi]["id"] == _ebNodeId { _ebFound = _ebNodes[_ebi]; break; }
-                _ebi = _ebi + 1;
-            }
-            selectedNode = _ebFound;
+            applyMutationResult(mutData, _ebPrevScore, _ebNodeId);
         } except Exception { }
         isSaving = False;
         pushUpdate();
